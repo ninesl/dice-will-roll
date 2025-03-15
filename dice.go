@@ -37,7 +37,7 @@ type Face struct {
 func NewDie(sides int) Die {
 	faces := []Face{}
 	for i := range sides {
-		faces = append(faces, NewFace(i+1))
+		faces = append(faces, NewFace(i+1)) // so we dont have 0-5 pips
 	}
 	return Die{
 		faces: faces,
