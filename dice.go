@@ -23,15 +23,18 @@ type Die struct {
 	faces      []Face
 }
 
-// A Face is the representation of one of a Die's faces
+// A Face is from Die's faces
 //
 // each side has a number of pips, which correlates to the Value of the face
 //
-// Value, when refering to Faces, is the literal number of Pips (dots) on a die faces
+// Value, when refering to Faces, is the literal number of Pips (dots) on a face
 type Face struct {
-	mod  Modifier
+	// mod  Modifier
 	pips []Modifier
 }
+
+// The highest value a face can have. (not the highest it count for??)
+const MAX_PIPS = 9
 
 // Makes a blank die with each face being one more than the last, starting from 1
 func NewDie(sides int) Die {
