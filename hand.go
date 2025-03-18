@@ -1,5 +1,9 @@
 package main
 
+import (
+	"slices"
+)
+
 // This pkg is used to determine hand outcome from die.Roll().Value()
 
 // HandRank is the type of hand played, Straight, Full House, Five of a kind, etc.
@@ -12,100 +16,158 @@ type HandRank uint8
 //	TWO_PAIR > NO_HAND
 //	STRAIGHT_LARGE < FOUR_OF_A_KIND
 const (
-	UNKNOWN_HAND HandRank = iota
-	NO_HAND
+	NO_HAND HandRank = iota
 	HIGH_DIE
 	ONE_PAIR
 	SNAKE_EYES
 	TWO_PAIR
 	THREE_OF_A_KIND
-	STRAIGHT_SMALL // 4 consecutive
-	STRAIGHT_LARGE // 5 consecutive
+	// 4 consecutive
+	STRAIGHT_SMALL
+	// 5 consecutive
+	STRAIGHT_LARGE
 	FULL_HOUSE
 	FOUR_OF_A_KIND
 	FIVE_OF_A_KIND
+
 	// 6 die
-	THREE_PAIR    // 2 + 2 + 2
-	CROWDED_HOUSE // 4 + 2
+	// straight + pair?
+
+	// 2 + 2 + 2
+	THREE_PAIR
+	// 4 + 2
+	CROWDED_HOUSE
 	SIX_OF_A_KIND
-	STRAIGHT_LARGER     // 6 consecutive
-	TWO_THREE_OF_A_KIND // 3 + 3
+	// 6 consecutive
+	STRAIGHT_LARGER
+	// 3 + 3
+	TWO_THREE_OF_A_KIND
+
 	// 7 die
-	OVERPOPULATED_HOUSE // 4 + 3
-	STRAIGHT_LARGEST    // 7 consecutive
-	FULLEST_HOUSE       // 5 + 2
+	// straight + three of a kind?
+
+	// 4 + 3
+	OVERPOPULATED_HOUSE
+	// 7 consecutive
+	STRAIGHT_LARGEST
+	// 5 + 2
+	FULLEST_HOUSE
 	SEVEN_OF_A_KIND
-	SEVEN_SEVENS // 7 of a kind where all Value is 7
+	// 7 of a kind where all Value is 7
+	SEVEN_SEVENS
+
+	// Special, usually from modifiers
+	STRAIGHT_MAX
+
+	// other
+	UNKNOWN_HAND
+	NUM_TYP
 )
 
-// first check in determining HandRank
-func isStraight(dice []Die) bool {
-	if len(dice) < 4 {
-		return false
-	}
+// could be modified?
+var (
+	STRAIGHT_SMALL_LENGTH   = 4
+	STRAIGHT_LARGE_LENGTH   = 5
+	STRAIGHT_LARGER_LENGTH  = 6
+	STRAIGHT_LARGEST_LENGTH = 7
 
-	//TODO: implementation
+	SNAKE_EYES_TARGET   = 1 // default to 1 bc obvious
+	SEVEN_SEVENS_TARGET = 7
+)
 
-	return false
-}
-
-// TODO: unit test
+// first check when determining HandRank
 //
-// Calculates given slice of dice's active face's values.
-//
-// returns a HandRank that corresponds to the input dice
-func DetermineHandRank(dice []Die) HandRank {
-	var (
-		numDice  = len(dice)
-		valueMap = map[int]int{}
-		values   = []int{} // tracks the # of values' occurences from valueMap for comparisons. A slice of the values of valueMap
-	)
+// returns NO_HAND if a straight is not found, otherwise returns the associated HandRank for the straight
+func checkStraight(values []int) HandRank {
+	// consecutive := [MAX_PIPS]bool{}
 
-	// gather occurences of unique values
-	for i := range numDice {
-		value := dice[i].ActiveFace().Value()
-		// starts from 0 bc of nil int
-		valueMap[value] = valueMap[value] + 1
+	// for _, value := range values {
+	// 	consecutive[value] = true
+	// }
+
+	inARow := 1
+	var maxRow int
+	straight := NO_HAND
+	var lastValue, curValue int
+	slices.Sort(values)
+
+	// fmt.Println(values)
+
+	lastValue = values[0]
+	for i := 1; i < len(values); i += 1 {
+		curValue = values[i]
+
+		// TODO: modifiers for skip straight?
+
+		if lastValue+1 == curValue {
+			inARow += 1
+		} else {
+			maxRow = inARow
+			inARow = 1
+		}
+
+		lastValue = curValue
 	}
 
-	// used in determining hand logic
-	for value := range valueMap {
-		values = append(values, value)
+	// for value slices that are the entire sequence
+	if maxRow == 0 {
+		maxRow = inARow
 	}
 
-	// if is a straight, return based off
-	//  switch numDice {}
-	if isStraight(dice) {
-		switch numDice {
-		case 4:
-			return STRAIGHT_SMALL
-		case 5:
-			return STRAIGHT_LARGE
-		case 6:
-			return STRAIGHT_LARGER
-		case 7:
-			return STRAIGHT_LARGEST
+	// fmt.Println(maxRow, "in a row")
+
+	// for i := range consecutive {
+	// 	if consecutive[i] {
+	// 		curValue = i
+
+	// 		if lastValue+1 == curValue { // still works for 0 - 1
+	// 			inARow += 1
+	// 		} else if lastValue != curValue {
+	// 			inARow = 0
+	// 		}
+
+	// 		lastValue = curValue
+	// 	}
+	// }
+
+	if maxRow >= STRAIGHT_SMALL_LENGTH { // small straight
+		switch maxRow {
+		case STRAIGHT_SMALL_LENGTH:
+			straight = STRAIGHT_SMALL
+		case STRAIGHT_LARGE_LENGTH:
+			straight = STRAIGHT_LARGE
+		case STRAIGHT_LARGER_LENGTH:
+			straight = STRAIGHT_LARGER
+		case STRAIGHT_LARGEST_LENGTH:
+			straight = STRAIGHT_LARGEST
+		case STRAIGHT_LARGEST_LENGTH + 1: // for + 1 from modifiers??? FIXME: this shouldn't be hardcoded?
+			straight = STRAIGHT_MAX // placeholder TODO: STRAIGHT_MAX impl
 		}
 	}
 
-	// determine type of hand based off # of unique values
-	//
-	// can assume no straight bc of earlier check
-	//
-	// annoying logic for each one. comments are placed where it isn't obv after a glance
-	uniqueValues := len(valueMap)
+	return straight
+}
 
-	var bottomValue, topValue int // useful placeholder for hand logic
+// second check when determining handRank
+//
+//	// annoying logic for each one. comments are placed where it isn't obv after a glance
+//
+// returns NO_HAND if nothing is found, otherwise returns the highest HandRank that can be associated (other than straights)
+func checkHandOtherThanStraight(valueCount map[int]int, values []int, numDice int) HandRank {
+	uniqueValues := len(valueCount)
 	switch uniqueValues {
+	case 0:
+		return NO_HAND
 	case 1:
 		switch numDice {
 		case 1:
 			return HIGH_DIE
 		case 2:
-			if valueMap[1] == numDice {
+			if valueCount[SNAKE_EYES_TARGET] == numDice {
 				return SNAKE_EYES
+			} else {
+				return ONE_PAIR
 			}
-			return ONE_PAIR
 		case 3:
 			return THREE_OF_A_KIND
 		case 4:
@@ -115,138 +177,219 @@ func DetermineHandRank(dice []Die) HandRank {
 		case 6:
 			return SIX_OF_A_KIND
 		case 7:
-			if valueMap[7] == 7 {
+			if valueCount[SEVEN_SEVENS_TARGET] == 7 {
 				return SEVEN_SEVENS
 			} else {
 				return SEVEN_OF_A_KIND
 			}
 		}
 	case 2:
-		bottomValue = values[0]
-		topValue = values[1]
-
 		switch numDice {
 		case 2: // 4 2
 			return HIGH_DIE
 		case 3: // 2 2 1
-			if valueMap[1] == 2 {
+			if valueCount[SNAKE_EYES_TARGET] == 2 {
 				return SNAKE_EYES
+			} else {
+				return ONE_PAIR
 			}
-			return ONE_PAIR
-		case 4: // 1 1 2 2
+		case 4: // 1 1 2 2, 1 1 1 2
+			if valueCount[values[0]] == 3 || valueCount[values[1]] == 3 {
+				return THREE_OF_A_KIND
+			}
 			return TWO_PAIR
 		case 5: // 1 2 2 2 2, 1 1 2 2 2
-			// 4 - 1 = 3 != 1,
-			if bottomValue+1 == topValue || topValue+1 == bottomValue {
+			if valueCount[values[0]] == 2 && valueCount[values[1]] == 3 ||
+				valueCount[values[1]] == 2 && valueCount[values[0]] == 3 {
 				return FULL_HOUSE
+			} else {
+				return FOUR_OF_A_KIND
 			}
-
-			return FOUR_OF_A_KIND
 		case 6: // 3 3 3 5 5 5, 1 1 2 2 2 2, 4 3 3 3 3 3,
-			if bottomValue == topValue {
+			if valueCount[values[0]] == valueCount[values[1]] {
 				return TWO_THREE_OF_A_KIND
-			}
-			if bottomValue+2 == topValue || topValue+2 == bottomValue {
+			} else if valueCount[values[0]] == 2 && valueCount[values[1]] == 4 ||
+				valueCount[values[1]] == 2 && valueCount[values[0]] == 4 {
 				return CROWDED_HOUSE
+			} else {
+				return FIVE_OF_A_KIND
 			}
-			return FIVE_OF_A_KIND
 		case 7: // 1 1 1 2 2 2 2, 1 1 2 2 2 2 2, 1 2 2 2 2 2 2
-			if bottomValue+1 == topValue || topValue+1 == bottomValue {
+
+			if valueCount[values[0]] == 3 && valueCount[values[1]] == 4 ||
+				valueCount[values[1]] == 3 && valueCount[values[0]] == 4 {
 				return OVERPOPULATED_HOUSE
-			}
-			if bottomValue+3 == topValue || topValue+3 == bottomValue {
+			} else if valueCount[values[0]] == 2 && valueCount[values[1]] == 5 ||
+				valueCount[values[1]] == 2 && valueCount[values[0]] == 5 {
 				return FULLEST_HOUSE
+			} else {
+				return SIX_OF_A_KIND
 			}
-			return SIX_OF_A_KIND
 		}
 	case 3:
 		switch numDice {
 		case 3:
 			return HIGH_DIE
 		case 4: // 1 1 2 3
-			if valueMap[1] == 2 {
+			if valueCount[SNAKE_EYES_TARGET] == 2 {
 				return SNAKE_EYES
+			} else {
+				return ONE_PAIR
 			}
-			return ONE_PAIR
 		case 5: // 1 1 1 2 3, 1 1 2 2 3
-			if values[0] == 3 || values[1] == 3 || values[2] == 3 {
+			if valueCount[values[0]] == 3 ||
+				valueCount[values[1]] == 3 ||
+				valueCount[values[2]] == 3 {
 				return THREE_OF_A_KIND
+			} else {
+				return TWO_PAIR
 			}
-			return TWO_PAIR
 		case 6: // 1 1 1 1 2 3, 1 1 1 2 2 3, 1 1 2 2 3 3
-			if values[0] == 4 || values[1] == 4 || values[2] == 4 {
+			if valueCount[values[0]] == 4 ||
+				valueCount[values[1]] == 4 ||
+				valueCount[values[2]] == 4 {
 				return FOUR_OF_A_KIND
-			}
-			if values[0] == values[1] && values[1] == values[2] {
+			} else if valueCount[values[0]] == valueCount[values[1]] && valueCount[values[1]] == valueCount[values[2]] {
 				return THREE_PAIR
+			} else {
+				return FULL_HOUSE
 			}
-			return FULL_HOUSE
 		case 7: // 1 1 1 1 1 2 3, 1 1 1 1 2 2 3, 1 1 1 2 2 2 3
-			if values[0] == 5 || values[1] == 5 || values[2] == 5 {
+			if valueCount[values[0]] == 5 ||
+				valueCount[values[1]] == 5 ||
+				valueCount[values[2]] == 5 {
 				return FIVE_OF_A_KIND
-			}
-			if values[0] == values[1] || values[1] == values[2] {
+			} else if valueCount[values[0]] == valueCount[values[1]] ||
+				valueCount[values[1]] == valueCount[values[2]] {
 				return TWO_THREE_OF_A_KIND
+			} else if (valueCount[values[0]] == 2 && valueCount[values[1]] == 4 ||
+				valueCount[values[1]] == 2 && valueCount[values[0]] == 4) ||
+
+				(valueCount[values[1]] == 2 && valueCount[values[2]] == 4 ||
+					valueCount[values[2]] == 2 && valueCount[values[1]] == 4) ||
+
+				(valueCount[values[0]] == 2 && valueCount[values[2]] == 4 ||
+					valueCount[values[2]] == 2 && valueCount[values[0]] == 4) {
+				return CROWDED_HOUSE
+			} else {
+				return FULL_HOUSE
 			}
-			return FULLEST_HOUSE
 		}
 	case 4:
 		switch numDice {
 		case 4:
 			return HIGH_DIE
 		case 5: // 1 1 2 3 4
-			if valueMap[1] == 2 {
+			if valueCount[SNAKE_EYES_TARGET] == 2 {
 				return SNAKE_EYES
+			} else {
+				return ONE_PAIR
 			}
-			return ONE_PAIR
 		case 6: // 1 1 1 2 3 4, 1 1 2 2 3 4
-			if values[0] == 3 || values[1] == 3 || values[2] == 3 || values[4] == 3 {
+			if valueCount[values[0]] == 3 ||
+				valueCount[values[1]] == 3 ||
+				valueCount[values[2]] == 3 ||
+				valueCount[values[3]] == 3 {
 				return THREE_OF_A_KIND
+			} else {
+				return TWO_PAIR
 			}
-			return TWO_PAIR
-		case 7: // 1 1 1 1 2 3 4, 1 1 1 2 2 3 4
-			if values[0] == 4 || values[1] == 4 || values[2] == 4 || values[3] == 4 {
+		case 7: // 1 1 1 1 2 3 4, 1 1 1 2 2 3 4, 1 1 2 2 3 3 4
+			if valueCount[values[0]] == 4 ||
+				valueCount[values[1]] == 4 ||
+				valueCount[values[2]] == 4 ||
+				valueCount[values[3]] == 4 {
 				return FOUR_OF_A_KIND
+			} else if (valueCount[values[0]] == valueCount[values[1]] && valueCount[values[1]] == valueCount[values[2]]) ||
+				(valueCount[values[1]] == valueCount[values[2]] && valueCount[values[2]] == valueCount[values[3]]) {
+				return THREE_PAIR
+			} else {
+				return FULL_HOUSE
 			}
-			return FULL_HOUSE
 		}
 	case 5:
 		switch numDice {
 		case 5:
 			return HIGH_DIE
 		case 6: // 1 1 2 3 4 5
-			if valueMap[1] == 2 {
+			if valueCount[SNAKE_EYES_TARGET] == 2 {
 				return SNAKE_EYES
+			} else {
+				return ONE_PAIR
 			}
-			return ONE_PAIR
 		case 7: // 1 1 1 2 3 4 5, 1 1 2 2 3 4 5
-			if values[0] == 3 || values[1] == 3 || values[2] == 3 || values[4] == 3 || values[5] == 3 {
+			if valueCount[values[0]] == 3 ||
+				valueCount[values[1]] == 3 ||
+				valueCount[values[2]] == 3 ||
+				valueCount[values[3]] == 3 ||
+				valueCount[values[4]] == 3 {
 				return THREE_OF_A_KIND
+			} else {
+				return TWO_PAIR
 			}
-			return TWO_PAIR
 		}
 	case 6:
 		switch numDice {
 		case 6:
 			return HIGH_DIE
 		case 7:
-			if valueMap[1] == 2 {
+			if valueCount[SNAKE_EYES_TARGET] == 2 {
 				return SNAKE_EYES
+			} else {
+				return ONE_PAIR
 			}
-			return ONE_PAIR
 		}
 	case 7:
 		return HIGH_DIE
-	default: // shouldn't get here
-		return UNKNOWN_HAND
 	}
 
-	return UNKNOWN_HAND
+	return UNKNOWN_HAND // SHOULD NOT GET HERE!
+}
+
+// TODO: unit test
+//
+// Calculates given slice of dice's active face's values.
+//
+// returns a HandRank that corresponds to the input dice
+func DetermineHandRank(dice []Die) HandRank {
+	var (
+		numDice       = len(dice)
+		valueCount    = map[int]int{}
+		values        = []int{} // tracks the # of values' occurences from valueCount for comparisons. A slice of the values of valueCount
+		foundStraight HandRank
+		handFound     HandRank
+	)
+
+	// gather occurences of unique values
+	for i := range numDice {
+		value := dice[i].ActiveFace().Value()
+		// starts from 0 bc of nil int
+		valueCount[value] = valueCount[value] + 1
+	}
+
+	// used in determining hand logic
+	for value := range valueCount {
+		values = append(values, value)
+	}
+
+	// if a straight exists, assign check variable
+	if numDice >= STRAIGHT_SMALL_LENGTH { // has to be at least 4. STRAIGHT_SMALL
+		foundStraight = checkStraight(values)
+	}
+
+	// determine type of hand based off # of unique values
+	handFound = checkHandOtherThanStraight(valueCount, values, numDice)
+
+	// found straight vs handfound. Edge case for full houses and straights in the same hand
+	if foundStraight > handFound {
+		return foundStraight
+	}
+	return handFound
 }
 
 var (
 	handRankStringMap = map[HandRank]string{
-		UNKNOWN_HAND:        "Unknown Hand",
+		UNKNOWN_HAND:        "UNKNOWN HAND (shouldn't see this)",
 		NO_HAND:             "No Hand",
 		HIGH_DIE:            "High Die",
 		ONE_PAIR:            "One Pair",
@@ -261,13 +404,14 @@ var (
 		THREE_PAIR:          "Three Pair",
 		CROWDED_HOUSE:       "Crowded House",
 		SIX_OF_A_KIND:       "Six of a Kind",
-		STRAIGHT_LARGER:     "Larger Straight",
+		STRAIGHT_LARGER:     "Large-r Straight",
 		TWO_THREE_OF_A_KIND: "Three's a Crowd",
 		OVERPOPULATED_HOUSE: "Overpopulated House",
 		STRAIGHT_LARGEST:    "Ultra Straight",
-		FULLEST_HOUSE:       "Fullest House",
+		FULLEST_HOUSE:       "Fire Code Violation",
 		SEVEN_OF_A_KIND:     "Seven of a Kind",
 		SEVEN_SEVENS:        "Lucky Sevens",
+		STRAIGHT_MAX:        "MEGA Straight",
 	}
 )
 
