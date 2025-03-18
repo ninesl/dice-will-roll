@@ -69,6 +69,15 @@ func BlankDice(numDice int) []Die {
 	return dice
 }
 
+// Returns x blank (ModNONE) dice with maxValue faces, each.
+func BlankDiceRange(numDice int, maxValue int) []Die {
+	dice := []Die{}
+	for range numDice {
+		dice = append(dice, NewDie(maxValue))
+	}
+	return dice
+}
+
 // output of each side and how many pips on each side
 func (d *Die) String() string {
 	var sb strings.Builder
@@ -96,8 +105,17 @@ func (d *Die) Roll() *Face {
 	return d.ActiveFace()
 }
 
-// Value is the literal NUMBER of pips on the face.
+// Value is the literal NUMBER of pips on the face and relevant modifiers (to the die, not enviornment) are applied
 func (f *Face) Value() int {
+	value := f.NumPips()
+
+	// modifier?
+
+	return value
+}
+
+// NumPips returns len(f.pips)
+func (f *Face) NumPips() int {
 	return len(f.pips)
 }
 
