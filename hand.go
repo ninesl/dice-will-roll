@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"slices"
 )
 
@@ -61,7 +62,6 @@ const (
 
 	// other
 	UNKNOWN_HAND
-	NUM_TYP
 )
 
 // could be modified?
@@ -346,8 +346,99 @@ func checkHandOtherThanStraight(valueCount map[int]int, values []int, numDice in
 	return UNKNOWN_HAND // SHOULD NOT GET HERE!
 }
 
-// TODO: unit test
+// returns straight with the BEST values for the conesecutive.
 //
+// # for modifiers, etc the tie breaker is ALWAYS the true number of .pips on the die.
+func findBestSingleConsecutive(dice []Die) []Die {
+	return nil
+}
+
+// TODO: impl
+//
+// returns slice of Die from input die that share valuess.
+//
+//	dice values [1, 2, 1, 3, 4, 2]
+//	return pairs [1, 1, 2, 2] // order not guaranteed
+//
+//	dice := [1, 2, 2, 2, 3]
+//	return [2, 2, 2]
+//
+//	dice [1, 3, 2, 2, 2, 3]
+//	return [3, 3, 2, 2, 2]
+func findMatchingValues(dice []Die) []Die {
+	return nil
+}
+
+// TODO: impl
+//
+// returns the X values with the most .Value() of input die.
+//
+//	dice [1, 1, 2, 2, 2, 3, 3] x = 2
+//	return [2, 2, 2, 3, 3] // order not guaranteed
+func bestValues(dice []Die, x int) []Die {
+	return nil
+}
+
+// Find the hand that is associated with the given handrank.
+//
+// # The given handrank assumes that it is the BEST hand possible for the input dice
+//
+// Returns an error if not?? FIXME: not sure if this is worth doing
+//
+// # Returns the die that make up input handrank, assumes handrank is the best hand
+func FindHandRankDice(hand HandRank, dice []Die) []Die {
+	var foundDice []Die
+	switch hand {
+	case HIGH_DIE:
+		var dieIndex, bestVal int
+		for i, die := range dice {
+			thisVal := die.ActiveFace().Value()
+			if thisVal > bestVal {
+				bestVal = thisVal
+				dieIndex = i
+			}
+		}
+		foundDice = append(foundDice, dice[dieIndex])
+	case ONE_PAIR, SNAKE_EYES, THREE_OF_A_KIND, FOUR_OF_A_KIND, FIVE_OF_A_KIND, SIX_OF_A_KIND, SEVEN_OF_A_KIND, SEVEN_SEVENS:
+		foundDice = findMatchingValues(dice)
+	case THREE_PAIR, CROWDED_HOUSE, TWO_PAIR, TWO_THREE_OF_A_KIND, OVERPOPULATED_HOUSE, FULLEST_HOUSE: // broken up for clarity
+		foundDice = findMatchingValues(dice)
+	case STRAIGHT_SMALL, STRAIGHT_LARGE, STRAIGHT_LARGER, STRAIGHT_LARGEST:
+		foundDice = findBestSingleConsecutive(dice)
+	case FULL_HOUSE:
+		foundDice = findMatchingValues(dice)
+		foundDice = bestValues(foundDice, 2) // [1, 1, 2, 2, 2, 3, 3]
+	case STRAIGHT_MAX:
+		// TODO: impl
+		// ? MustLen(len(foundDice), 7)
+	case UNKNOWN_HAND, NO_HAND:
+	default:
+		return nil
+	}
+
+	length := len(foundDice)
+	switch hand {
+	case HIGH_DIE:
+		MustLen(length, 1, fmt.Sprintf("%d %s, %d length found, expected 1", hand, hand.String(), length))
+	case ONE_PAIR, SNAKE_EYES:
+		MustLen(length, 2, fmt.Sprintf("%d %s, %d length found, expected 2", hand, hand.String(), length))
+	case THREE_OF_A_KIND:
+		MustLen(length, 3, fmt.Sprintf("%d %s, %d length found, expected 3", hand, hand.String(), length))
+	case TWO_PAIR, STRAIGHT_SMALL, FOUR_OF_A_KIND:
+		MustLen(length, 4, fmt.Sprintf("%d %s, %d length found, expected 4", hand, hand.String(), length))
+	case STRAIGHT_LARGE, FULL_HOUSE, FIVE_OF_A_KIND:
+		MustLen(length, 5, fmt.Sprintf("%d %s, %d length found, expected 5", hand, hand.String(), length))
+	case SIX_OF_A_KIND, STRAIGHT_LARGER, TWO_THREE_OF_A_KIND, CROWDED_HOUSE, THREE_PAIR:
+		MustLen(length, 6, fmt.Sprintf("%d %s, %d length found, expected 6", hand, hand.String(), length))
+	case OVERPOPULATED_HOUSE, FULLEST_HOUSE, SEVEN_OF_A_KIND, SEVEN_SEVENS:
+		MustLen(length, 7, fmt.Sprintf("%d %s, %d length found, expected 7", hand, hand.String(), length))
+	default:
+		MustLen(length, -1, hand.String()+" found. ???") // insta crash
+	}
+
+	return foundDice
+}
+
 // Calculates given slice of dice's active face's values.
 //
 // returns a HandRank that corresponds to the input dice
