@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"slices"
+	"sort"
 )
 
 // This pkg is used to determine hand outcome from die.Roll().Value()
@@ -353,7 +353,7 @@ func findBestSingleConsecutive(dice []Die) []Die {
 	return nil
 }
 
-// TODO: impl
+// TODO: make this more efficient
 //
 // returns slice of Die from input die that share valuess.
 //
@@ -366,17 +366,56 @@ func findBestSingleConsecutive(dice []Die) []Die {
 //	dice [1, 3, 2, 2, 2, 3]
 //	return [3, 3, 2, 2, 2]
 func findMatchingValues(dice []Die) []Die {
-	return nil
+	tracker := map[int][]Die{}
+
+	for _, die := range dice {
+		x := die.ActiveFace().NumPips()
+		tracker[x] = append(tracker[x], die)
+	}
+
+	var matchingValues []Die
+
+	for _, diceThisValue := range tracker {
+		if len(diceThisValue) > 1 {
+			matchingValues = append(matchingValues, diceThisValue...)
+		}
+	}
+
+	return matchingValues
 }
 
-// TODO: impl
+// TODO: clean this up. refactor etc
 //
 // returns the X values with the most .Value() of input die.
 //
+//	dice [1, 1, 2, 2] x = 1
+//	return [2, 2]
 //	dice [1, 1, 2, 2, 2, 3, 3] x = 2
 //	return [2, 2, 2, 3, 3] // order not guaranteed
 func bestValues(dice []Die, x int) []Die {
-	return nil
+	var uniqueValues []int
+	var bestValues []Die
+
+	for _, die := range dice {
+		pips := die.ActiveFace().NumPips()
+		if !slices.Contains(uniqueValues, pips) {
+			uniqueValues = append(uniqueValues, pips)
+		}
+	}
+
+	sort.Slice(uniqueValues, func(i, j int) bool {
+		return uniqueValues[i] < uniqueValues[j]
+	})
+
+	uniqueValues = uniqueValues[:x] // 0 - x exclusive
+
+	for _, die := range dice {
+		if slices.Contains(uniqueValues, die.ActiveFace().NumPips()) {
+			bestValues = append(bestValues, die)
+		}
+	}
+
+	return bestValues
 }
 
 // Find the hand that is associated with the given handrank.
@@ -416,25 +455,25 @@ func FindHandRankDice(hand HandRank, dice []Die) []Die {
 		return nil
 	}
 
-	length := len(foundDice)
-	switch hand {
-	case HIGH_DIE:
-		MustLen(length, 1, fmt.Sprintf("%d %s, %d length found, expected 1", hand, hand.String(), length))
-	case ONE_PAIR, SNAKE_EYES:
-		MustLen(length, 2, fmt.Sprintf("%d %s, %d length found, expected 2", hand, hand.String(), length))
-	case THREE_OF_A_KIND:
-		MustLen(length, 3, fmt.Sprintf("%d %s, %d length found, expected 3", hand, hand.String(), length))
-	case TWO_PAIR, STRAIGHT_SMALL, FOUR_OF_A_KIND:
-		MustLen(length, 4, fmt.Sprintf("%d %s, %d length found, expected 4", hand, hand.String(), length))
-	case STRAIGHT_LARGE, FULL_HOUSE, FIVE_OF_A_KIND:
-		MustLen(length, 5, fmt.Sprintf("%d %s, %d length found, expected 5", hand, hand.String(), length))
-	case SIX_OF_A_KIND, STRAIGHT_LARGER, TWO_THREE_OF_A_KIND, CROWDED_HOUSE, THREE_PAIR:
-		MustLen(length, 6, fmt.Sprintf("%d %s, %d length found, expected 6", hand, hand.String(), length))
-	case OVERPOPULATED_HOUSE, FULLEST_HOUSE, SEVEN_OF_A_KIND, SEVEN_SEVENS:
-		MustLen(length, 7, fmt.Sprintf("%d %s, %d length found, expected 7", hand, hand.String(), length))
-	default:
-		MustLen(length, -1, hand.String()+" found. ???") // insta crash
-	}
+	// length := len(foundDice)
+	// switch hand {
+	// case HIGH_DIE:
+	// 	MustLen(length, 1, fmt.Sprintf("%d %s, %d length found, expected 1", hand, hand.String(), length))
+	// case ONE_PAIR, SNAKE_EYES:
+	// 	MustLen(length, 2, fmt.Sprintf("%d %s, %d length found, expected 2", hand, hand.String(), length))
+	// case THREE_OF_A_KIND:
+	// 	MustLen(length, 3, fmt.Sprintf("%d %s, %d length found, expected 3", hand, hand.String(), length))
+	// case TWO_PAIR, STRAIGHT_SMALL, FOUR_OF_A_KIND:
+	// 	MustLen(length, 4, fmt.Sprintf("%d %s, %d length found, expected 4", hand, hand.String(), length))
+	// case STRAIGHT_LARGE, FULL_HOUSE, FIVE_OF_A_KIND:
+	// 	MustLen(length, 5, fmt.Sprintf("%d %s, %d length found, expected 5", hand, hand.String(), length))
+	// case SIX_OF_A_KIND, STRAIGHT_LARGER, TWO_THREE_OF_A_KIND, CROWDED_HOUSE, THREE_PAIR:
+	// 	MustLen(length, 6, fmt.Sprintf("%d %s, %d length found, expected 6", hand, hand.String(), length))
+	// case OVERPOPULATED_HOUSE, FULLEST_HOUSE, SEVEN_OF_A_KIND, SEVEN_SEVENS:
+	// 	MustLen(length, 7, fmt.Sprintf("%d %s, %d length found, expected 7", hand, hand.String(), length))
+	// default:
+	// 	MustLen(length, -1, hand.String()+" found. ???") // insta crash
+	// }
 
 	return foundDice
 }
