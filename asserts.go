@@ -13,7 +13,7 @@ func MustLen(length int, expectedLength int, sourceMsg ...string) {
 		if len(sourceMsg) > 0 {
 			msg = fmt.Sprintln(msg, sourceMsg)
 		}
-		msg = fmt.Sprintf("%s\nPANIC %d found. expected %d", msg length, expectedLength)
+		msg = fmt.Sprintf("%s\nPANIC %d found. expected %d", msg, length, expectedLength)
 		panic(msg)
 	}
 }
