@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"reflect"
+	"sort"
 	"testing"
 )
 
@@ -64,14 +66,73 @@ func randDiceHand(x, n int) {
 	fmt.Println(handRankStringMap[handRank] + "\n")
 }
 
-// func TestSetRandomDice(t *testing.T) {
-// 	randDiceHand(6, 1)
-// 	randDiceHand(6, 2)
-// 	randDiceHand(6, 3)
-// 	randDiceHand(6, 4)
-// 	randDiceHand(6, 5)
-// 	randDiceHand(6, 6)
-// 	randDiceHand(7, 7)
+//	func TestSetRandomDice(t *testing.T) {
+//		randDiceHand(6, 1)
+//		randDiceHand(6, 2)
+//		randDiceHand(6, 3)
+//		randDiceHand(6, 4)
+//		randDiceHand(6, 5)
+//		randDiceHand(6, 6)
+//		randDiceHand(7, 7)
+//
+// Helper function to extract the numerical values from a slice of Die
+func extractDiceValues(dice []Die) []int {
+	values := make([]int, len(dice))
+	for i, d := range dice {
+		values[i] = d.ActiveFace().Value() // Or NumPips() if that's more appropriate for comparison
+	}
+	return values
+}
+
+// Helper function to compare expected dice values with actual returned dice, ignoring order.
+func compareDiceSlicesUnordered(t *testing.T, gotDice []Die, wantValues []int, testName string, inputValues []int, hand HandRank) {
+	t.Helper() // Marks this as a helper function for better error reporting
+
+	gotValues := extractDiceValues(gotDice)
+
+	// Sort both slices for comparison
+	sort.Ints(gotValues)
+	sort.Ints(wantValues)
+
+	if !reflect.DeepEqual(gotValues, wantValues) {
+		t.Errorf("%s: FindHandRankDice(%s, %v) returned dice with values %v; want values %v",
+			testName, hand.String(), inputValues, gotValues, wantValues)
+	}
+
+	// Additionally, check if the length assertion in FindHandRankDice would pass
+	// This requires manually implementing the length checks from FindHandRankDice
+	// This part is optional but can help diagnose issues related to the MustLen checks
+	expectedLen := -1 // Default for unknown
+	switch hand {
+	case HIGH_DIE:
+		expectedLen = 1
+	case ONE_PAIR, SNAKE_EYES:
+		expectedLen = 2
+	case THREE_OF_A_KIND:
+		expectedLen = 3
+	case TWO_PAIR, STRAIGHT_SMALL, FOUR_OF_A_KIND:
+		expectedLen = 4
+	case STRAIGHT_LARGE, FULL_HOUSE, FIVE_OF_A_KIND:
+		expectedLen = 5
+	case SIX_OF_A_KIND, STRAIGHT_LARGER, TWO_THREE_OF_A_KIND, CROWDED_HOUSE, THREE_PAIR:
+		expectedLen = 6
+	case OVERPOPULATED_HOUSE, FULLEST_HOUSE, SEVEN_OF_A_KIND, SEVEN_SEVENS:
+		expectedLen = 7
+		// Add STRAIGHT_LARGEST, STRAIGHT_MAX if needed
+	}
+
+	if expectedLen != -1 && len(gotDice) != expectedLen {
+		// This check happens *after* the value comparison, primarily to indicate
+		// if MustLen *would* have failed inside the original function based on the dice found.
+		// The test already failed above if the values were wrong.
+		// If the values *were* correct but the length is wrong, this adds context.
+		if reflect.DeepEqual(gotValues, wantValues) { // Only log this extra error if values matched but length is wrong
+			t.Errorf("%s: FindHandRankDice(%s, %v) returned correct values %v but wrong count %d; expected count %d for this hand rank",
+				testName, hand.String(), inputValues, gotValues, len(gotDice), expectedLen)
+		}
+	}
+}
+
 // }
 
 // Main test for all basic hand types
@@ -146,6 +207,7 @@ func TestDetermineHandRank(t *testing.T) {
 					tc.diceValues, got.String(), tc.expected.String())
 			}
 		})
+
 	}
 }
 
@@ -443,4 +505,82 @@ func debugHandAnalysis(t *testing.T, values []int) {
 	// Final determination
 	finalResult := DetermineHandRank(dice)
 	t.Logf("Final hand determination: %s", finalResult.String())
+}
+
+// TestFindHandRankDice_MatchingValues tests the FindHandRankDice function
+// specifically for hand ranks determined primarily by finding matching dice values.
+// It ASSUMES the inputHandRank is the CORRECT rank previously determined for the inputDiceValues.
+func TestFindHandRankDice_MatchingValues(t *testing.T) {
+	tests := []struct {
+		name               string
+		inputHandRank      HandRank // Assumed correct rank for the dice
+		inputDiceValues    []int    // Dice that result in inputHandRank
+		maxPips            int
+		expectedDiceValues []int // EXACT dice values making up the inputHandRank
+	}{
+		{"ONE_PAIR", ONE_PAIR, []int{1, 3, 3, 4, 5}, 6, []int{2, 2}},
+		// --- Single Group Matches ---
+		{"SNAKE_EYES", SNAKE_EYES, []int{1, 1, 3, 4, 5}, 6, []int{1, 1}},
+		{"THREE_OF_A_KIND", THREE_OF_A_KIND, []int{3, 3, 3, 1, 5}, 6, []int{3, 3, 3}},
+		{"FOUR_OF_A_KIND", FOUR_OF_A_KIND, []int{4, 4, 4, 4, 1}, 6, []int{4, 4, 4, 4}},
+		{"FIVE_OF_A_KIND", FIVE_OF_A_KIND, []int{5, 5, 5, 5, 5, 2}, 6, []int{5, 5, 5, 5, 5}},
+		{"SIX_OF_A_KIND", SIX_OF_A_KIND, []int{2, 2, 2, 2, 2, 2, 3}, 6, []int{2, 2, 2, 2, 2, 2}},
+		{"SEVEN_OF_A_KIND", SEVEN_OF_A_KIND, []int{1, 1, 1, 1, 1, 1, 1}, 6, []int{1, 1, 1, 1, 1, 1, 1}},
+		{"SEVEN_SEVENS special", SEVEN_SEVENS, []int{7, 7, 7, 7, 7, 7, 7}, 7, []int{7, 7, 7, 7, 7, 7, 7}},
+
+		// --- Multiple Group Matches ---
+		// findMatchingValues should return *all* dice involved in these specific hands.
+		{"TWO_PAIR", TWO_PAIR, []int{2, 2, 4, 4, 5}, 6, []int{2, 2, 4, 4}},
+		{"THREE_PAIR", THREE_PAIR, []int{1, 1, 3, 3, 5, 5, 6}, 6, []int{1, 1, 3, 3, 5, 5}},
+
+		// Full House: Uses findMatchingValues then bestValues(..., 2).
+		// Assuming bestValues correctly identifies the two groups (or doesn't incorrectly filter them),
+		// it should return the dice comprising the 3-of-a-kind and the pair.
+		{"FULL_HOUSE (3+2)", FULL_HOUSE, []int{3, 3, 3, 5, 5}, 6, []int{3, 3, 3, 5, 5}},
+		// {"FULL_HOUSE (3+2) with larger pairs", FULL_HOUSE, []int{1, 1, 1, 3, 3, 6, 6}, 7, []int{1, 1, 1, 6, 6}}, // Expect only the FH dice
+		// can skip because it ends up being TWO_THREE_PAIR anyway
+
+		{"CROWDED_HOUSE (4+2)", CROWDED_HOUSE, []int{4, 4, 4, 4, 1, 1, 3}, 6, []int{4, 4, 4, 4, 1, 1}},
+		{"TWO_THREE_OF_A_KIND (3+3)", TWO_THREE_OF_A_KIND, []int{2, 2, 2, 5, 5, 5, 1}, 6, []int{2, 2, 2, 5, 5, 5}},
+		{"OVERPOPULATED_HOUSE (4+3)", OVERPOPULATED_HOUSE, []int{5, 5, 5, 5, 2, 2, 2}, 7, []int{5, 5, 5, 5, 2, 2, 2}},
+		{"FULLEST_HOUSE (5+2)", FULLEST_HOUSE, []int{3, 3, 3, 3, 3, 2, 2}, 6, []int{3, 3, 3, 3, 3, 2, 2}},
+
+		// --- Edge Cases (that are valid scenarios) ---
+		// Case: Hand is ONE_PAIR, but includes a higher non-matching die
+		{"ONE_PAIR with higher single", ONE_PAIR, []int{2, 2, 6}, 6, []int{2, 2}},
+
+		// --- Cases where findMatchingValues needs filtering (implicitly done by MustLen? Or should findMatchingValues be smarter?)
+		// Q: If the hand is ONE_PAIR, but dice are [2, 2, 4, 4, 5] (actual best hand TWO_PAIR), what happens?
+		// A: This scenario is invalid based on the user requirement. We assume inputHandRank is TWO_PAIR.
+		// Q: If the hand is THREE_OF_A_KIND, but dice are [3, 3, 3, 5, 5] (actual best hand FULL_HOUSE), what happens?
+		// A: Invalid scenario. We assume inputHandRank is FULL_HOUSE.
+
+		// Therefore, tests where findMatchingValues returns *more* dice than the specific hand requires (e.g., returning two pairs when only one is asked for) are removed,
+		// because FindHandRankDice will only be called with the *correct*, highest-ranking hand.
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Prepare input dice
+			dice := generateDiceValues(tc.inputDiceValues, tc.maxPips)
+
+			// Verify our assumption: DetermineHandRank should yield tc.inputHandRank
+			// This is a sanity check for the test case itself.
+			determinedRank := DetermineHandRank(dice)
+			if determinedRank != tc.inputHandRank {
+				// If this fails, the test case setup is wrong. The inputDiceValues
+				// don't actually produce the inputHandRank.
+				// Use debugHandAnalysis for complex cases if needed.
+				// debugHandAnalysis(t, tc.inputDiceValues) // Uncomment to debug test case setup
+				t.Fatalf("Test Case Setup Error for '%s': DetermineHandRank(%v) returned %s, but test expected %s. Adjust inputDiceValues or inputHandRank.",
+					tc.name, tc.inputDiceValues, determinedRank.String(), tc.inputHandRank.String())
+			}
+
+			// Call the function under test with the *correct* hand rank
+			foundDice := FindHandRankDice(tc.inputHandRank, dice)
+
+			// Compare the values of the returned dice (order-independent)
+			compareDiceSlicesUnordered(t, foundDice, tc.expectedDiceValues, tc.name, tc.inputDiceValues, tc.inputHandRank)
+		})
+	}
 }
