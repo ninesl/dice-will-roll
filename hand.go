@@ -64,7 +64,7 @@ const (
 	UNKNOWN_HAND
 )
 
-// could be modified?
+// could be modified by gems?
 var (
 	STRAIGHT_SMALL_LENGTH   = 4
 	STRAIGHT_LARGE_LENGTH   = 5
@@ -74,6 +74,17 @@ var (
 	SNAKE_EYES_TARGET   = 1 // default to 1 bc obvious
 	SEVEN_SEVENS_TARGET = 7
 )
+
+func trackUniqueValues(dice []Die) map[int][]Die {
+	tracker := map[int][]Die{}
+
+	for _, die := range dice {
+		x := die.ActiveFace().Value()
+		tracker[x] = append(tracker[x], die)
+	}
+
+	return tracker
+}
 
 // first check when determining HandRank
 //
@@ -350,7 +361,22 @@ func checkHandOtherThanStraight(valueCount map[int]int, values []int, numDice in
 //
 // # for modifiers, etc the tie breaker is ALWAYS the true number of .pips on the die.
 func findBestSingleConsecutive(dice []Die) []Die {
-	return nil
+	tracker := trackUniqueValues(dice)
+
+	trackedLen := len(tracker)
+
+	if trackedLen < STRAIGHT_SMALL_LENGTH {
+		return []Die{} // explicitly empty
+	}
+
+	inARow := []Die{}
+
+	// going from the top gets best straight
+	for i := trackedLen; i >= 0; i -= 1 {
+
+	}
+
+	return inARow
 }
 
 // TODO: make this more efficient
@@ -366,12 +392,7 @@ func findBestSingleConsecutive(dice []Die) []Die {
 //	dice [1, 3, 2, 2, 2, 3]
 //	return [3, 3, 2, 2, 2]
 func findMatchingValues(dice []Die) []Die {
-	tracker := map[int][]Die{}
-
-	for _, die := range dice {
-		x := die.ActiveFace().NumPips()
-		tracker[x] = append(tracker[x], die)
-	}
+	tracker := trackUniqueValues(dice)
 
 	var matchingValues []Die
 
@@ -397,7 +418,7 @@ func bestValues(dice []Die, x int) []Die {
 	var bestValues []Die
 
 	for _, die := range dice {
-		pips := die.ActiveFace().NumPips()
+		pips := die.ActiveFace().Value()
 		if !slices.Contains(uniqueValues, pips) {
 			uniqueValues = append(uniqueValues, pips)
 		}
@@ -410,7 +431,7 @@ func bestValues(dice []Die, x int) []Die {
 	uniqueValues = uniqueValues[:x] // 0 - x exclusive
 
 	for _, die := range dice {
-		if slices.Contains(uniqueValues, die.ActiveFace().NumPips()) {
+		if slices.Contains(uniqueValues, die.ActiveFace().NumPips()) { // TODO: figure out if this should be numpip or value
 			bestValues = append(bestValues, die)
 		}
 	}
@@ -440,13 +461,10 @@ func FindHandRankDice(hand HandRank, dice []Die) []Die {
 		foundDice = append(foundDice, dice[dieIndex])
 	case ONE_PAIR, SNAKE_EYES, THREE_OF_A_KIND, FOUR_OF_A_KIND, FIVE_OF_A_KIND, SIX_OF_A_KIND, SEVEN_OF_A_KIND, SEVEN_SEVENS:
 		foundDice = findMatchingValues(dice)
-	case THREE_PAIR, CROWDED_HOUSE, TWO_PAIR, TWO_THREE_OF_A_KIND, OVERPOPULATED_HOUSE, FULLEST_HOUSE: // broken up for clarity
+	case THREE_PAIR, FULL_HOUSE, CROWDED_HOUSE, TWO_PAIR, TWO_THREE_OF_A_KIND, OVERPOPULATED_HOUSE, FULLEST_HOUSE: // broken up for readability
 		foundDice = findMatchingValues(dice)
 	case STRAIGHT_SMALL, STRAIGHT_LARGE, STRAIGHT_LARGER, STRAIGHT_LARGEST:
 		foundDice = findBestSingleConsecutive(dice)
-	case FULL_HOUSE:
-		foundDice = findMatchingValues(dice)
-		foundDice = bestValues(foundDice, 2) // [1, 1, 2, 2, 2, 3, 3]
 	case STRAIGHT_MAX:
 		// TODO: impl
 		// ? MustLen(len(foundDice), 7)
