@@ -7,11 +7,11 @@ package main
 //		// of every .ActiveFace() from the
 //		// best HandRank of the input dice
 func Score(dice []Die) int {
-	var (
-		total       int
-		rank        = DetermineHandRank(dice)
-		scoringDice = FindHandRankDice(rank, dice)
-	)
+	var total int
+	rank := DetermineHandRank(dice)
+	scoringDice := FindHandRankDice(rank, dice)
+
+	// fmt.Println(DiceString(scoringDice))
 
 	for _, d := range scoringDice {
 		total += d.ActiveFace().Score()
@@ -42,8 +42,11 @@ func FindHandRankDice(hand HandRank, dice []Die) []Die {
 		foundDice = append(foundDice, dice[dieIndex])
 	case ONE_PAIR, SNAKE_EYES, THREE_OF_A_KIND, FOUR_OF_A_KIND, FIVE_OF_A_KIND, SIX_OF_A_KIND, SEVEN_OF_A_KIND, SEVEN_SEVENS:
 		foundDice = findMatchingValues(dice)
-	case THREE_PAIR, FULL_HOUSE, CROWDED_HOUSE, TWO_PAIR, TWO_THREE_OF_A_KIND, OVERPOPULATED_HOUSE, FULLEST_HOUSE: // broken up for readability
+	case FULL_HOUSE, CROWDED_HOUSE, TWO_PAIR, TWO_THREE_OF_A_KIND, OVERPOPULATED_HOUSE, FULLEST_HOUSE: // broken up for readability
 		foundDice = findMatchingValues(dice)
+	case THREE_PAIR:
+		foundDice = findMatchingValues(dice)
+		foundDice = filterThreePair(foundDice)
 	case STRAIGHT_SMALL, STRAIGHT_LARGE, STRAIGHT_LARGER, STRAIGHT_LARGEST:
 		foundDice = findBestSingleConsecutive(dice)
 	case STRAIGHT_MAX:
@@ -60,8 +63,9 @@ func FindHandRankDice(hand HandRank, dice []Die) []Die {
 	// 	MustLen(length, 1, fmt.Sprintf("%d %s, %d length found, expected 1", hand, hand.String(), length))
 	// case ONE_PAIR, SNAKE_EYES:
 	// 	MustLen(length, 2, fmt.Sprintf("%d %s, %d length found, expected 2", hand, hand.String(), length))
-	// case THREE_OF_A_KIND:
-	// 	MustLen(length, 3, fmt.Sprintf("%d %s, %d length found, expected 3", hand, hand.String(), length))
+	// case THREE_OF_A_KIND: //TODO: FIXME:
+
+	// 	// MustLen(length, 3, fmt.Sprintf("%d %s, %d length found, expected 3", hand, hand.String(), length))
 	// case TWO_PAIR, STRAIGHT_SMALL, FOUR_OF_A_KIND:
 	// 	MustLen(length, 4, fmt.Sprintf("%d %s, %d length found, expected 4", hand, hand.String(), length))
 	// case STRAIGHT_LARGE, FULL_HOUSE, FIVE_OF_A_KIND:
@@ -71,7 +75,7 @@ func FindHandRankDice(hand HandRank, dice []Die) []Die {
 	// case OVERPOPULATED_HOUSE, FULLEST_HOUSE, SEVEN_OF_A_KIND, SEVEN_SEVENS:
 	// 	MustLen(length, 7, fmt.Sprintf("%d %s, %d length found, expected 7", hand, hand.String(), length))
 	// default:
-	// 	MustLen(length, -1, hand.String()+" found. ???") // insta crash
+	// MustLen(length, -1, hand.String()+" found. ???") // insta crash
 	// }
 
 	return foundDice

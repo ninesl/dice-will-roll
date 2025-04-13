@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"slices"
 	"sort"
 )
@@ -87,6 +88,21 @@ func trackUniqueValues(dice []Die) map[int][]Die {
 	}
 
 	return tracker
+}
+
+// TODO:FIXME: this will need to be 100% sure it's the right die being passed
+// makes sure threepair is ACTUALLY THREE pairs
+func filterThreePair(dice []Die) []Die {
+	tracker := trackUniqueValues(dice)
+
+	var collect []Die
+	for _, curValueDice := range tracker {
+		collect = append(collect, bestValues(curValueDice, 1)[:2]...) // top 2 hopefully
+	}
+
+	fmt.Println(DiceString(collect))
+
+	return collect
 }
 
 // first check when determining HandRank
@@ -273,7 +289,10 @@ func checkHandOtherThanStraight(valueCount map[int]int, values []int, numDice in
 				return FIVE_OF_A_KIND
 			} else if valueCount[values[0]] == valueCount[values[1]] ||
 				valueCount[values[1]] == valueCount[values[2]] {
-				return TWO_THREE_OF_A_KIND
+				if valueCount[values[0]] == 3 || valueCount[values[1]] == 3 { // at least 1 of these is the match
+					return TWO_THREE_OF_A_KIND
+				}
+				return THREE_PAIR
 			} else if (valueCount[values[0]] == 2 && valueCount[values[1]] == 4 ||
 				valueCount[values[1]] == 2 && valueCount[values[0]] == 4) ||
 
