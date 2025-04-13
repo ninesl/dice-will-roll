@@ -519,6 +519,7 @@ func TestFindHandRankDice_MatchingValues(t *testing.T) {
 		expectedDiceValues []int // EXACT dice values making up the inputHandRank
 	}{
 		{"ONE_PAIR", ONE_PAIR, []int{1, 3, 3, 4, 5}, 6, []int{3, 3}},
+
 		// --- Single Group Matches ---
 		{"SNAKE_EYES", SNAKE_EYES, []int{1, 1, 3, 4, 5}, 6, []int{1, 1}},
 		{"THREE_OF_A_KIND", THREE_OF_A_KIND, []int{3, 3, 3, 1, 5}, 6, []int{3, 3, 3}},
