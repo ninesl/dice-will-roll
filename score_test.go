@@ -62,26 +62,23 @@ func TestScoreComprehensive(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Handle empty dice case separately as generateDiceValues might expect > 0
-			if len(tc.diceValues) == 0 {
-				if tc.expected != 0 {
-					t.Errorf("Test '%s': Score for empty dice expected 0, got check for %d", tc.name, tc.expected)
-				}
-				// Call score with nil or empty slice if that's how it handles it
-				score := Score(nil) // Or Score([]Die{})
-				if score != 0 {
-					t.Errorf("Test '%s': Score(nil) = %d; want 0", tc.name, score)
-				}
-				return // Skip rest of test for empty input
-			}
+			// // Handle empty dice case separately as generateDiceValues might expect > 0
+			// if len(tc.diceValues) == 0 {
+			// 	if tc.expected != 0 {
+			// 		t.Errorf("Test '%s': Score for empty dice expected 0, got check for %d", tc.name, tc.expected)
+			// 	}
+			// 	// Call score with nil or empty slice if that's how it handles it
+			// 	score := Score(nil) // Or Score([]Die{})
+			// 	if score != 0 {
+			// 		t.Errorf("Test '%s': Score(nil) = %d; want 0", tc.name, score)
+			// 	}
+			// 	return // Skip rest of test for empty input
+			// }
 
-			// Setup: Create dice with specific values
 			dice := generateDiceValues(tc.diceValues, tc.maxPips)
 
-			// Execute: Call the Score function
-			score := Score(dice) // Assuming Score function exists
+			score := Score(dice)
 
-			// Verify: Check if the calculated score matches the expected score
 			if score != tc.expected {
 				t.Errorf("Test '%s': Score(%v) = %d; want %d",
 					tc.name, tc.diceValues, score, tc.expected)

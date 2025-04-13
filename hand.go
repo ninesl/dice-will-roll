@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"slices"
 	"sort"
 )
@@ -99,8 +98,6 @@ func filterThreePair(dice []Die) []Die {
 	for _, curValueDice := range tracker {
 		collect = append(collect, bestValues(curValueDice, 1)[:2]...) // top 2 hopefully
 	}
-
-	fmt.Println(DiceString(collect))
 
 	return collect
 }
