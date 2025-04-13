@@ -135,3 +135,11 @@ func (f *Face) Score() int {
 	*/
 	return f.Value()
 }
+
+func DiceString(dice []Die) string {
+	s := "["
+	for i := range dice {
+		s = fmt.Sprintf("%s%d,", s, dice[i].ActiveFace().NumPips())
+	}
+	return s + "]"
+}

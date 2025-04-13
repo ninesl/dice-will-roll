@@ -518,7 +518,7 @@ func TestFindHandRankDice_MatchingValues(t *testing.T) {
 		maxPips            int
 		expectedDiceValues []int // EXACT dice values making up the inputHandRank
 	}{
-		{"ONE_PAIR", ONE_PAIR, []int{1, 3, 3, 4, 5}, 6, []int{2, 2}},
+		{"ONE_PAIR", ONE_PAIR, []int{1, 3, 3, 4, 5}, 6, []int{3, 3}},
 		// --- Single Group Matches ---
 		{"SNAKE_EYES", SNAKE_EYES, []int{1, 1, 3, 4, 5}, 6, []int{1, 1}},
 		{"THREE_OF_A_KIND", THREE_OF_A_KIND, []int{3, 3, 3, 1, 5}, 6, []int{3, 3, 3}},
@@ -582,5 +582,95 @@ func TestFindHandRankDice_MatchingValues(t *testing.T) {
 			// Compare the values of the returned dice (order-independent)
 			compareDiceSlicesUnordered(t, foundDice, tc.expectedDiceValues, tc.name, tc.inputDiceValues, tc.inputHandRank)
 		})
+	}
+}
+
+// TestFindBestSingleConsecutive tests the findBestSingleConsecutive function directly.
+// It checks if the function correctly identifies and returns the dice forming the
+// highest-value consecutive sequence of at least STRAIGHT_SMALL_LENGTH.
+func TestFindBestSingleConsecutive(t *testing.T) {
+	tests := []struct {
+		name               string
+		inputDiceValues    []int // Dice values to feed into the function
+		maxPips            int
+		expectedDiceValues []int // EXACT dice values expected for the *best* straight found
+	}{
+		// --- Basic Straights ---
+		{"Small Straight 1-4", []int{1, 2, 3, 4}, 6, []int{1, 2, 3, 4}},
+		{"Small Straight 3-6", []int{3, 4, 5, 6}, 6, []int{3, 4, 5, 6}},
+		{"Large Straight 1-5", []int{1, 2, 3, 4, 5}, 6, []int{1, 2, 3, 4, 5}},
+		{"Large Straight 2-6", []int{2, 3, 4, 5, 6}, 6, []int{2, 3, 4, 5, 6}},
+		{"Larger Straight 1-6", []int{1, 2, 3, 4, 5, 6}, 6, []int{1, 2, 3, 4, 5, 6}},
+		{"Largest Straight 1-7", []int{1, 2, 3, 4, 5, 6, 7}, 7, []int{1, 2, 3, 4, 5, 6, 7}},
+
+		// --- Straights with Duplicates ---
+		// Only one die for each value in the sequence should be returned
+		{"Small Straight 1-4 with duplicate 2", []int{1, 2, 2, 3, 4}, 6, []int{1, 2, 3, 4}},
+		{"Large Straight 2-6 with duplicate 4", []int{2, 3, 4, 4, 4, 5, 6}, 6, []int{2, 3, 4, 5, 6}},
+		{"Larger Straight 1-6 with duplicate 1", []int{1, 1, 2, 3, 4, 5, 6}, 6, []int{1, 2, 3, 4, 5, 6}},
+
+		// --- Straights with Extra Dice (Outside the Best Straight) ---
+		{"Small Straight 1-4 with extra 6", []int{1, 2, 3, 4, 6}, 6, []int{1, 2, 3, 4}},
+		{"Larger Straight 1-6 with extra 1", []int{1, 2, 3, 4, 5, 6, 1}, 6, []int{1, 2, 3, 4, 5, 6}},
+
+		// --- Unsorted Input ---
+		{"Unsorted Small Straight 1-4 with extras", []int{4, 1, 3, 2, 4}, 6, []int{1, 2, 3, 4}},
+		{"Unsorted Larger Straight 1-6 with extras", []int{5, 1, 3, 6, 2, 4, 3}, 6, []int{1, 2, 3, 4, 5, 6}},
+
+		// --- Edge Case: Minimum Length ---
+		{"Exactly Small Straight 1-4", []int{1, 2, 3, 4}, 6, []int{1, 2, 3, 4}},
+
+		// technically not possible within constraints of game
+		// {"2 unsorted straights", []int{1, 3, 4, 5, 2, 8, 7, 9, 10}, 10, []int{1, 2, 3, 4, 5}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Prepare input dice
+			dice := generateDiceValues(tc.inputDiceValues, tc.maxPips)
+
+			// --- Optional: Add prints inside the test if needed ---
+			// fmt.Printf("--- Running Test: %s ---\n", tc.name)
+			// fmt.Println("Input Dice Values:", tc.inputDiceValues)
+
+			// Call the specific function under test
+			foundDice := findBestSingleConsecutive(dice)
+
+			// fmt.Println("Expected Values:", tc.expectedDiceValues)
+			// fmt.Println("Found Dice Values:", extractDiceValues(foundDice))
+			// fmt.Println("-----------------------------")
+
+			// Compare the values of the returned dice (order-independent)
+			// Use a slightly modified comparison for this specific test
+			compareStraightResult(t, foundDice, tc.expectedDiceValues, tc.name, tc.inputDiceValues)
+		})
+	}
+}
+
+// compareStraightResult is a helper specific to TestFindBestSingleConsecutive
+// as the expected length isn't tied to a HandRank here.
+func compareStraightResult(t *testing.T, gotDice []Die, wantValues []int, testName string, inputValues []int) {
+	t.Helper() // Marks this as a helper function
+
+	gotValues := extractDiceValues(gotDice)
+
+	// Sort both slices for comparison
+	sort.Ints(gotValues)
+	sort.Ints(wantValues)
+
+	// Handle the case where no straight is expected (empty slice)
+	if len(wantValues) == 0 {
+		if len(gotValues) != 0 {
+			t.Errorf("%s: findBestSingleConsecutive(%v) returned dice with values %v; want empty slice []",
+				testName, inputValues, gotValues)
+		}
+		// If both are empty, it's a pass for this case, so return.
+		return
+	}
+
+	// If a non-empty slice is expected, compare values
+	if !reflect.DeepEqual(gotValues, wantValues) {
+		t.Errorf("%s: findBestSingleConsecutive(%v) returned dice with values %v; want values %v",
+			testName, inputValues, gotValues, wantValues)
 	}
 }
