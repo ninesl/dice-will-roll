@@ -3,6 +3,7 @@
 logic
 	types
 		die
+		handrank
 
 render
 */
