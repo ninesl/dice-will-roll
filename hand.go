@@ -75,6 +75,9 @@ var (
 	SEVEN_SEVENS_TARGET = 7
 )
 
+// TODO: determine if this should return more info.
+// maybe meta-data/better dice info available?
+// don't want to enapsulate too much of the dice logic inside itself
 func trackUniqueValues(dice []Die) map[int][]Die {
 	tracker := map[int][]Die{}
 
@@ -102,8 +105,7 @@ func checkStraight(values []int) HandRank {
 	var lastValue, curValue int
 	slices.Sort(values)
 
-	// fmt.Println(values)
-
+	// TODO: should this just input the dice and also return the sequence die? saves some loops
 	lastValue = values[0]
 	for i := 1; i < len(values); i += 1 {
 		curValue = values[i]
@@ -125,8 +127,6 @@ func checkStraight(values []int) HandRank {
 		maxRow = inARow
 	}
 
-	// fmt.Println(maxRow, "in a row")
-
 	// for i := range consecutive {
 	// 	if consecutive[i] {
 	// 		curValue = i
@@ -145,6 +145,7 @@ func checkStraight(values []int) HandRank {
 		switch maxRow {
 		case STRAIGHT_SMALL_LENGTH:
 			straight = STRAIGHT_SMALL
+			// sortByValue()
 		case STRAIGHT_LARGE_LENGTH:
 			straight = STRAIGHT_LARGE
 		case STRAIGHT_LARGER_LENGTH:
@@ -360,23 +361,59 @@ func checkHandOtherThanStraight(valueCount map[int]int, values []int, numDice in
 // returns straight with the BEST values for the conesecutive.
 //
 // # for modifiers, etc the tie breaker is ALWAYS the true number of .pips on the die.
+//
+// The dice given MUST be a straight
 func findBestSingleConsecutive(dice []Die) []Die {
 	tracker := trackUniqueValues(dice)
 
-	trackedLen := len(tracker)
+	// trackedLen := len(tracker)
 
-	if trackedLen < STRAIGHT_SMALL_LENGTH {
-		return []Die{} // explicitly empty
+	// if trackedLen < STRAIGHT_SMALL_LENGTH { // this check might not be needed bc dice WILL be straights when they get here
+	// 	return []Die{} // explicitly empty
+	// }
+
+	// going from the top gets best straight - but idk how to do it smartly
+	// dont love this. could be found in trackUniqueValues but would be wasted elsewhere?
+	var topValue int
+	for value := range tracker {
+		if value > topValue {
+			topValue = value
+		}
 	}
 
-	inARow := []Die{}
-
-	// going from the top gets best straight
-	for i := trackedLen; i >= 0; i -= 1 {
-
+	var inARow int = 1
+	for i := topValue; i > 0; i -= 1 {
+		if len(tracker[i-1]) > 0 { // if there is dice below our current Value, 1 more in a row=
+			inARow += 1
+			if i > topValue {
+				topValue = i - 1
+			}
+		} else {
+			if inARow < STRAIGHT_SMALL_LENGTH {
+				topValue = 0 // set to 0 for topval find
+				inARow = 0   // resets to 0. when going from a blank index it'll still add 1, so it's 0 to 1 in a row from a new found number
+			} else {
+				// could assume that there will never be a sequence once one is found
+				// TODO: would not work with 1-3 straight or more than 7 dice
+				break
+			}
+		}
 	}
 
-	return inARow
+	var sequenceDice []Die
+	for i := topValue - inARow + 1; i <= topValue; i++ {
+		var die Die
+		if len(tracker[i]) > 1 {
+			die = bestValues(tracker[i], 1)[0]
+		} else {
+			die = tracker[i][0]
+		}
+		sequenceDice = append(sequenceDice, die)
+	}
+
+	// probably the most innefficient way to check for straights.
+	//TODO: make this better. it just stinks
+	return sequenceDice
 }
 
 // TODO: make this more efficient
@@ -401,7 +438,6 @@ func findMatchingValues(dice []Die) []Die {
 			matchingValues = append(matchingValues, diceThisValue...)
 		}
 	}
-
 	return matchingValues
 }
 
@@ -418,7 +454,7 @@ func bestValues(dice []Die, x int) []Die {
 	var bestValues []Die
 
 	for _, die := range dice {
-		pips := die.ActiveFace().Value()
+		pips := die.ActiveFace().NumPips()
 		if !slices.Contains(uniqueValues, pips) {
 			uniqueValues = append(uniqueValues, pips)
 		}
