@@ -1,4 +1,4 @@
-package main
+package dice
 
 //	 FIXME: will need to figure out how this works with rendering
 //	 Score takes a set of dice, does the calculations
