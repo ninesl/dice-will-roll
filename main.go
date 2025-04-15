@@ -1,14 +1,7 @@
-// DICE WILL ROLL
-/*
-logic
-	types
-		die
-		handrank
-
-render
-*/
 package main
 
+import "fmt"
+
 func main() {
-	// Do something()
+	fmt.Println("Hello world!")
 }
