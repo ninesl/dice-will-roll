@@ -6,10 +6,16 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
+type Vec2 struct {
+	X, Y float64
+}
+
+// is a renderable
 type Sprite struct {
 	Image       *ebiten.Image
-	X, Y        float64
 	SpriteSheet SpriteSheet
+	Vec2        Vec2
+	// Updates the sprite in Game.Update() loop
 }
 
 // assumed all tiles are squares

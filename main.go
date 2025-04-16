@@ -9,14 +9,11 @@ import (
 
 type Game struct {
 	TileSize int
-	Dice     *Sprite
+	Dice     DieSprite
 }
 
 func (g *Game) Update() error {
-
-	g.Dice.X++
-	g.Dice.Y++
-	g.Dice.SpriteSheet.Animate()
+	// g.Dice.Update()
 
 	// fmt.Println("HELLO?")
 	return nil
@@ -26,7 +23,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// ebitenutil.DebugPrint(screen, "Hello, World!")
 	opts := &ebiten.DrawImageOptions{}
 
-	opts.GeoM.Translate(g.Dice.X, g.Dice.Y)
+	opts.GeoM.Translate(g.Dice.Vec2.X, g.Dice.Vec2.Y)
 	screen.DrawImage(
 		g.Dice.Image.SubImage(
 			g.Dice.SpriteSheet.Rect(g.Dice.SpriteSheet.ActiveFrame),
@@ -48,14 +45,16 @@ func loadGame() *Game {
 
 	dieImgSize := diceImg.Bounds().Dx() / 6
 
-	diceSprite := Sprite{
-		Image:       diceImg,
-		SpriteSheet: NewSpriteSheet(6, 7, dieImgSize),
+	diceSprite := DieSprite{
+		Sprite{
+			Image:       diceImg,
+			SpriteSheet: NewSpriteSheet(6, 7, dieImgSize),
+		},
 	}
 
 	return &Game{
 		TileSize: dieImgSize,
-		Dice:     &diceSprite,
+		Dice:     diceSprite,
 	}
 }
 
