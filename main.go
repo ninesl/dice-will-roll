@@ -2,20 +2,33 @@ package main
 
 import (
 	"log"
+	"math/rand/v2"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
+var (
+	GAME_BOUNDS_X int
+	GAME_BOUNDS_Y int
+	MinWidth      float64
+	MaxWidth      float64
+	MaxHeight     float64
+)
+
 type Game struct {
-	TileSize int
-	Dice     DieSprite
+	DiceSheet *SpriteSheet
+	Dice      *DieSprite
+	TileSize  int
+}
+
+func (g *Game) Bounds() (int, int) {
+	return g.TileSize * 16, g.TileSize * 9
 }
 
 func (g *Game) Update() error {
-	// g.Dice.Update()
+	UpdateDieSprite(g.Dice)
 
-	// fmt.Println("HELLO?")
 	return nil
 }
 
@@ -32,9 +45,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	)
 }
 
-// 320 x 240 is the pixels in the game
+// return the pixels in the game
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return g.TileSize * 16, g.TileSize * 9
+	return GAME_BOUNDS_X, GAME_BOUNDS_Y
 }
 
 func loadGame() *Game {
@@ -44,17 +57,36 @@ func loadGame() *Game {
 	}
 
 	dieImgSize := diceImg.Bounds().Dx() / 6
+	tileSize := float64(dieImgSize)
 
 	diceSprite := DieSprite{
-		Sprite{
+		Sprite: Sprite{
 			Image:       diceImg,
 			SpriteSheet: NewSpriteSheet(6, 7, dieImgSize),
+			Vec2: Vec2{
+				X: tileSize,
+				Y: tileSize,
+			},
 		},
+		// Direction: DOWNRIGHT,
+		Velocity: Vec2{
+			X: 40 + rand.Float64(),
+			Y: 40 + rand.Float64(),
+		},
+		TileSize: float64(dieImgSize),
 	}
+
+	// GAME BOUNDARY ASSIGNMENT
+	GAME_BOUNDS_X = dieImgSize * 16
+	GAME_BOUNDS_Y = dieImgSize * 9
+
+	MinWidth = float64(GAME_BOUNDS_X / 5)
+	MaxWidth = float64(GAME_BOUNDS_X) - MinWidth
+	MaxHeight = float64(GAME_BOUNDS_Y / 4)
 
 	return &Game{
 		TileSize: dieImgSize,
-		Dice:     diceSprite,
+		Dice:     &diceSprite,
 	}
 }
 
