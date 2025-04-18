@@ -14,7 +14,7 @@ type Vec2 struct {
 type Sprite struct {
 	Image       *ebiten.Image
 	SpriteSheet SpriteSheet
-	Vec2        Vec2
+	// Vec2        Vec2
 	// Updates the sprite in Game.Update() loop
 }
 
@@ -47,10 +47,10 @@ func (s *SpriteSheet) Rect(index int) image.Rectangle {
 	)
 }
 
-// updates the active frame by 1, resets back to 0
-func (s *SpriteSheet) Animate() {
-	s.ActiveFrame++
-	if s.ActiveFrame > s.TileAmount {
-		s.ActiveFrame = 0
-	}
-}
+// // updates the active frame by 1, resets back to 0
+// func (s *SpriteSheet) Animate() {
+// 	s.ActiveFrame++
+// 	if s.ActiveFrame > s.TileAmount {
+// 		s.ActiveFrame = 0
+// 	}
+// }

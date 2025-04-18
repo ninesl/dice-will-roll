@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"image"
 	"log"
 	"math/rand/v2"
 
+	_ "embed"
+	_ "image/png" // for png encoder
+
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
 var (
@@ -17,9 +21,9 @@ var (
 )
 
 type Game struct {
-	DiceSheet *SpriteSheet
-	Dice      *DieSprite
-	TileSize  int
+	DiceSprite *Sprite
+	Dice       []*DieRenderable
+	TileSize   int
 }
 
 func (g *Game) Bounds() (int, int) {
@@ -27,7 +31,12 @@ func (g *Game) Bounds() (int, int) {
 }
 
 func (g *Game) Update() error {
-	UpdateDieSprite(g.Dice)
+	for i := range g.Dice {
+		UpdateDie(g.Dice[i])
+		// UpdateDie(die)
+	}
+
+	CheckCollisions(g.Dice)
 
 	return nil
 }
@@ -36,13 +45,20 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// ebitenutil.DebugPrint(screen, "Hello, World!")
 	opts := &ebiten.DrawImageOptions{}
 
-	opts.GeoM.Translate(g.Dice.Vec2.X, g.Dice.Vec2.Y)
-	screen.DrawImage(
-		g.Dice.Image.SubImage(
-			g.Dice.SpriteSheet.Rect(g.Dice.SpriteSheet.ActiveFrame),
-		).(*ebiten.Image),
-		opts,
-	)
+	for i := 0; i < len(g.Dice); i++ {
+		die := g.Dice[i]
+
+		opts.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
+		screen.DrawImage(
+			g.DiceSprite.Image.SubImage(
+				g.DiceSprite.SpriteSheet.Rect(die.IndexOnSheet),
+			).(*ebiten.Image),
+			opts,
+		)
+		opts.GeoM.Reset()
+
+	}
+
 }
 
 // return the pixels in the game
@@ -50,31 +66,26 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 	return GAME_BOUNDS_X, GAME_BOUNDS_Y
 }
 
-func loadGame() *Game {
-	diceImg, _, err := ebitenutil.NewImageFromFile("assets/images/dice.png")
+// TODO: embedded FS for loading assets
+//
+//go:embed assets/images/dice.png
+var dicePng []byte
+var DiceImage image.Image = func() image.Image {
+	img, _, err := image.Decode(bytes.NewReader(dicePng))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to decode embedded image: %v", err)
 	}
+	return img
+}()
+
+func loadGame() *Game {
+
+	// img := *ebiten.NewImageFromImage()
+	// diceImg, _, err := ebitenutil.NewImageFromFile("assets/images/dice.png")
+	diceImg := ebiten.NewImageFromImage(DiceImage)
 
 	dieImgSize := diceImg.Bounds().Dx() / 6
-	tileSize := float64(dieImgSize)
-
-	diceSprite := DieSprite{
-		Sprite: Sprite{
-			Image:       diceImg,
-			SpriteSheet: NewSpriteSheet(6, 7, dieImgSize),
-			Vec2: Vec2{
-				X: tileSize,
-				Y: tileSize,
-			},
-		},
-		// Direction: DOWNRIGHT,
-		Velocity: Vec2{
-			X: 40 + rand.Float64(),
-			Y: 40 + rand.Float64(),
-		},
-		TileSize: float64(dieImgSize),
-	}
+	// tileSize := float64(dieImgSize)
 
 	// GAME BOUNDARY ASSIGNMENT
 	GAME_BOUNDS_X = dieImgSize * 16
@@ -84,9 +95,47 @@ func loadGame() *Game {
 	MaxWidth = float64(GAME_BOUNDS_X) - MinWidth
 	MaxHeight = float64(GAME_BOUNDS_Y / 4)
 
+	diceSheet := Sprite{
+		Image:       diceImg,
+		SpriteSheet: NewSpriteSheet(6, 7, dieImgSize),
+	}
+
+	var dice []*DieRenderable
+	for range 2 {
+		directionX := float64(rand.IntN(1) + 1)
+		directionY := float64(rand.IntN(1) + 1)
+		if directionX == 2 {
+			directionX = -1.0
+		}
+		if directionY == 2 {
+			directionY = -1.0
+		}
+
+		dieRenderable := DieRenderable{
+			Vec2: Vec2{
+				X: MinWidth + rand.Float64()*MaxWidth,
+				Y: 0 + rand.Float64()*MaxHeight,
+				// X: MinWidth*float64(i) + MinWidth,
+				// Y: float64(rand.IntN(int(MaxHeight))) - tileSize,
+			},
+			// Direction: DOWNRIGHT,
+			Velocity: Vec2{
+				X: (rand.Float64()*40 + 20) * directionX,
+				Y: (rand.Float64()*40 + 20) * directionY,
+			},
+			TileSize: float64(dieImgSize),
+		}
+		dice = append(dice, &dieRenderable)
+	}
+
+	// for die := range dice {
+	// 	fmt.Println(dice[die])
+	// }
+
 	return &Game{
-		TileSize: dieImgSize,
-		Dice:     &diceSprite,
+		TileSize:   dieImgSize,
+		DiceSprite: &diceSheet,
+		Dice:       dice,
 	}
 }
 
