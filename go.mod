@@ -1,4 +1,4 @@
-module github.com/nines/dice-will-roll
+module github.com/ninesl/dice-will-roll
 
 go 1.24.0
 
