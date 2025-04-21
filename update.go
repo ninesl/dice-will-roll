@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"math"
 	"math/rand/v2"
 )
@@ -24,160 +23,149 @@ const BUFFER float64 = 2.0
 // Renderable for the graphical dice.Die
 type DieRenderable struct {
 	// Sprite
-	// Fixed		 Vec2 	// specific coordinates
-	Vec2         Vec2    // the top left of the sprite x,y
-	Velocity     Vec2    // how much gets added a frame when rolling
-	TileSize     float64 // inside here saves size? unsure
-	IndexOnSheet int     // corresponds to the Xth tile on the spritesheet
+	Fixed    Vec2    // specific coordinates
+	Vec2     Vec2    // the top left of the sprite x,y
+	Velocity Vec2    // how much gets added a frame when rolling
+	TileSize float64 // inside here saves size? unsure
+
+	ColorSpot    int // base color for spritesheet
+	IndexOnSheet int // corresponds to the Xth tile on the spritesheet
 	// Direction Direction
-	// IsResting bool
+	Colliding bool // flag for collisions
 }
 
-var DiceBottom float64 = MaxHeight / 4.0
-
-var DampingFactor float64 = 0.7
-var BounceFactor float64 = 0.9
-var BounceThreshold float64 = 6.0
+var (
+	DiceBottom      float64
+	DampingFactor   float64 = 0.7
+	BounceFactor    float64 = .9
+	BounceThreshold float64 = 4.0
+	VelocityMin     float64 = BounceThreshold * 2
+)
 
 // gross code
-func CheckCollisions(dice []*DieRenderable) {
+func HandleDiceCollisions(dice []*DieRenderable) {
 	for i, die := range dice {
 		for q, die2 := range dice {
 			if i == q {
 				continue
 			}
 
-			rightSide := die.Vec2.X + die.TileSize
-			leftSide := die2.Vec2.X + die2.TileSize
+			if die.Colliding {
+				die.Vec2.X += die.Velocity.X
+				die.Vec2.Y += die.Velocity.Y
 
-			hitRight := die.Vec2.X < die2.Vec2.X && rightSide >= die2.Vec2.X
-			hitLeft := die.Vec2.X > die2.Vec2.X && die.Vec2.X <= leftSide
-			//  := die.Vec2.Y+die.TileSize >= die2.Vec2.Y || die.Vec2.Y <= die2.Vec2.Y+die2.TileSize
+				die.Velocity.Y *= rand.Float64() + .2
+				die.Colliding = false
+			}
 
-			// could flag being hit here on sprite?
-			if hitRight {
-				die.Velocity.X = math.Abs(die.Velocity.X) * -1 // force left
-				die2.Velocity.X = math.Abs(die.Velocity.X)     // force right
+			if die2.Colliding {
+				die2.Vec2.X += die2.Velocity.X
+				die2.Vec2.Y += die2.Velocity.Y
 
-				overlap := (rightSide - die2.Vec2.X) / 2.0
-				die.Vec2.X -= overlap
-				die2.Vec2.X += overlap
+				die2.Velocity.Y *= rand.Float64() + .2
+				die2.Colliding = false
+			}
 
-			} else if hitLeft {
-				die.Velocity.X = math.Abs(die.Velocity.X) * -1 // force left
-				die2.Velocity.X = math.Abs(die.Velocity.X)     // force right
+			xCollide := die.Vec2.X < die2.Vec2.X+die2.TileSize && die.Vec2.X > die2.Vec2.X
+			yCollide := die.Vec2.Y < die2.Vec2.Y+die2.TileSize && die.Vec2.Y > die2.Vec2.Y
 
-				overlap := (die2.Vec2.X - leftSide) / 2.0
-				die.Vec2.X += overlap
-				die2.Vec2.X -= overlap
+			if yCollide && xCollide {
+				die.Colliding = true
+				die2.Colliding = true
+
+				// die.Velocity.Y *= rand.Float64() + 1
+				// die2.Velocity.Y *= rand.Float64() + 1
+
+				FixOverlap(die, die2)
+
+				// die.Velocity.X *= -BounceFactor
+				// die2.Velocity.X *= -BounceFactor
+				// die.Velocity.Y *= -BounceFactor
+				// die2.Velocity.Y *= -BounceFactor
 			}
 		}
 	}
 }
 
+func FixOverlap(die *DieRenderable, die2 *DieRenderable) {
+	// die.IndexOnSheet = rand.IntN1(5)
+	// die2.IndexOnSheet = rand.IntN(5)
+
+	if die.Velocity.X < BounceThreshold && die.Velocity.Y < BounceThreshold {
+		return
+	}
+
+	if die2.Velocity.X < BounceThreshold && die2.Velocity.Y < BounceThreshold {
+		return
+	}
+
+	xOverlap := (die.Vec2.X - die2.Vec2.X) / 1.5
+	yOverlap := (die.Vec2.Y - die2.Vec2.Y) / 1.5
+
+	if xOverlap > yOverlap {
+		die.Vec2.X += xOverlap
+		die2.Vec2.X -= xOverlap
+
+		var speed float64
+
+		if math.Abs(die.Velocity.X) > math.Abs(die2.Velocity.X) {
+			speed = die.Velocity.X * DampingFactor
+
+			// die.Velocity.X -= speed / 2
+			die2.Velocity.X += speed / 2
+		} else {
+			speed = die2.Velocity.X * DampingFactor
+
+			// die2.Velocity.X -= speed / 2
+			die.Velocity.X += speed / 2
+		}
+
+		die.Velocity.X *= -1
+		die2.Velocity.X *= -1
+	} else {
+		die.Vec2.Y += yOverlap
+		die2.Vec2.Y -= yOverlap
+
+		die.Velocity.Y *= -1
+		die2.Velocity.Y *= -1
+	}
+}
+
 // Update handles the movement and bouncing of the DieSprite under gravity.
 func UpdateDie(d *DieRenderable) {
-	fmt.Printf("%.4f %.4f\n", d.Velocity.X, d.Velocity.Y)
-
 	var hitLeft, hitRight, hitTop, hitBottom bool
 
-	if math.Abs(d.Velocity.Y) < BounceFactor*2 {
-		// return to center
-		// hitTop = d.Vec2.Y <
-		return
-	} else {
-		hitTop = d.Vec2.Y < 0
-		hitBottom = d.Vec2.Y+d.TileSize >= MaxHeight
-	}
+	hitTop = d.Vec2.Y < MinHeight
+	hitBottom = d.Vec2.Y+d.TileSize >= MaxHeight
 
-	if math.Abs(d.Velocity.X) < BounceFactor*16 {
-		return
-	} else {
-		hitLeft = d.Vec2.X < MinWidth
-		hitRight = d.Vec2.X+d.TileSize >= MaxWidth
-	}
+	hitLeft = d.Vec2.X < MinWidth
+	hitRight = d.Vec2.X+d.TileSize >= MaxWidth
 
-	// if math.Abs(d.Velocity.X) < BounceThreshold || math.Abs(d.Velocity.Y) < BounceFactor {
-	// 	return
-	// }
-
-	// could add damping, gravity, etc
-	// 3. Check for boundary collisions
-
-	// 4. Handle collisions: Reverse velocity, apply damping, clamp position
-	// Horizontal bounce (Walls)
 	if hitLeft || hitRight {
-		d.Velocity.X *= -1.0 * BounceFactor * DampingFactor
+		d.Velocity.X *= -1.0 * BounceFactor
 
 		if hitLeft {
 			d.Vec2.X = MinWidth
 		} else {
 			d.Vec2.X = MaxWidth - d.TileSize
 		}
-
+		// d.IndexOnSheet = d.ColorSpot + rand.IntN(5)
 	}
 
 	if hitTop || hitBottom {
 		d.Velocity.Y *= -1.0 * BounceFactor //* DampingFactor
 
 		if hitTop {
-			d.Vec2.Y = 0
+			d.Vec2.Y = MinHeight
 		} else {
 			d.Vec2.Y = MaxHeight - d.TileSize
 		}
+		// d.IndexOnSheet = rand.IntN(5)
 	}
 
-	if hitLeft || hitRight || hitBottom || hitTop {
-		d.IndexOnSheet = rand.IntN(5)
-	}
+	d.Velocity.X *= .95
+	d.Velocity.Y *= .95
 
-	d.Vec2.X = d.Vec2.X + d.Velocity.X
-	d.Vec2.Y = d.Vec2.Y + d.Velocity.Y
-
-	// fmt.Println(d.Velocity)
-
-	// log.Printf("%v", d.Vec2)
-	// // Vertical bounce (Floor)
-	// if hitBottom {
-	// 	// d.Velocity.X *= DampingFactor
-
-	// 	// Only reverse and dampen if it has significant downward velocity
-	// 	// This helps prevent getting stuck if gravity pulls it slightly below floor
-	// 	if math.Abs(d.Velocity.Y) > 0.1 { // Threshold to prevent tiny bounces when settling
-	// 		d.Velocity.Y *= -1.0 //* DampingFactor // Reverse and dampen Y velocity (now points up)
-	// 	} else {
-	// 		d.Velocity.Y = 0 // Stop vertical motion if it was barely moving down
-	// 	}
-	// 	nextY = MaxHeight - d.TileSize // Clamp position firmly to the floor
-
-	// 	// Check if it should be considered resting
-	// 	if math.Abs(d.Velocity.Y) < 0.1 {
-	// 		d.IsResting = true
-	// 		d.Velocity.Y = 0 // Ensure it stops fully
-	// 		// Optionally stop X velocity on rest too, or let it slide
-	// 		// d.Velocity.X *= 0.9 // Example friction while resting/sliding
-
-	// 	}
-	// 	if math.Abs(d.Velocity.X) < 0.1 {
-	// 		d.Velocity.X = 0
-	// 	}
-	// }
-
-	// // 5. Update the actual position using the (potentially clamped) next coordinates
-	// d.Vec2.X = nextX
-	// d.Vec2.Y = nextY
-
-	// // // 6. Optional: Update Direction enum based on final velocity (if you use it)
-	// // if !d.IsResting { // Only update direction if moving
-	// // 	if d.Velocity.X < 0 && d.Velocity.Y < 0 {
-	// // 		d.Direction = UPLEFT
-	// // 	} else if d.Velocity.X > 0 && d.Velocity.Y < 0 {
-	// // 		d.Direction = UPRIGHT
-	// // 	} else if d.Velocity.X < 0 && d.Velocity.Y > 0 {
-	// // 		d.Direction = DOWNLEFT
-	// // 	} else if d.Velocity.X > 0 && d.Velocity.Y > 0 {
-	// // 		d.Direction = DOWNRIGHT
-	// // 	}
-	// // 	// ... (add cases for horizontal/vertical only if needed)
-	// }
+	d.Vec2.X += d.Velocity.X
+	d.Vec2.Y += d.Velocity.Y
 }
