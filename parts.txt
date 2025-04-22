@@ -1,0 +1,110 @@
+LOOP
+	// keeping rolling and picking hands
+	// gameplay decisions with using pip mods
+	// 
+	Blowing Up Rocks
+		dice
+		rocks
+// no shop, you keep going and going and be greedy
+
+DICE/Rolling
+	// always in the middle
+	// dice able to be hidden quickly thru API?
+	press spacebar // weeee
+		rolling, animations, sound effects etc.
+	MODES
+		- modes per screen
+		- # ROLLING
+		- #    starts rolling with collision detection, then stops
+		- # HIDDEN
+		- #    hidden
+		- # EDIT
+		- #    locks to slot in shelf and expanded out to see every side
+
+		--- TBD ---
+		LOOP
+			Gems
+			Shelf
+				# EDIT
+			Shop
+				# HIDDEN
+			Mine
+				# ROLLING 
+		BASE
+			
+
+BASE
+	Gems
+		_ 
+	Shelf - tbd mechanics
+		// Upgrade Dice
+		# EDIT
+	Shop - tbd mechanics
+		Gem
+		Mod
+	Mine
+		CaveSelection
+			// 4 caves, each start at a layer and then go down each time
+			Shist
+			Slate
+			
+			-> LOOP		
+
+HOME
+	Menu
+		settings
+			resolution
+			volume
+				music
+				effects
+			language
+				// list on steam page
+		play
+			-> BASE
+		unlocks?
+
+
+---- Architecture? ----
+
+BASE
+  ________________
+ |s\____shelf___/m|
+ |h|            |i|
+ |o|   dice     |n|
+ |p|____________|e|
+ |/_____gems_____\|
+
+shop
+	unfurls by being shot to the right
+  ________________
+ | \____shelf___/m|
+ |              |i|
+ |     shop     |n|
+ |  ____________|e|
+ |/_____gems_____\|
+
+shelf
+	drops down w/ gravity
+  ________________
+ |s\            /m|
+ |h|            |i|
+ |o|   shelf    |n|
+ |p|____________|e|
+ |/_____gems_____\|
+
+
+MINE
+  ________________
+ |c\____cave____/c|
+ |a|            |a|
+ |v|   dice     |v|
+ |e|____________|e|
+ |/_____cave_____\|
+
+LOOP
+  ________________
+ | scored   dice  |
+ |                |
+ |     dice       |
+ |  ____________  |
+ |/_____gems_____\|
