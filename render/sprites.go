@@ -1,4 +1,4 @@
-package main
+package render
 
 import (
 	"image"
@@ -10,7 +10,7 @@ type Vec2 struct {
 	X, Y float64
 }
 
-// is a renderable
+// should be renderable
 type Sprite struct {
 	Image       *ebiten.Image
 	SpriteSheet SpriteSheet

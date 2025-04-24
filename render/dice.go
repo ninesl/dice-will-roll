@@ -1,31 +1,14 @@
-package main
+package render
 
 import (
 	"math"
 	"math/rand/v2"
 )
 
-type Direction uint8
-
-const (
-	UP = iota
-	DOWN
-	LEFT
-	RIGHT
-	UPLEFT
-	UPRIGHT
-	DOWNRIGHT
-	DOWNLEFT
-)
-
-const BUFFER float64 = 2.0
-
-// Renderable for the graphical dice.Die
 type DieRenderable struct {
-	// Sprite
+	Vec2     Vec2    // current position
+	Velocity Vec2    // traveling speed xy +-
 	Fixed    Vec2    // specific coordinates
-	Vec2     Vec2    // the top left of the sprite x,y
-	Velocity Vec2    // how much gets added a frame when rolling
 	TileSize float64 // inside here saves size? unsure
 
 	ColorSpot    int // base color for spritesheet
@@ -33,6 +16,8 @@ type DieRenderable struct {
 	// Direction Direction
 	Colliding bool // flag for collisions
 }
+
+// func (d *DieRenderable) Sprite()
 
 var (
 	DiceBottom      float64

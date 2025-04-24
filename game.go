@@ -12,7 +12,15 @@ import (
 	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/ninesl/dice-will-roll/render"
 )
+
+type Game struct {
+	// DiceSprite *render.Sprite
+	Dice     []*Die
+	TileSize int
+	DiceMode Mode
+}
 
 // return the pixels in the game
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
@@ -59,18 +67,29 @@ func LoadGame() *Game {
 	GAME_BOUNDS_X = dieImgSize * 16
 	GAME_BOUNDS_Y = dieImgSize * 9
 
-	MinWidth = float64(GAME_BOUNDS_X / 5)
-	MaxWidth = float64(GAME_BOUNDS_X) - MinWidth
-	MinHeight = float64(GAME_BOUNDS_Y / 5)
-	MaxHeight = float64(GAME_BOUNDS_Y) - MinHeight
-	DiceBottom = MaxHeight / 4.0
+	render.MinWidth = float64(GAME_BOUNDS_X / 5)
+	render.MaxWidth = float64(GAME_BOUNDS_X) - render.MinWidth
+	render.MinHeight = float64(GAME_BOUNDS_Y / 5)
+	render.MaxHeight = float64(GAME_BOUNDS_Y) - render.MinHeight
+	render.DiceBottom = render.MaxHeight / 4.0
 
-	diceSheet := Sprite{
+	diceSheet := &render.Sprite{
 		Image:       diceImg,
-		SpriteSheet: NewSpriteSheet(6, 7, dieImgSize),
+		SpriteSheet: render.NewSpriteSheet(6, 7, dieImgSize),
 	}
 
-	var dice []*DieRenderable
+	dice := SetupPlayerDice(diceSheet, dieImgSize)
+
+	return &Game{
+		TileSize: dieImgSize,
+		// DiceSprite: diceSheet,
+		Dice:     dice,
+		DiceMode: ROLLING,
+	}
+}
+
+func SetupPlayerDice(diceSheet *render.Sprite, dieImgSize int) []*Die {
+	var dice []*Die
 	for i := range 7 {
 		directionX := float64(rand.IntN(2))
 		directionY := float64(rand.IntN(2))
@@ -83,30 +102,28 @@ func LoadGame() *Game {
 
 		tileSize := float64(dieImgSize)
 
-		pos := Vec2{
-			X: MinWidth + tileSize*float64(i)*2.0,
-			Y: MaxHeight/2 - tileSize*0.5,
+		pos := render.Vec2{
+			X: render.MinWidth + tileSize*float64(i)*2.0,
+			Y: render.MaxHeight/2 - tileSize*0.5,
 		}
-		dieRenderable := DieRenderable{
+		dieRenderable := render.DieRenderable{
 			Fixed: pos,
 			Vec2:  pos,
-			Velocity: Vec2{
+			Velocity: render.Vec2{
 				X: (rand.Float64()*40 + 20) * float64(i) * -1.0,
 				Y: (rand.Float64()*40 + 20) * float64(i) * -1.0,
 			},
 			TileSize:  float64(dieImgSize),
 			ColorSpot: i * 6,
 		}
-		dice = append(dice, &dieRenderable)
+
+		die := Die{
+			Sprite:        diceSheet,
+			DieRenderable: dieRenderable,
+			Mode:          ROLLING,
+		}
+		dice = append(dice, &die)
 	}
 
-	// for die := range dice {
-	// 	fmt.Println(dice[die])
-	// }
-
-	return &Game{
-		TileSize:   dieImgSize,
-		DiceSprite: &diceSheet,
-		Dice:       dice,
-	}
+	return dice
 }
