@@ -57,6 +57,7 @@ HOME
 			volume
 				music
 				effects
+			keybinds
 			language
 				// list on steam page
 		play
