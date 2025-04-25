@@ -154,3 +154,26 @@ func UpdateDie(d *DieRenderable) {
 	d.Vec2.X += d.Velocity.X
 	d.Vec2.Y += d.Velocity.Y
 }
+
+func BounceAndClamp(die *DieRenderable) {
+	if die.Vec2.X+die.TileSize >= MaxWidth {
+		die.Vec2.X = MaxWidth - die.TileSize - 1
+		die.Velocity.X = math.Abs(die.Velocity.X) * -1
+		die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
+	}
+	if die.Vec2.X < MinWidth {
+		die.Vec2.X = MinWidth + 1
+		die.Velocity.X = math.Abs(die.Velocity.X)
+		die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
+	}
+	if die.Vec2.Y+die.TileSize >= MaxHeight {
+		die.Vec2.Y = MaxHeight - die.TileSize - 1
+		die.Velocity.Y = math.Abs(die.Velocity.Y) * -1
+		die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
+	}
+	if die.Vec2.Y < MinHeight {
+		die.Vec2.Y = MinHeight + 1
+		die.Velocity.Y = math.Abs(die.Velocity.Y)
+		die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
+	}
+}
