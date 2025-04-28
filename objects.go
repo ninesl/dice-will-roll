@@ -12,7 +12,7 @@ type Die struct {
 	*render.Sprite
 	*dice.Die
 	render.DieRenderable
-	Mode Mode // Current mode of the die, is modified thru player Controls()
+	Mode Action // Current mode of the die, is modified thru player Controls()
 }
 
 func (d *Die) Draw() *ebiten.Image {

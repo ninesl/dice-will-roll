@@ -20,11 +20,9 @@ type DieRenderable struct {
 // func (d *DieRenderable) Sprite()
 
 var (
-	DiceBottom      float64
-	DampingFactor   float64 = 0.7
-	BounceFactor    float64 = .9
-	BounceThreshold float64 = 4.0
-	VelocityMin     float64 = BounceThreshold * 2
+	DiceBottom    float64
+	DampingFactor float64 = 0.7
+	BounceFactor  float64 = .9
 )
 
 // gross code
@@ -61,7 +59,7 @@ func HandleDiceCollisions(dice []*DieRenderable) {
 				// die.Velocity.Y *= rand.Float64() + 1
 				// die2.Velocity.Y *= rand.Float64() + 1
 
-				FixOverlap(die, die2)
+				BounceOffEachother(die, die2)
 
 				// die.Velocity.X *= -BounceFactor
 				// die2.Velocity.X *= -BounceFactor
@@ -69,51 +67,49 @@ func HandleDiceCollisions(dice []*DieRenderable) {
 				// die2.Velocity.Y *= -BounceFactor
 			}
 		}
+
+		if math.Abs(die.Velocity.X) < .3 && math.Abs(die.Velocity.Y) < .3 {
+			die.Velocity.X = 0
+			die.Velocity.Y = 0
+		}
 	}
 }
 
-func FixOverlap(die *DieRenderable, die2 *DieRenderable) {
-	// die.IndexOnSheet = rand.IntN1(5)
-	// die2.IndexOnSheet = rand.IntN(5)
-
-	if die.Velocity.X < BounceThreshold && die.Velocity.Y < BounceThreshold {
+func BounceOffEachother(die *DieRenderable, die2 *DieRenderable) {
+	if die.Velocity.X < BounceFactor && die.Velocity.Y < BounceFactor {
 		return
 	}
 
-	if die2.Velocity.X < BounceThreshold && die2.Velocity.Y < BounceThreshold {
-		return
-	}
+	factor := -1.1
 
-	xOverlap := (die.Vec2.X - die2.Vec2.X) / 1.5
-	yOverlap := (die.Vec2.Y - die2.Vec2.Y) / 1.5
+	die.Velocity.X *= factor * DampingFactor
+	die.Velocity.Y *= factor * DampingFactor
 
-	if xOverlap > yOverlap {
-		die.Vec2.X += xOverlap
-		die2.Vec2.X -= xOverlap
-
-		var speed float64
-
-		if math.Abs(die.Velocity.X) > math.Abs(die2.Velocity.X) {
-			speed = die.Velocity.X * DampingFactor
-
-			// die.Velocity.X -= speed / 2
-			die2.Velocity.X += speed / 2
-		} else {
-			speed = die2.Velocity.X * DampingFactor
-
-			// die2.Velocity.X -= speed / 2
-			die.Velocity.X += speed / 2
-		}
-
-		die.Velocity.X *= -1
-		die2.Velocity.X *= -1
+	if die.Velocity.X < 0 {
+		die.Velocity.X += 1
 	} else {
-		die.Vec2.Y += yOverlap
-		die2.Vec2.Y -= yOverlap
-
-		die.Velocity.Y *= -1
-		die2.Velocity.Y *= -1
+		die.Velocity.X -= 1
 	}
+	if die.Velocity.Y < 0 {
+		die.Velocity.Y += 1
+	} else {
+		die.Velocity.Y -= 1
+	}
+
+	die2.Velocity.X *= factor * DampingFactor
+	die2.Velocity.Y *= factor * DampingFactor
+
+	if die2.Velocity.X < 0 {
+		die2.Velocity.X += 10
+	} else {
+		die2.Velocity.X -= 10
+	}
+	if die2.Velocity.Y < 0 {
+		die2.Velocity.Y += 10
+	} else {
+		die2.Velocity.Y -= 10
+	}
+
 }
 
 // Update handles the movement and bouncing of the DieSprite under gravity.

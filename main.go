@@ -8,6 +8,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/ninesl/dice-will-roll/render"
 )
 
 var (
@@ -17,37 +18,61 @@ var (
 
 // Mode is a representation different game states that modify
 // controls, what is getting displayed, etc.
-type Mode uint16
+type Action uint16
 
 const (
-	ROLLING Mode = iota
+	ROLLING Action = iota
+	ROLL
 	SCORE
 	HELD
+	DRAG // locked to mouse cursor
+	PICK_DIE
 )
 
 func (g *Game) Bounds() (int, int) {
 	return g.TileSize * 16, g.TileSize * 9
 }
 
-// will change global variables that manage state?
-func (g *Game) Controls() {
+// returns an Action based on player input
+//
+// input for the controller scheme? TODO:FIXME: idk if this is final
+func (g *Game) Controls() Action {
+	g.UpdateCusor()
+
+	fmt.Printf("g.x = %d, g.y = %d\n", g.x, g.y)
+	var action Action = ROLLING // the animation of rolling
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
-		for i := range g.Dice {
-			g.Dice[i].Roll()
+		action = ROLL
+	} else if inpututil.IsMouseButtonJustPressed(ebiten.MouseButton0) {
+
+		withinDiceZone := g.x > render.MinWidth && g.x < render.MaxWidth &&
+			g.y > render.MinHeight && g.y < render.MaxHeight
+
+		if withinDiceZone {
+			action = PICK_DIE
 		}
+	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButton0) {
+
 	}
+	// if ebiten.IsMouseButtonPressed(ebiten.MouseButton0) {
+
+	// }
+
+	return action
 }
 
 func (g *Game) Update() error {
-	g.Controls()
+	action := g.Controls()
 
-	UpdateDice(g.Dice)
+	g.ControlAction(action)
+
+	g.UpdateDice()
 
 	return nil
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	msg := fmt.Sprintf("T%0.2f F%0.2f", ebiten.ActualTPS(), ebiten.ActualFPS())
+	msg := fmt.Sprintf("T%0.2f F%0.2f x%0.0f y%0.0f", ebiten.ActualTPS(), ebiten.ActualFPS(), g.x, g.y)
 	op := &text.DrawOptions{}
 	// op.GeoM.Translate(0, 0)
 	op.ColorScale.ScaleWithColor(color.White)
@@ -62,13 +87,17 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		die := g.Dice[i]
 
 		opts.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
+
 		screen.DrawImage(
 			die.Draw(),
 			opts,
 		)
 		opts.GeoM.Reset()
-
 	}
+
+	// if die.Mode == DRAG {
+	// 	opts.GeoM.Translate(float64(g.x), float64(g.y))
+	// }
 
 }
 

@@ -19,7 +19,14 @@ type Game struct {
 	// DiceSprite *render.Sprite
 	Dice     []*Die
 	TileSize int
-	DiceMode Mode
+	//   can be updated with LocateCursor()
+	x, y float64 // the x/y coordinates of the cursor
+}
+
+func (g *Game) UpdateCusor() {
+	x, y := ebiten.CursorPosition()
+	g.x = float64(x)
+	g.y = float64(y)
 }
 
 // return the pixels in the game
@@ -83,8 +90,7 @@ func LoadGame() *Game {
 	return &Game{
 		TileSize: dieImgSize,
 		// DiceSprite: diceSheet,
-		Dice:     dice,
-		DiceMode: ROLLING,
+		Dice: dice,
 	}
 }
 
@@ -107,11 +113,11 @@ func SetupPlayerDice(diceSheet *render.Sprite, dieImgSize int) []*Die {
 			Y: render.MaxHeight/2 - tileSize*0.5,
 		}
 		dieRenderable := render.DieRenderable{
-			Fixed: pos,
-			Vec2:  pos,
+			Fixed:    pos,
+			Vec2:     pos,
 			Velocity: render.Vec2{
-				X: (rand.Float64()*40 + 20) * float64(i) * -1.0,
-				Y: (rand.Float64()*40 + 20) * float64(i) * -1.0,
+				// X: (rand.Float64()*40 + 20) * float64(i) * -1.0,
+				// Y: (rand.Float64()*40 + 20) * float64(i) * -1.0,
 			},
 			TileSize:  float64(dieImgSize),
 			ColorSpot: i * 6,
