@@ -23,7 +23,6 @@ func (g *Game) PickDie() *Die {
 		}
 	}
 
-	panic("Tried to pick a die, could not find one")
 	return nil
 }
 
@@ -39,6 +38,15 @@ func (g *Game) ControlAction(action Action) {
 		}
 	case PICK_DIE:
 		die := g.PickDie()
-		die.Mode = DRAG
+		if die != nil {
+			die.Mode = DRAG
+		}
+	case SELECT:
+		for _, die := range g.Dice {
+			if die.Mode == DRAG {
+				die.Mode = ROLLING
+				die.Roll()
+			}
+		}
 	}
 }

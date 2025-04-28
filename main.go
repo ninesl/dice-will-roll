@@ -27,6 +27,7 @@ const (
 	HELD
 	DRAG // locked to mouse cursor
 	PICK_DIE
+	SELECT // when the mouse is released ie. clicked
 )
 
 func (g *Game) Bounds() (int, int) {
@@ -39,7 +40,6 @@ func (g *Game) Bounds() (int, int) {
 func (g *Game) Controls() Action {
 	g.UpdateCusor()
 
-	fmt.Printf("g.x = %d, g.y = %d\n", g.x, g.y)
 	var action Action = ROLLING // the animation of rolling
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 		action = ROLL
@@ -52,7 +52,7 @@ func (g *Game) Controls() Action {
 			action = PICK_DIE
 		}
 	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButton0) {
-
+		action = SELECT
 	}
 	// if ebiten.IsMouseButtonPressed(ebiten.MouseButton0) {
 
