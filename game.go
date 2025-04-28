@@ -113,11 +113,11 @@ func SetupPlayerDice(diceSheet *render.Sprite, dieImgSize int) []*Die {
 			Y: render.MaxHeight/2 - tileSize*0.5,
 		}
 		dieRenderable := render.DieRenderable{
-			Fixed:    pos,
-			Vec2:     pos,
+			Fixed: pos,
+			Vec2:  pos,
 			Velocity: render.Vec2{
-				// X: (rand.Float64()*40 + 20) * float64(i) * -1.0,
-				// Y: (rand.Float64()*40 + 20) * float64(i) * -1.0,
+				X: (rand.Float64()*40 + 20) * float64(i) * -1.0,
+				Y: (rand.Float64()*40 + 20) * float64(i) * -1.0,
 			},
 			TileSize:  float64(dieImgSize),
 			ColorSpot: i * 6,

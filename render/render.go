@@ -16,6 +16,10 @@ const (
 )
 
 var (
+	// Usage: x to subtract when something is following cusor
+	XOffset float64
+	// Usage: y to subtract when something is following cusor
+	YOffset   float64
 	MinWidth  float64
 	MaxWidth  float64
 	MinHeight float64

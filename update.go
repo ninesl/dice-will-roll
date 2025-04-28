@@ -33,8 +33,9 @@ func (g *Game) UpdateDice() {
 		} else if die.Mode == DRAG {
 			die.Velocity.X = 0
 			die.Velocity.Y = 0
-			die.Vec2.X = g.x - die.TileSize/2
-			die.Vec2.Y = g.y - die.TileSize/2
+
+			die.Vec2.X = g.x - render.XOffset // + (die.Vec2.X + die.TileSize - g.x)
+			die.Vec2.Y = g.y - render.YOffset // + (die.Vec2.Y + die.TileSize - g.y)
 		}
 	}
 

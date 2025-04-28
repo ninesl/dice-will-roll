@@ -1,5 +1,7 @@
 package main
 
+import "github.com/ninesl/dice-will-roll/render"
+
 // returns the first Die found that is within the cursor's bounds
 //
 // used to later set the die's mode to DRAG
@@ -14,11 +16,15 @@ func (g *Game) PickDie() *Die {
 	}
 	x := g.x
 	y := g.y
-	for _, die := range g.Dice {
+	// the last one rendered is on top
+	for i := len(g.Dice) - 1; i >= 0; i -= 1 {
+		die := g.Dice[i]
 		withinX := x > die.Vec2.X && x < die.Vec2.X+die.TileSize
 		withinY := y > die.Vec2.Y && y < die.Vec2.Y+die.TileSize
 
 		if withinX && withinY {
+			render.XOffset = x - die.Vec2.X
+			render.YOffset = y - die.Vec2.Y
 			return die
 		}
 	}
@@ -45,7 +51,7 @@ func (g *Game) ControlAction(action Action) {
 		for _, die := range g.Dice {
 			if die.Mode == DRAG {
 				die.Mode = ROLLING
-				die.Roll()
+
 			}
 		}
 	}
