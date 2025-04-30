@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"log"
 	"math/rand/v2"
@@ -60,15 +61,19 @@ func SetFonts() {
 	DEBUG_FONT = s
 }
 
+func SetBounds(tileSize int) {
+	GAME_BOUNDS_X = tileSize * 16
+	GAME_BOUNDS_Y = tileSize * 9
+	render.GAME_BOUNDS_X = float64(GAME_BOUNDS_X)
+	render.GAME_BOUNDS_Y = float64(GAME_BOUNDS_Y)
+}
+
 func LoadGame() *Game {
 	SetFonts()
-
 	diceImg := ebiten.NewImageFromImage(DiceImage)
-
 	dieImgSize := diceImg.Bounds().Dx() / 6
 
-	render.GAME_BOUNDS_X = float64(dieImgSize * 16)
-	render.GAME_BOUNDS_Y = float64(dieImgSize * 9)
+	SetBounds(dieImgSize)
 	render.SetZones()
 
 	diceSheet := &render.Sprite{
@@ -78,11 +83,18 @@ func LoadGame() *Game {
 
 	dice := SetupPlayerDice(diceSheet, dieImgSize)
 
-	return &Game{
+	g := &Game{
 		TileSize: dieImgSize,
 		// DiceSprite: diceSheet,
 		Dice: dice,
 	}
+
+	fmt.Println(g.String())
+	return g
+}
+
+func (g *Game) String() string {
+	return fmt.Sprintf("GAMEBOUNDS X %d\nGAMEBOUNDS Y %ds\nROLLZONE %#v\n", GAME_BOUNDS_X, GAME_BOUNDS_Y, render.ROLLZONE)
 }
 
 func SetupPlayerDice(diceSheet *render.Sprite, dieImgSize int) []*Die {

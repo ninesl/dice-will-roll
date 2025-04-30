@@ -112,63 +112,24 @@ func BounceOffEachother(die *DieRenderable, die2 *DieRenderable) {
 
 }
 
-// Update handles the movement and bouncing of the DieSprite under gravity.
-func UpdateDie(d *DieRenderable) {
-	var hitLeft, hitRight, hitTop, hitBottom bool
-
-	hitTop = d.Vec2.Y < MinHeight
-	hitBottom = d.Vec2.Y+d.TileSize >= MaxHeight
-
-	hitLeft = d.Vec2.X < MinWidth
-	hitRight = d.Vec2.X+d.TileSize >= MaxWidth
-
-	if hitLeft || hitRight {
-		d.Velocity.X *= -1.0 * BounceFactor
-
-		if hitLeft {
-			d.Vec2.X = MinWidth
-		} else {
-			d.Vec2.X = MaxWidth - d.TileSize
-		}
-		// d.IndexOnSheet = d.ColorSpot + rand.IntN(5)
-	}
-
-	if hitTop || hitBottom {
-		d.Velocity.Y *= -1.0 * BounceFactor //* DampingFactor
-
-		if hitTop {
-			d.Vec2.Y = MinHeight
-		} else {
-			d.Vec2.Y = MaxHeight - d.TileSize
-		}
-		// d.IndexOnSheet = rand.IntN(5)
-	}
-
-	d.Velocity.X *= .95
-	d.Velocity.Y *= .95
-
-	d.Vec2.X += d.Velocity.X
-	d.Vec2.Y += d.Velocity.Y
-}
-
 func BounceAndClamp(die *DieRenderable) {
-	if die.Vec2.X+die.TileSize >= MaxWidth {
-		die.Vec2.X = MaxWidth - die.TileSize - 1
+	if die.Vec2.X+die.TileSize >= ROLLZONE.MaxWidth {
+		die.Vec2.X = ROLLZONE.MaxWidth - die.TileSize - 1
 		die.Velocity.X = math.Abs(die.Velocity.X) * -1
 		die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
 	}
-	if die.Vec2.X < MinWidth {
-		die.Vec2.X = MinWidth + 1
+	if die.Vec2.X < ROLLZONE.MinWidth {
+		die.Vec2.X = ROLLZONE.MinWidth + 1
 		die.Velocity.X = math.Abs(die.Velocity.X)
 		die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
 	}
-	if die.Vec2.Y+die.TileSize >= MaxHeight {
-		die.Vec2.Y = MaxHeight - die.TileSize - 1
+	if die.Vec2.Y+die.TileSize >= ROLLZONE.MaxHeight {
+		die.Vec2.Y = ROLLZONE.MaxHeight - die.TileSize - 1
 		die.Velocity.Y = math.Abs(die.Velocity.Y) * -1
 		die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
 	}
-	if die.Vec2.Y < MinHeight {
-		die.Vec2.Y = MinHeight + 1
+	if die.Vec2.Y < ROLLZONE.MinHeight {
+		die.Vec2.Y = ROLLZONE.MinHeight + 1
 		die.Velocity.Y = math.Abs(die.Velocity.Y)
 		die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
 	}

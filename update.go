@@ -18,11 +18,14 @@ func (g *Game) UpdateDice() {
 	// I'm not a fan of that abstraction it'd be hard to keep track of
 	var dieRenderables []*render.DieRenderable
 
-	for i := range g.Dice {
-		die := &g.Dice[i].DieRenderable
-		dieRenderables = append(dieRenderables, die)
+	for i := 0; i < len(g.Dice); i++ {
+		d := g.Dice[i]
+		d.Velocity.X *= .95
+		d.Velocity.Y *= .95
 
-		render.UpdateDie(die)
+		d.Vec2.X += d.Velocity.X
+		d.Vec2.Y += d.Velocity.Y
+		dieRenderables = append(dieRenderables, &d.DieRenderable)
 	}
 
 	render.HandleDiceCollisions(dieRenderables)
