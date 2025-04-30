@@ -19,11 +19,7 @@ var (
 	// Usage: x to subtract when something is following cusor
 	XOffset float64
 	// Usage: y to subtract when something is following cusor
-	YOffset   float64
-	MinWidth  float64
-	MaxWidth  float64
-	MinHeight float64
-	MaxHeight float64
+	YOffset float64
 	// Usage: DirectionMap[Direction].X * math.Abs(renderable.Velocity.X)
 	DirectionMap = map[Direction]Vec2{
 		UP:        Vec2{X: 0, Y: -1},

@@ -63,22 +63,13 @@ func SetFonts() {
 func LoadGame() *Game {
 	SetFonts()
 
-	// img := *ebiten.NewImageFromImage()
-	// diceImg, _, err := ebitenutil.NewImageFromFile("assets/images/dice.png")
 	diceImg := ebiten.NewImageFromImage(DiceImage)
 
 	dieImgSize := diceImg.Bounds().Dx() / 6
-	// tileSize := float64(dieImgSize)
 
-	// GAME BOUNDARY ASSIGNMENT
-	GAME_BOUNDS_X = dieImgSize * 16
-	GAME_BOUNDS_Y = dieImgSize * 9
-
-	render.MinWidth = float64(GAME_BOUNDS_X / 5)
-	render.MaxWidth = float64(GAME_BOUNDS_X) - render.MinWidth
-	render.MinHeight = float64(GAME_BOUNDS_Y / 5)
-	render.MaxHeight = float64(GAME_BOUNDS_Y) - render.MinHeight
-	render.DiceBottom = render.MaxHeight / 4.0
+	render.GAME_BOUNDS_X = float64(dieImgSize * 16)
+	render.GAME_BOUNDS_Y = float64(dieImgSize * 9)
+	render.SetZones()
 
 	diceSheet := &render.Sprite{
 		Image:       diceImg,
@@ -109,8 +100,8 @@ func SetupPlayerDice(diceSheet *render.Sprite, dieImgSize int) []*Die {
 		tileSize := float64(dieImgSize)
 
 		pos := render.Vec2{
-			X: render.MinWidth + tileSize*float64(i)*2.0,
-			Y: render.MaxHeight/2 - tileSize*0.5,
+			X: render.ROLLZONE.MinWidth + tileSize*float64(i)*2.0,
+			Y: render.ROLLZONE.MaxHeight/2 - tileSize*0.5,
 		}
 		dieRenderable := render.DieRenderable{
 			Fixed: pos,

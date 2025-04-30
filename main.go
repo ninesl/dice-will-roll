@@ -30,6 +30,10 @@ const (
 	SELECT // when the mouse is released ie. clicked
 )
 
+func (g *Game) cursorWithin(zone render.Zone) bool {
+	return g.x > zone.MinWidth && g.x < zone.MaxWidth && g.y > zone.MinHeight && g.y < zone.MaxHeight
+}
+
 func (g *Game) Bounds() (int, int) {
 	return g.TileSize * 16, g.TileSize * 9
 }
@@ -44,11 +48,7 @@ func (g *Game) Controls() Action {
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 		action = ROLL
 	} else if inpututil.IsMouseButtonJustPressed(ebiten.MouseButton0) {
-
-		withinDiceZone := g.x > render.MinWidth && g.x < render.MaxWidth &&
-			g.y > render.MinHeight && g.y < render.MaxHeight
-
-		if withinDiceZone {
+		if g.cursorWithin(render.ROLLZONE) {
 			action = PICK_DIE
 		}
 	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButton0) {
