@@ -25,11 +25,16 @@ const (
 	ROLL
 	SCORE
 	HELD
-	DRAG // locked to mouse cursor
-	PICK_DIE
+	DRAG   // locked to mouse cursor
+	PRESS  // when the mouse is pressed
 	SELECT // when the mouse is released ie. clicked
 )
 
+func (g *Game) UpdateCusor() {
+	x, y := ebiten.CursorPosition()
+	g.x = float64(x)
+	g.y = float64(y)
+}
 func (g *Game) cursorWithin(zone render.Zone) bool {
 	return g.x > zone.MinWidth && g.x < zone.MaxWidth && g.y > zone.MinHeight && g.y < zone.MaxHeight
 }
@@ -49,7 +54,7 @@ func (g *Game) Controls() Action {
 		action = ROLL
 	} else if inpututil.IsMouseButtonJustPressed(ebiten.MouseButton0) {
 		if g.cursorWithin(render.ROLLZONE) {
-			action = PICK_DIE
+			action = PRESS
 		}
 	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButton0) {
 		action = SELECT

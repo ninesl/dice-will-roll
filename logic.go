@@ -16,6 +16,11 @@ func (g *Game) PickDie() *Die {
 	}
 	x := g.x
 	y := g.y
+
+	var index int // to put on last element of g.Dice to have it render on top
+	var PickedDie *Die
+	//tempDie := g.Dice[index]
+
 	// the last one rendered is on top
 	for i := len(g.Dice) - 1; i >= 0; i -= 1 {
 		die := g.Dice[i]
@@ -25,11 +30,21 @@ func (g *Game) PickDie() *Die {
 		if withinX && withinY {
 			render.XOffset = x - die.Vec2.X
 			render.YOffset = y - die.Vec2.Y
-			return die
+			index = i
+			PickedDie = die
+			break
 		}
 	}
 
-	return nil
+	// shift left
+	for i := index; i < len(g.Dice)-1; i++ {
+		g.Dice[i] = g.Dice[i+1]
+	}
+
+	// set top to picked die
+	g.Dice[len(g.Dice)-1] = PickedDie
+
+	return PickedDie
 }
 
 func (g *Game) ControlAction(action Action) {
@@ -42,7 +57,7 @@ func (g *Game) ControlAction(action Action) {
 		for _, die := range g.Dice {
 			die.Roll()
 		}
-	case PICK_DIE:
+	case PRESS:
 		die := g.PickDie()
 		if die != nil {
 			die.Mode = DRAG
@@ -51,7 +66,7 @@ func (g *Game) ControlAction(action Action) {
 		for _, die := range g.Dice {
 			if die.Mode == DRAG {
 				die.Mode = ROLLING
-
+				break
 			}
 		}
 	}

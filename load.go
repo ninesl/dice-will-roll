@@ -24,12 +24,6 @@ type Game struct {
 	x, y float64 // the x/y coordinates of the cursor
 }
 
-func (g *Game) UpdateCusor() {
-	x, y := ebiten.CursorPosition()
-	g.x = float64(x)
-	g.y = float64(y)
-}
-
 // return the pixels in the game
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
 	return GAME_BOUNDS_X, GAME_BOUNDS_Y
