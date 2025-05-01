@@ -35,7 +35,7 @@ func (g *Game) UpdateCusor() {
 	g.x = float64(x)
 	g.y = float64(y)
 }
-func (g *Game) cursorWithin(zone render.Zone) bool {
+func (g *Game) cursorWithin(zone render.ZoneRenderable) bool {
 	return g.x > zone.MinWidth && g.x < zone.MaxWidth && g.y > zone.MinHeight && g.y < zone.MaxHeight
 }
 
@@ -59,9 +59,6 @@ func (g *Game) Controls() Action {
 	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButton0) {
 		action = SELECT
 	}
-	// if ebiten.IsMouseButtonPressed(ebiten.MouseButton0) {
-
-	// }
 
 	return action
 }
@@ -70,7 +67,6 @@ func (g *Game) Update() error {
 	action := g.Controls()
 
 	g.ControlAction(action)
-
 	g.UpdateDice()
 
 	return nil
@@ -88,13 +84,23 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	opts := &ebiten.DrawImageOptions{}
 
+	if g.cursorWithin(render.SCOREZONE) {
+		//TODO:FIXME: have to make this work for standard input, etc. will probably change with shaders anyways later
+		if ebiten.IsMouseButtonPressed(ebiten.MouseButton0) {
+			opts.GeoM.Translate(render.SCOREZONE.MinWidth, render.SCOREZONE.MinHeight)
+			screen.DrawImage(
+				render.SCOREZONE.Sprite(),
+				opts,
+			)
+			opts.GeoM.Reset()
+		}
+	}
+
 	for i := 0; i < len(g.Dice); i++ {
 		die := g.Dice[i]
-
 		opts.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
-
 		screen.DrawImage(
-			die.Draw(),
+			die.Sprite(),
 			opts,
 		)
 		opts.GeoM.Reset()

@@ -41,5 +41,3 @@ type Renderable interface {
 	Sprite() *ebiten.Image // the image to draw
 	Position() Vec2        // where the image should go
 }
-
-const BUFFER float64 = 2.0

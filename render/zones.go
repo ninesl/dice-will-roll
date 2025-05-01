@@ -1,5 +1,11 @@
 package render
 
+import (
+	"image/color"
+
+	"github.com/hajimehoshi/ebiten/v2"
+)
+
 var (
 	GAME_BOUNDS_X float64
 	GAME_BOUNDS_Y float64
@@ -22,26 +28,67 @@ type Zone struct {
 	MaxHeight float64
 }
 
+type ZoneRenderable struct {
+	Zone
+	sprite *ebiten.Image
+}
+
+func (z *ZoneRenderable) Update() {
+}
+
+func (z *ZoneRenderable) Sprite() *ebiten.Image {
+	return z.sprite
+}
+
+func (z *ZoneRenderable) Position() Vec2 {
+	return Vec2{X: z.MinWidth, Y: z.MinHeight}
+}
+
 var (
-	// bounds set during LoadGame()
-	ROLLZONE  Zone
-	SCOREZONE Zone
+	ROLLZONE  ZoneRenderable
+	SCOREZONE ZoneRenderable
 )
 
 func SetZones() {
 	minWidth := GAME_BOUNDS_X / 5
 	minHeight := GAME_BOUNDS_Y / 5
 
-	ROLLZONE = Zone{
-		MinWidth:  minWidth,
-		MaxWidth:  GAME_BOUNDS_X - minWidth,
-		MinHeight: minHeight,
-		MaxHeight: GAME_BOUNDS_Y - minHeight,
+	ROLLZONE = ZoneRenderable{
+		Zone: Zone{
+			MinWidth:  minWidth,
+			MaxWidth:  GAME_BOUNDS_X - minWidth,
+			MinHeight: minHeight,
+			MaxHeight: GAME_BOUNDS_Y - minHeight,
+		},
+		sprite: createImage(
+			int((GAME_BOUNDS_X-minWidth)-minWidth),
+			int((GAME_BOUNDS_Y-minHeight)-minHeight),
+			color.RGBA{R: 50, G: 50, B: 50, A: 128},
+		),
 	}
-	SCOREZONE = Zone{
-		MinWidth:  minWidth,
-		MaxWidth:  ROLLZONE.MaxWidth,
-		MinHeight: 0,
-		MaxHeight: ROLLZONE.MinHeight - 1,
+
+	SCOREZONE = ZoneRenderable{
+		Zone: Zone{
+			MinWidth:  minWidth,
+			MaxWidth:  ROLLZONE.MaxWidth,
+			MinHeight: 0,
+			MaxHeight: ROLLZONE.MinHeight - 1,
+		},
+		sprite: createImage(
+			int(ROLLZONE.MaxWidth-minWidth),
+			int(ROLLZONE.MinHeight-1),
+			color.RGBA{R: 30, G: 30, B: 80, A: 128},
+		),
 	}
+}
+
+func createImage(width, height int, c color.Color) *ebiten.Image {
+	img := ebiten.NewImage(width, height)
+	img.Fill(c)
+	return img
+}
+
+// TODO:
+func RenderZones() {
+
 }

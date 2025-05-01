@@ -46,11 +46,3 @@ func (s *SpriteSheet) Rect(index int) image.Rectangle {
 		x, y, x+s.TileSize, y+s.TileSize,
 	)
 }
-
-// // updates the active frame by 1, resets back to 0
-// func (s *SpriteSheet) Animate() {
-// 	s.ActiveFrame++
-// 	if s.ActiveFrame > s.TileAmount {
-// 		s.ActiveFrame = 0
-// 	}
-// }

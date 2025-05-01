@@ -9,19 +9,19 @@ import (
 )
 
 type Die struct {
-	*render.Sprite
 	*dice.Die
 	render.DieRenderable
-	Mode Action // Current mode of the die, is modified thru player Controls()
+	sprite *render.Sprite
+	Mode   Action // Current mode of the die, is modified thru player Controls()
 }
 
-func (d *Die) Draw() *ebiten.Image {
+func (d *Die) Sprite() *ebiten.Image {
 	// g.DiceSprite.Image.SubImage(
 	// 			g.DiceSprite.SpriteSheet.Rect(die.IndexOnSheet),
 	// 		).(*ebiten.Image)
 
-	return d.Image.SubImage(
-		d.SpriteSheet.Rect(d.IndexOnSheet),
+	return d.sprite.Image.SubImage(
+		d.sprite.SpriteSheet.Rect(d.IndexOnSheet),
 	).(*ebiten.Image)
 }
 

@@ -120,7 +120,7 @@ func SetupPlayerDice(diceSheet *render.Sprite, dieImgSize int) []*Die {
 		}
 
 		die := Die{
-			Sprite:        diceSheet,
+			sprite:        diceSheet,
 			DieRenderable: dieRenderable,
 			Mode:          ROLLING,
 		}

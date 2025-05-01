@@ -16,6 +16,7 @@ func (g *Game) PickDie() *Die {
 	if len(g.Dice) == 0 {
 		return nil
 	}
+
 	x := g.x
 	y := g.y
 
@@ -70,6 +71,9 @@ func (g *Game) ControlAction(action Action) {
 			die.Fixed = die.Vec2 // set the fixed position to the current position
 			die.Mode = DRAG
 		}
+		if g.cursorWithin(render.SCOREZONE) {
+			// render.Zones
+		}
 	case SELECT:
 		var d *Die
 		for _, die := range g.Dice {
@@ -77,6 +81,10 @@ func (g *Game) ControlAction(action Action) {
 				d = die
 				break
 			}
+		}
+
+		if d == nil {
+			return
 		}
 
 		if g.cursorWithin(render.SCOREZONE) {
@@ -88,20 +96,9 @@ func (g *Game) ControlAction(action Action) {
 		d.Mode = ROLLING
 
 		if g.cursorWithin(render.ROLLZONE) {
-			if d.Vec2.X > d.Fixed.X {
-				d.Velocity.X = 1
-			} else {
-				d.Velocity.X = -1
-			}
-			if d.Vec2.Y > d.Fixed.Y {
-				d.Velocity.Y = 1
-			} else {
-				d.Velocity.Y = -1
-			}
+			d.HoverFromFromFixed()
+			d.Fixed = render.Vec2{}
 			return
 		}
-
-		// if the die is not within the rollzone, set it to the fixed position
-		d.Vec2.X = d.Fixed.X
 	}
 }

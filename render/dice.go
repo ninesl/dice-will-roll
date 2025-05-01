@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"math"
 	"math/rand/v2"
 )
@@ -20,24 +21,47 @@ type DieRenderable struct {
 // func (d *DieRenderable) Sprite()
 
 var (
-	DiceBottom    float64
 	DampingFactor float64 = 0.7
-	BounceFactor  float64 = .9
+	BounceFactor  float64 = .95
 )
+
+func HandleHeldDice(dice []*DieRenderable) {
+	num := len(dice)
+	if num == 0 {
+		return
+	}
+	mod := dice[0].TileSize
+
+	x := GAME_BOUNDS_X/2 - mod/2
+	y := SCOREZONE.MaxHeight/2 + SCOREZONE.MinHeight/2 - mod/2
+
+	for i := 0; i < num; i++ {
+		d := dice[i]
+
+		o := float64(i)
+		d.Vec2.X = x + mod*o
+		d.Vec2.Y = y
+
+		fmt.Printf("%d %f : %#v\n", i, o, d.Vec2)
+	}
+}
 
 // gross code
 func HandleDiceCollisions(dice []*DieRenderable) {
-	for i, die := range dice {
-		for q, die2 := range dice {
+	var die, die2 *DieRenderable
+	for i := 0; i < len(dice); i++ {
+		die = dice[i]
+		for q := 0; q < len(dice); q++ {
 			if i == q {
 				continue
 			}
+			die2 = dice[q]
 
 			if die.Colliding {
 				die.Vec2.X += die.Velocity.X
 				die.Vec2.Y += die.Velocity.Y
 
-				die.Velocity.Y *= rand.Float64() + .2
+				die.Velocity.Y *= rand.Float64() + .5
 				die.Colliding = false
 			}
 
@@ -45,7 +69,7 @@ func HandleDiceCollisions(dice []*DieRenderable) {
 				die2.Vec2.X += die2.Velocity.X
 				die2.Vec2.Y += die2.Velocity.Y
 
-				die2.Velocity.Y *= rand.Float64() + .2
+				die2.Velocity.Y *= rand.Float64() + .5
 				die2.Colliding = false
 			}
 
@@ -53,18 +77,7 @@ func HandleDiceCollisions(dice []*DieRenderable) {
 			yCollide := die.Vec2.Y < die2.Vec2.Y+die2.TileSize && die.Vec2.Y > die2.Vec2.Y
 
 			if yCollide && xCollide {
-				die.Colliding = true
-				die2.Colliding = true
-
-				// die.Velocity.Y *= rand.Float64() + 1
-				// die2.Velocity.Y *= rand.Float64() + 1
-
 				BounceOffEachother(die, die2)
-
-				// die.Velocity.X *= -BounceFactor
-				// die2.Velocity.X *= -BounceFactor
-				// die.Velocity.Y *= -BounceFactor
-				// die2.Velocity.Y *= -BounceFactor
 			}
 		}
 
@@ -76,6 +89,9 @@ func HandleDiceCollisions(dice []*DieRenderable) {
 }
 
 func BounceOffEachother(die *DieRenderable, die2 *DieRenderable) {
+	die.Colliding = true
+	die2.Colliding = true
+
 	if die.Velocity.X < BounceFactor && die.Velocity.Y < BounceFactor {
 		return
 	}
@@ -100,14 +116,15 @@ func BounceOffEachother(die *DieRenderable, die2 *DieRenderable) {
 	die2.Velocity.Y *= factor * DampingFactor
 
 	if die2.Velocity.X < 0 {
-		die2.Velocity.X += 10
+		die2.Velocity.X += 6
 	} else {
-		die2.Velocity.X -= 10
+		die2.Velocity.X -= 6
 	}
+
 	if die2.Velocity.Y < 0 {
-		die2.Velocity.Y += 10
+		die2.Velocity.Y += 6
 	} else {
-		die2.Velocity.Y -= 10
+		die2.Velocity.Y -= 6
 	}
 
 }
@@ -132,5 +149,19 @@ func BounceAndClamp(die *DieRenderable) {
 		die.Vec2.Y = ROLLZONE.MinHeight + 1
 		die.Velocity.Y = math.Abs(die.Velocity.Y)
 		die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
+	}
+}
+
+// small hover away effect
+func (d *DieRenderable) HoverFromFromFixed() {
+	if d.Vec2.X > d.Fixed.X {
+		d.Velocity.X = 3
+	} else {
+		d.Velocity.X = -3
+	}
+	if d.Vec2.Y > d.Fixed.Y {
+		d.Velocity.Y = 3
+	} else {
+		d.Velocity.Y = -3
 	}
 }
