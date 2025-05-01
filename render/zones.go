@@ -24,7 +24,8 @@ type Zone struct {
 
 var (
 	// bounds set during LoadGame()
-	ROLLZONE Zone
+	ROLLZONE  Zone
+	SCOREZONE Zone
 )
 
 func SetZones() {
@@ -36,5 +37,11 @@ func SetZones() {
 		MaxWidth:  GAME_BOUNDS_X - minWidth,
 		MinHeight: minHeight,
 		MaxHeight: GAME_BOUNDS_Y - minHeight,
+	}
+	SCOREZONE = Zone{
+		MinWidth:  minWidth,
+		MaxWidth:  ROLLZONE.MaxWidth,
+		MinHeight: 0,
+		MaxHeight: ROLLZONE.MinHeight - 1,
 	}
 }

@@ -1,6 +1,8 @@
 package main
 
-import "github.com/ninesl/dice-will-roll/render"
+import (
+	"github.com/ninesl/dice-will-roll/render"
+)
 
 // returns the first Die found that is within the cursor's bounds
 //
@@ -36,6 +38,11 @@ func (g *Game) PickDie() *Die {
 		}
 	}
 
+	//clicked nothing
+	if PickedDie == nil {
+		return nil
+	}
+
 	// shift left
 	for i := index; i < len(g.Dice)-1; i++ {
 		g.Dice[i] = g.Dice[i+1]
@@ -60,14 +67,41 @@ func (g *Game) ControlAction(action Action) {
 	case PRESS:
 		die := g.PickDie()
 		if die != nil {
+			die.Fixed = die.Vec2 // set the fixed position to the current position
 			die.Mode = DRAG
 		}
 	case SELECT:
+		var d *Die
 		for _, die := range g.Dice {
 			if die.Mode == DRAG {
-				die.Mode = ROLLING
+				d = die
 				break
 			}
 		}
+
+		if g.cursorWithin(render.SCOREZONE) {
+			d.Mode = HELD
+			return
+		}
+
+		// let go of die
+		d.Mode = ROLLING
+
+		if g.cursorWithin(render.ROLLZONE) {
+			if d.Vec2.X > d.Fixed.X {
+				d.Velocity.X = 1
+			} else {
+				d.Velocity.X = -1
+			}
+			if d.Vec2.Y > d.Fixed.Y {
+				d.Velocity.Y = 1
+			} else {
+				d.Velocity.Y = -1
+			}
+			return
+		}
+
+		// if the die is not within the rollzone, set it to the fixed position
+		d.Vec2.X = d.Fixed.X
 	}
 }
