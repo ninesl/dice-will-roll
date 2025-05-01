@@ -16,30 +16,33 @@ func (g *Game) UpdateDice() {
 	// Unsure if this is a good idea,probably wasting CPU cycles
 	// maybe a pointer to this during loading just to access it?
 	// I'm not a fan of that abstraction it'd be hard to keep track of
-	var dieRenderables []*render.DieRenderable
+	var rolling []*render.DieRenderable
+	var held []*render.DieRenderable
 
 	for i := 0; i < len(g.Dice); i++ {
 		d := g.Dice[i]
-		d.Velocity.X *= .95
-		d.Velocity.Y *= .95
+		die := &d.DieRenderable
 
-		d.Vec2.X += d.Velocity.X
-		d.Vec2.Y += d.Velocity.Y
-		dieRenderables = append(dieRenderables, &d.DieRenderable)
-	}
+		if d.Mode == ROLLING {
+			d.Velocity.X *= .95
+			d.Velocity.Y *= .95
 
-	render.HandleDiceCollisions(dieRenderables)
+			d.Vec2.X += d.Velocity.X
+			d.Vec2.Y += d.Velocity.Y
+			render.BounceAndClamp(die)
 
-	for _, die := range g.Dice {
-		if die.Mode == ROLLING {
-			render.BounceAndClamp(&die.DieRenderable)
-		} else if die.Mode == DRAG {
-			die.Velocity.X = 0
-			die.Velocity.Y = 0
+			rolling = append(rolling, die)
+		} else if d.Mode == DRAG {
+			d.Velocity.X = 0
+			d.Velocity.Y = 0
 
-			die.Vec2.X = g.x - render.XOffset // + (die.Vec2.X + die.TileSize - g.x)
-			die.Vec2.Y = g.y - render.YOffset // + (die.Vec2.Y + die.TileSize - g.y)
+			d.Vec2.X = g.x - render.XOffset // + (die.Vec2.X + die.TileSize - g.x)
+			d.Vec2.Y = g.y - render.YOffset // + (die.Vec2.Y + die.TileSize - g.y)
+		} else if d.Mode == HELD {
+			held = append(held, die)
 		}
 	}
 
+	render.HandleDiceCollisions(rolling)
+	render.HandleHeldDice(held)
 }
