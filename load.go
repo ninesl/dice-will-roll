@@ -83,7 +83,6 @@ func LoadGame() *Game {
 		Dice: dice,
 	}
 
-	fmt.Println(g.String())
 	return g
 }
 
