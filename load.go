@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 
 	_ "embed"
+	"image/color"
 	_ "image/png" // for png encoder
 
 	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
@@ -19,7 +20,7 @@ import (
 type Game struct {
 	// DiceSprite *render.Sprite
 	Dice     []*Die
-	TileSize int
+	TileSize float64
 	//   can be updated with LocateCursor()
 	x, y float64 // the x/y coordinates of the cursor
 }
@@ -78,10 +79,12 @@ func LoadGame() *Game {
 	dice := SetupPlayerDice(diceSheet, dieImgSize)
 
 	g := &Game{
-		TileSize: dieImgSize,
+		TileSize: float64(dieImgSize),
 		// DiceSprite: diceSheet,
 		Dice: dice,
 	}
+
+	dieImgTransparent = render.CreateImage(dieImgSize, dieImgSize, color.RGBA{56, 56, 56, 100})
 
 	return g
 }

@@ -1,5 +1,7 @@
 package render
 
+// where to render die
+
 import (
 	"fmt"
 	"math"
@@ -30,19 +32,33 @@ func HandleHeldDice(dice []*DieRenderable) {
 	if num == 0 {
 		return
 	}
+
+	var x, y float64
+
 	mod := dice[0].TileSize
 
-	x := GAME_BOUNDS_X/2 - mod/2
-	y := SCOREZONE.MaxHeight/2 + SCOREZONE.MinHeight/2 - mod/2
+	x = GAME_BOUNDS_X/2 - mod/2
+	y = SCOREZONE.MaxHeight/2 - mod/2
 
+	if num > 1 {
+		x -= mod * (float64(num) - 1.0)
+	}
+
+	/*
+		fmt.Printf("GAME_BOUNDS_X: %v, %v\nx: %f y: %f\nmod: %f\n",
+			GAME_BOUNDS_X, GAME_BOUNDS_X/2, x, y, mod)
+	*/
+
+	// go from right to left? i := len(dice)?
 	for i := 0; i < num; i++ {
-		d := dice[i]
+		die := dice[i]
 
-		o := float64(i)
-		d.Vec2.X = x + mod*o
-		d.Vec2.Y = y
+		die.Vec2.X = x
+		die.Vec2.Y = y
 
-		fmt.Printf("%d %f : %#v\n", i, o, d.Vec2)
+		fmt.Printf("%d : %#v\n", i, die.Vec2)
+
+		x += mod * 2
 	}
 }
 
@@ -86,6 +102,10 @@ func HandleDiceCollisions(dice []*DieRenderable) {
 			die.Velocity.Y = 0
 		}
 	}
+
+	for _, die := range dice {
+		BounceAndClamp(die)
+	}
 }
 
 func BounceOffEachother(die *DieRenderable, die2 *DieRenderable) {
@@ -102,14 +122,14 @@ func BounceOffEachother(die *DieRenderable, die2 *DieRenderable) {
 	die.Velocity.Y *= factor * DampingFactor
 
 	if die.Velocity.X < 0 {
-		die.Velocity.X += 1
+		die.Velocity.X += 6
 	} else {
-		die.Velocity.X -= 1
+		die.Velocity.X -= 6
 	}
 	if die.Velocity.Y < 0 {
-		die.Velocity.Y += 1
+		die.Velocity.Y += 6
 	} else {
-		die.Velocity.Y -= 1
+		die.Velocity.Y -= 6
 	}
 
 	die2.Velocity.X *= factor * DampingFactor
@@ -152,6 +172,7 @@ func BounceAndClamp(die *DieRenderable) {
 	}
 }
 
+// TODO: make this 'flick' the die based on mouse velocity?
 // small hover away effect
 func (d *DieRenderable) HoverFromFromFixed() {
 	if d.Vec2.X > d.Fixed.X {

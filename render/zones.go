@@ -60,7 +60,7 @@ func SetZones() {
 			MinHeight: minHeight,
 			MaxHeight: GAME_BOUNDS_Y - minHeight,
 		},
-		sprite: createImage(
+		sprite: CreateImage(
 			int((GAME_BOUNDS_X-minWidth)-minWidth),
 			int((GAME_BOUNDS_Y-minHeight)-minHeight),
 			color.RGBA{R: 50, G: 50, B: 50, A: 128},
@@ -69,26 +69,22 @@ func SetZones() {
 
 	SCOREZONE = ZoneRenderable{
 		Zone: Zone{
-			MinWidth:  minWidth,
-			MaxWidth:  ROLLZONE.MaxWidth,
+			MinWidth:  0,
+			MaxWidth:  GAME_BOUNDS_X,
 			MinHeight: 0,
 			MaxHeight: ROLLZONE.MinHeight - 1,
 		},
-		sprite: createImage(
-			int(ROLLZONE.MaxWidth-minWidth),
+		sprite: CreateImage(
+			int(GAME_BOUNDS_X),
 			int(ROLLZONE.MinHeight-1),
 			color.RGBA{R: 30, G: 30, B: 80, A: 128},
 		),
 	}
 }
 
-func createImage(width, height int, c color.Color) *ebiten.Image {
+// helperfunction for placeholder sprites
+func CreateImage(width, height int, c color.Color) *ebiten.Image {
 	img := ebiten.NewImage(width, height)
 	img.Fill(c)
 	return img
-}
-
-// TODO:
-func RenderZones() {
-
 }

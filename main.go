@@ -1,13 +1,10 @@
 package main
 
 import (
-	"fmt"
-	"image/color"
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
-	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/ninesl/dice-will-roll/render"
 )
 
@@ -39,8 +36,9 @@ func (g *Game) cursorWithin(zone render.ZoneRenderable) bool {
 	return g.x > zone.MinWidth && g.x < zone.MaxWidth && g.y > zone.MinHeight && g.y < zone.MaxHeight
 }
 
+// interface impl
 func (g *Game) Bounds() (int, int) {
-	return g.TileSize * 16, g.TileSize * 9
+	return int(g.TileSize) * 16, int(g.TileSize) * 9
 }
 
 // returns an Action based on player input
@@ -61,55 +59,6 @@ func (g *Game) Controls() Action {
 	}
 
 	return action
-}
-
-func (g *Game) Update() error {
-	action := g.Controls()
-
-	g.ControlAction(action)
-	g.UpdateDice()
-
-	return nil
-}
-
-func (g *Game) Draw(screen *ebiten.Image) {
-	msg := fmt.Sprintf("T%0.2f F%0.2f x%0.0f y%0.0f", ebiten.ActualTPS(), ebiten.ActualFPS(), g.x, g.y)
-	op := &text.DrawOptions{}
-	// op.GeoM.Translate(0, 0)
-	op.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, msg, &text.GoTextFace{
-		Source: DEBUG_FONT,
-		Size:   20,
-	}, op)
-
-	opts := &ebiten.DrawImageOptions{}
-
-	if g.cursorWithin(render.SCOREZONE) {
-		//TODO:FIXME: have to make this work for standard input, etc. will probably change with shaders anyways later
-		if ebiten.IsMouseButtonPressed(ebiten.MouseButton0) {
-			opts.GeoM.Translate(render.SCOREZONE.MinWidth, render.SCOREZONE.MinHeight)
-			screen.DrawImage(
-				render.SCOREZONE.Sprite(),
-				opts,
-			)
-			opts.GeoM.Reset()
-		}
-	}
-
-	for i := 0; i < len(g.Dice); i++ {
-		die := g.Dice[i]
-		opts.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
-		screen.DrawImage(
-			die.Sprite(),
-			opts,
-		)
-		opts.GeoM.Reset()
-	}
-
-	// if die.Mode == DRAG {
-	// 	opts.GeoM.Translate(float64(g.x), float64(g.y))
-	// }
-
 }
 
 func main() {
