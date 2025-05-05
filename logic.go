@@ -1,8 +1,32 @@
 package main
 
 import (
+	"time"
+
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/ninesl/dice-will-roll/render"
 )
+
+// returns an Action based on player input
+//
+// input for the controller scheme? TODO:FIXME: idk if this is final
+func (g *Game) Controls() Action {
+	g.UpdateCusor()
+
+	var action Action = ROLLING // the animation of rolling
+	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
+		action = ROLL
+	} else if inpututil.IsMouseButtonJustPressed(ebiten.MouseButton0) {
+		if g.cursorWithin(render.ROLLZONE) {
+			action = PRESS
+		}
+	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButton0) {
+		action = SELECT
+	}
+
+	return action
+}
 
 // returns the first Die found that is within the cursor's bounds
 //
@@ -68,10 +92,12 @@ func (g *Game) ControlAction(action Action) {
 	case PRESS:
 		die := g.PickDie()
 		if die != nil {
+			g.Time = time.Now()
+			g.Fixed = die.Vec2
 			die.Fixed = die.Vec2 // set the fixed position to the current position
 			die.Mode = DRAG
 		}
-		if g.cursorWithin(render.SCOREZONE) {
+		if g.cursorWithin(render.ROLLZONE) {
 			// render.Zones
 		}
 	case SELECT:
@@ -87,7 +113,10 @@ func (g *Game) ControlAction(action Action) {
 			return
 		}
 
-		if g.cursorWithin(render.SCOREZONE) {
+		//TODO: make this flick threshold 'feel' good
+		flicked := (time.Since(g.Time) > time.Millisecond*200) && (d.Fixed.Y+d.TileSize > d.Vec2.Y)
+
+		if g.cursorWithin(render.SCOREZONE) || flicked {
 			d.Mode = HELD
 			return
 		}
@@ -95,7 +124,7 @@ func (g *Game) ControlAction(action Action) {
 		// let go of die
 		d.Mode = ROLLING
 
-		if g.cursorWithin(render.ROLLZONE) {
+		if g.cursorWithin(render.SmallRollZone) {
 			d.HoverFromFromFixed()
 			d.Fixed = render.Vec2{}
 			return

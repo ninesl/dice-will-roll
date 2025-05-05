@@ -4,7 +4,6 @@ import (
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/ninesl/dice-will-roll/render"
 )
 
@@ -39,26 +38,6 @@ func (g *Game) cursorWithin(zone render.ZoneRenderable) bool {
 // interface impl
 func (g *Game) Bounds() (int, int) {
 	return int(g.TileSize) * 16, int(g.TileSize) * 9
-}
-
-// returns an Action based on player input
-//
-// input for the controller scheme? TODO:FIXME: idk if this is final
-func (g *Game) Controls() Action {
-	g.UpdateCusor()
-
-	var action Action = ROLLING // the animation of rolling
-	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
-		action = ROLL
-	} else if inpututil.IsMouseButtonJustPressed(ebiten.MouseButton0) {
-		if g.cursorWithin(render.ROLLZONE) {
-			action = PRESS
-		}
-	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButton0) {
-		action = SELECT
-	}
-
-	return action
 }
 
 func main() {

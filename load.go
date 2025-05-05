@@ -6,6 +6,7 @@ import (
 	"image"
 	"log"
 	"math/rand/v2"
+	"time"
 
 	_ "embed"
 	"image/color"
@@ -20,6 +21,8 @@ import (
 type Game struct {
 	// DiceSprite *render.Sprite
 	Dice     []*Die
+	Fixed    render.Vec2
+	Time     time.Time
 	TileSize float64
 	//   can be updated with LocateCursor()
 	x, y float64 // the x/y coordinates of the cursor

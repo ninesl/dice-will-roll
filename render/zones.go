@@ -29,8 +29,8 @@ type Zone struct {
 }
 
 type ZoneRenderable struct {
-	Zone
 	sprite *ebiten.Image
+	Zone
 }
 
 func (z *ZoneRenderable) Update() {
@@ -45,15 +45,31 @@ func (z *ZoneRenderable) Position() Vec2 {
 }
 
 var (
-	ROLLZONE  ZoneRenderable
-	SCOREZONE ZoneRenderable
+	ROLLZONE      ZoneRenderable
+	SCOREZONE     ZoneRenderable
+	SmallRollZone ZoneRenderable
+	BigRollZone   ZoneRenderable
 )
 
 func SetZones() {
 	minWidth := GAME_BOUNDS_X / 5
 	minHeight := GAME_BOUNDS_Y / 5
 
-	ROLLZONE = ZoneRenderable{
+	BigRollZone = ZoneRenderable{
+		Zone: Zone{
+			MinWidth:  0,
+			MaxWidth:  GAME_BOUNDS_X,
+			MinHeight: 0, // minHeight,
+			MaxHeight: GAME_BOUNDS_Y,
+		},
+		sprite: CreateImage(
+			int((GAME_BOUNDS_X)),
+			int((GAME_BOUNDS_Y /* - minHeight*/)),
+			color.RGBA{R: 123, G: 123, B: 123, A: 150},
+		),
+	}
+
+	SmallRollZone = ZoneRenderable{
 		Zone: Zone{
 			MinWidth:  minWidth,
 			MaxWidth:  GAME_BOUNDS_X - minWidth,
@@ -67,12 +83,14 @@ func SetZones() {
 		),
 	}
 
+	ROLLZONE = BigRollZone
+
 	SCOREZONE = ZoneRenderable{
 		Zone: Zone{
 			MinWidth:  0,
 			MaxWidth:  GAME_BOUNDS_X,
 			MinHeight: 0,
-			MaxHeight: ROLLZONE.MinHeight - 1,
+			MaxHeight: SmallRollZone.MinHeight,
 		},
 		sprite: CreateImage(
 			int(GAME_BOUNDS_X),
