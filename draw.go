@@ -96,7 +96,7 @@ func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOption
 // TODO: better abstraction than this
 func DEBUGDrawFPS(screen *ebiten.Image, x, y float64, rolling, held, moving int) {
 	msg := fmt.Sprintf("T%0.2f F%0.2f x%4.0f y%4.0f ", ebiten.ActualTPS(), ebiten.ActualFPS(), x, y)
-	msg += fmt.Sprintf("Rolling%d Held%d Moving%d", rolling, held, moving)
+	msg += fmt.Sprintf("Rolling %d Held %d Moving %d", rolling, held, moving)
 	op := &text.DrawOptions{}
 	// op.GeoM.Translate(0, 0)
 	op.ColorScale.ScaleWithColor(color.White)
