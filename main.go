@@ -17,11 +17,15 @@ var (
 type Action uint16
 
 const (
-	ROLLING Action = iota
-	ROLL
+	NONE Action = iota
+
+	ROLLING // the die is moving around, collision checks etc.
+	HELD    // held in hand, waiting to be scored
+	DRAG    // locked to mouse cursor
+	MOVING  // used to flag sprites that are moving to a specific location
+
 	SCORE
-	HELD
-	DRAG   // locked to mouse cursor
+	ROLL   // when the spacebar is pressed
 	PRESS  // when the mouse is pressed
 	SELECT // when the mouse is released ie. clicked
 )

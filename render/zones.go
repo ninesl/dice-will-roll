@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"image/color"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -26,6 +27,25 @@ type Zone struct {
 	MaxWidth  float64
 	MinHeight float64
 	MaxHeight float64
+}
+
+// helper function
+func (z *Zone) ContainsDie(die *DieRenderable) bool {
+	fmt.Sprintln("%+v\n%+v", z, die.Vec2)
+
+	right := die.Vec2.X+die.TileSize > z.MinWidth
+	left := die.Vec2.X < z.MaxWidth
+
+	xBounds := (right || left)
+
+	top := die.Vec2.Y < z.MaxHeight
+	bottom := die.Vec2.Y+die.TileSize > z.MinHeight
+
+	if top || bottom && xBounds {
+		return true
+	}
+
+	return false
 }
 
 type ZoneRenderable struct {

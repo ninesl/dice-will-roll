@@ -24,9 +24,11 @@ type DieRenderable struct {
 var (
 	DampingFactor float64 = 0.7
 	BounceFactor  float64 = .95
+	MoveFactor    float64 = .2
 )
 
-func HandleMovingDice(dice []*DieRenderable, heldNum int) {
+// Moves dice to fixed pos based on num of moving dice from being selected
+func HandleMovingHeldDice(dice []*DieRenderable) {
 	num := len(dice)
 	if num == 0 {
 		return
@@ -43,15 +45,27 @@ func HandleMovingDice(dice []*DieRenderable, heldNum int) {
 		x -= mod * (float64(num) - 1.0)
 	}
 
-	// go from right to left? i := len(dice)?
+	// find where the moving dice should be going towards
 	for i := 0; i < num; i++ {
 		die := dice[i]
 
-		die.Vec2.X = x
-		die.Vec2.Y = y
+		die.Fixed.X = x
+		die.Fixed.Y = y
 
 		x += mod * 2
 	}
+
+	for i := 0; i < num; i++ {
+		die := dice[i]
+
+		// should be a gradual slowdown in the direction
+		die.Velocity.X = (die.Fixed.X - die.Vec2.X) * MoveFactor
+		die.Velocity.Y = (die.Fixed.Y - die.Vec2.Y) * MoveFactor
+
+		die.Vec2.X += die.Velocity.X
+		die.Vec2.Y += die.Velocity.Y
+	}
+
 }
 
 func HandleHeldDice(dice []*DieRenderable) {

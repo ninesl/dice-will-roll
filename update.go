@@ -18,9 +18,10 @@ func (g *Game) Update() error {
 func (g *Game) UpdateDice() {
 	// Unsure if this is a good idea,probably wasting CPU cycles
 	// maybe a pointer to this during loading just to access it?
-	// I'm not a fan of that abstraction it'd be hard to keep track of
+	// But I'm not a fan of that abstraction it'd be hard to keep track of
 	var rolling []*render.DieRenderable
 	var held []*render.DieRenderable
+	// var moving []*render.DieRenderable
 
 	for i := 0; i < len(g.Dice); i++ {
 		d := g.Dice[i]
@@ -40,11 +41,14 @@ func (g *Game) UpdateDice() {
 
 			d.Vec2.X = g.x - render.XOffset
 			d.Vec2.Y = g.y - render.YOffset
-		} else if d.Mode == HELD {
+		} else if d.Mode == MOVING {
 			held = append(held, die)
 		}
+		rolling = append(rolling, die)
+
 	}
 
+	// render.HandleHeldDice(held)
+	render.HandleMovingDice(held)
 	render.HandleDiceCollisions(rolling)
-	render.HandleHeldDice(held)
 }

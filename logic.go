@@ -90,44 +90,69 @@ func (g *Game) ControlAction(action Action) {
 			die.Roll()
 		}
 	case PRESS:
-		die := g.PickDie()
-		if die != nil {
-			g.Time = time.Now()
-			g.Fixed = die.Vec2
-			die.Fixed = die.Vec2 // set the fixed position to the current position
-			die.Mode = DRAG
-		}
-		if g.cursorWithin(render.ROLLZONE) {
-			// render.Zones
-		}
+		g.Press()
 	case SELECT:
-		var d *Die
-		for _, die := range g.Dice {
-			if die.Mode == DRAG {
-				d = die
-				break
-			}
-		}
+		g.Select()
+	}
+}
 
-		if d == nil {
+func (g *Game) Press() {
+	die := g.PickDie()
+	if die != nil {
+		g.Time = time.Now()
+		// g.Fixed = die.Vec2
+
+		// where the mouse was clicked
+		die.Fixed = render.Vec2{
+			X: g.x,
+			Y: g.y,
+		} // set the fixed position to the current position
+		die.Mode = DRAG
+	}
+	if g.cursorWithin(render.ROLLZONE) {
+		// render.Zones
+	}
+}
+
+func (g *Game) Select() {
+	var d *Die
+	for _, die := range g.Dice {
+		if die.Mode == DRAG {
+			d = die
+			break
+		}
+	}
+
+	if d == nil {
+		return
+	}
+
+	// check if die was ficked
+	since := time.Since(g.Time)
+	if since < time.Second {
+		flickBuffer := d.TileSize * 3
+
+		above := g.y < d.Fixed.Y+d.TileSize/2
+		below := g.y > d.Fixed.Y-flickBuffer*2
+		left := g.x > d.Fixed.X-flickBuffer
+		right := g.x < d.Fixed.X+flickBuffer
+
+		flicked := above && below && left && right
+
+		if flicked {
+			// moving, calc velocity needed
+			d.Mode = MOVING
+			// d.Mode = HELD
 			return
 		}
+	}
 
-		//TODO: make this flick threshold 'feel' good
-		flicked := (time.Since(g.Time) > time.Millisecond*200) && (d.Fixed.Y+d.TileSize > d.Vec2.Y)
+	// let go of die
+	d.Mode = ROLLING
 
-		if g.cursorWithin(render.SCOREZONE) || flicked {
-			d.Mode = HELD
-			return
-		}
-
-		// let go of die
-		d.Mode = ROLLING
-
-		if g.cursorWithin(render.SmallRollZone) {
-			d.HoverFromFromFixed()
-			d.Fixed = render.Vec2{}
-			return
-		}
+	if g.cursorWithin(render.SmallRollZone) {
+		d.HoverFromFromFixed()
+		d.Fixed = render.Vec2{}
+		return
 	}
 }
