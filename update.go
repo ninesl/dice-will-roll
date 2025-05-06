@@ -41,14 +41,13 @@ func (g *Game) UpdateDice() {
 
 			d.Vec2.X = g.x - render.XOffset
 			d.Vec2.Y = g.y - render.YOffset
-		} else if d.Mode == MOVING {
+		} else if d.Mode == HELD {
 			held = append(held, die)
 		}
 		rolling = append(rolling, die)
-
 	}
 
 	// render.HandleHeldDice(held)
-	render.HandleMovingDice(held)
+	render.HandleMovingHeldDice(held)
 	render.HandleDiceCollisions(rolling)
 }

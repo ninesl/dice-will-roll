@@ -140,9 +140,7 @@ func (g *Game) Select() {
 		flicked := above && below && left && right
 
 		if flicked {
-			// moving, calc velocity needed
-			d.Mode = MOVING
-			// d.Mode = HELD
+			d.Mode = HELD
 			return
 		}
 	}

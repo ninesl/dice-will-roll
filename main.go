@@ -20,9 +20,9 @@ const (
 	NONE Action = iota
 
 	ROLLING // the die is moving around, collision checks etc.
-	HELD    // held in hand, waiting to be scored
+	_HELD   // held in hand, waiting to be scored
 	DRAG    // locked to mouse cursor
-	MOVING  // used to flag sprites that are moving to a specific location
+	HELD    // held in hand
 
 	SCORE
 	ROLL   // when the spacebar is pressed

@@ -10,7 +10,7 @@ import (
 )
 
 type DEBUG struct {
-	rolling, held, moving int
+	rolling, held int
 }
 
 func (g *Game) refreshDEBUG() {
@@ -21,8 +21,6 @@ func (g *Game) refreshDEBUG() {
 			g.DEBUG.rolling++
 		} else if die.Mode == HELD {
 			g.DEBUG.held++
-		} else if die.Mode == MOVING {
-			g.DEBUG.moving++
 		}
 	}
 }
@@ -30,7 +28,7 @@ func (g *Game) refreshDEBUG() {
 // interface impl
 func (g *Game) Draw(screen *ebiten.Image) {
 	g.refreshDEBUG()
-	DEBUGDrawFPS(screen, g.x, g.y, g.DEBUG.rolling, g.DEBUG.held, g.DEBUG.moving)
+	DEBUGDrawFPS(screen, g.x, g.y, g.DEBUG.rolling, g.DEBUG.held)
 	opts := &ebiten.DrawImageOptions{}
 
 	DrawROLLZONE(screen, opts)
@@ -94,9 +92,9 @@ func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOption
 }
 
 // TODO: better abstraction than this
-func DEBUGDrawFPS(screen *ebiten.Image, x, y float64, rolling, held, moving int) {
+func DEBUGDrawFPS(screen *ebiten.Image, x, y float64, rolling, held int) {
 	msg := fmt.Sprintf("T%0.2f F%0.2f x%4.0f y%4.0f ", ebiten.ActualTPS(), ebiten.ActualFPS(), x, y)
-	msg += fmt.Sprintf("Rolling %d Held %d Moving %d", rolling, held, moving)
+	msg += fmt.Sprintf("Rolling %d Held %d", rolling, held)
 	op := &text.DrawOptions{}
 	// op.GeoM.Translate(0, 0)
 	op.ColorScale.ScaleWithColor(color.White)
