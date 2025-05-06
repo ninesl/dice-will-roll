@@ -26,6 +26,8 @@ type Game struct {
 	TileSize float64
 	//   can be updated with LocateCursor()
 	x, y float64 // the x/y coordinates of the cursor
+
+	DEBUG DEBUG
 }
 
 // return the pixels in the game

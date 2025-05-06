@@ -9,9 +9,28 @@ import (
 	"github.com/ninesl/dice-will-roll/render"
 )
 
+type DEBUG struct {
+	rolling, held, moving int
+}
+
+func (g *Game) refreshDEBUG() {
+	g.DEBUG = DEBUG{} // zero
+
+	for _, die := range g.Dice {
+		if die.Mode == ROLLING {
+			g.DEBUG.rolling++
+		} else if die.Mode == HELD {
+			g.DEBUG.held++
+		} else if die.Mode == MOVING {
+			g.DEBUG.moving++
+		}
+	}
+}
+
 // interface impl
 func (g *Game) Draw(screen *ebiten.Image) {
-	DEBUGDrawFPS(screen, g.x, g.y)
+	g.refreshDEBUG()
+	DEBUGDrawFPS(screen, g.x, g.y, g.DEBUG.rolling, g.DEBUG.held, g.DEBUG.moving)
 	opts := &ebiten.DrawImageOptions{}
 
 	DrawROLLZONE(screen, opts)
@@ -74,8 +93,10 @@ func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOption
 	)
 }
 
-func DEBUGDrawFPS(screen *ebiten.Image, x float64, y float64) {
-	msg := fmt.Sprintf("T%0.2f F%0.2f x%0.0f y%0.0f", ebiten.ActualTPS(), ebiten.ActualFPS(), x, y)
+// TODO: better abstraction than this
+func DEBUGDrawFPS(screen *ebiten.Image, x, y float64, rolling, held, moving int) {
+	msg := fmt.Sprintf("T%0.2f F%0.2f x%4.0f y%4.0f ", ebiten.ActualTPS(), ebiten.ActualFPS(), x, y)
+	msg += fmt.Sprintf("Rolling%d Held%d Moving%d", rolling, held, moving)
 	op := &text.DrawOptions{}
 	// op.GeoM.Translate(0, 0)
 	op.ColorScale.ScaleWithColor(color.White)

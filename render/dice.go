@@ -3,7 +3,6 @@ package render
 // where to render die
 
 import (
-	"fmt"
 	"math"
 	"math/rand/v2"
 )
@@ -27,6 +26,34 @@ var (
 	BounceFactor  float64 = .95
 )
 
+func HandleMovingDice(dice []*DieRenderable, heldNum int) {
+	num := len(dice)
+	if num == 0 {
+		return
+	}
+
+	var x, y float64
+
+	mod := dice[0].TileSize
+
+	x = GAME_BOUNDS_X/2 - mod/2
+	y = SCOREZONE.MaxHeight/2 - mod/2
+
+	if num > 1 {
+		x -= mod * (float64(num) - 1.0)
+	}
+
+	// go from right to left? i := len(dice)?
+	for i := 0; i < num; i++ {
+		die := dice[i]
+
+		die.Vec2.X = x
+		die.Vec2.Y = y
+
+		x += mod * 2
+	}
+}
+
 func HandleHeldDice(dice []*DieRenderable) {
 	num := len(dice)
 	if num == 0 {
@@ -44,19 +71,12 @@ func HandleHeldDice(dice []*DieRenderable) {
 		x -= mod * (float64(num) - 1.0)
 	}
 
-	/*
-		fmt.Printf("GAME_BOUNDS_X: %v, %v\nx: %f y: %f\nmod: %f\n",
-			GAME_BOUNDS_X, GAME_BOUNDS_X/2, x, y, mod)
-	*/
-
 	// go from right to left? i := len(dice)?
 	for i := 0; i < num; i++ {
 		die := dice[i]
 
 		die.Vec2.X = x
 		die.Vec2.Y = y
-
-		fmt.Printf("%d : %#v\n", i, die.Vec2)
 
 		x += mod * 2
 	}
