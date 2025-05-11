@@ -12,6 +12,8 @@ type DieRenderable struct {
 	Velocity Vec2    // traveling speed xy +-
 	Fixed    Vec2    // specific coordinates
 	TileSize float64 // inside here saves size? unsure
+	// Theta        float64 // turning to the right opts.GeoM.Rotate(theta)
+	// SpinningLeft bool    // left or right when rotating
 
 	ColorSpot    int // base color for spritesheet
 	IndexOnSheet int // corresponds to the Xth tile on the spritesheet

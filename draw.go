@@ -9,22 +9,6 @@ import (
 	"github.com/ninesl/dice-will-roll/render"
 )
 
-type DEBUG struct {
-	rolling, held int
-}
-
-func (g *Game) refreshDEBUG() {
-	g.DEBUG = DEBUG{} // zero
-
-	for _, die := range g.Dice {
-		if die.Mode == ROLLING {
-			g.DEBUG.rolling++
-		} else if die.Mode == HELD {
-			g.DEBUG.held++
-		}
-	}
-}
-
 // interface impl
 func (g *Game) Draw(screen *ebiten.Image) {
 	g.refreshDEBUG()
@@ -42,15 +26,23 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	DrawDice(screen, opts, g.Dice)
 
-	// DEBUGDrawCenterSCOREZONE(screen, opts, float64(g.TileSize))
-
+	// DEBUGDrawCenterSCOREZONE(screen, opts, float64(g.TileSize), g.DEBUG.dieImgTransparent)
 	opts.GeoM.Reset()
 }
 
 func DrawDice(screen *ebiten.Image, opts *ebiten.DrawImageOptions, dice []*Die) {
 	for i := 0; i < len(dice); i++ {
 		die := dice[i]
+		// halfOut := 0 - die.TileSize/2
+
+		// //lock center to middle to rotate
+		// opts.GeoM.Translate(halfOut, halfOut)
+		// opts.GeoM.Rotate(-die.Theta) // messes up check for PRESS
 		opts.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
+		//the whole 'screen' for the sprite.
+
+		// fmt.Println(die.Theta)
+
 		screen.DrawImage(
 			die.Sprite(),
 			opts,
@@ -83,7 +75,25 @@ func DrawROLLZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
 // DEBUG
 //
 
-func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions, tileSize float64) {
+type DEBUG struct {
+	dieImgTransparent *ebiten.Image
+	rolling, held     int
+}
+
+func (g *Game) refreshDEBUG() {
+	g.DEBUG.rolling = 0
+	g.DEBUG.held = 0
+
+	for _, die := range g.Dice {
+		if die.Mode == ROLLING {
+			g.DEBUG.rolling++
+		} else if die.Mode == HELD {
+			g.DEBUG.held++
+		}
+	}
+}
+
+func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions, tileSize float64, dieImgTransparent *ebiten.Image) {
 	opts.GeoM.Translate(render.GAME_BOUNDS_X/2.0-tileSize/2.0, render.SCOREZONE.MaxHeight/2.0-tileSize/2.0)
 	screen.DrawImage(
 		dieImgTransparent,

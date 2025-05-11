@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ninesl/dice-will-roll/render"
@@ -12,6 +13,18 @@ var (
 	GAME_BOUNDS_Y int
 )
 
+type Game struct {
+	// DiceSprite *render.Sprite
+	Dice     []*Die
+	Fixed    render.Vec2
+	Time     time.Time
+	TileSize float64
+	//   can be updated with LocateCursor()
+	x, y float64 // the x/y coordinates of the cursor
+
+	DEBUG DEBUG
+}
+
 // Mode is a representation different game states that modify
 // controls, what is getting displayed, etc.
 type Action uint16
@@ -20,11 +33,10 @@ const (
 	NONE Action = iota
 
 	ROLLING // the die is moving around, collision checks etc.
-	_HELD   // held in hand, waiting to be scored
 	DRAG    // locked to mouse cursor
-	HELD    // held in hand
+	HELD    // held in hand, waiting to be scored. will move to it's Fixed
 
-	SCORE
+	SCORE  // when the score button is pressed
 	ROLL   // when the spacebar is pressed
 	PRESS  // when the mouse is pressed
 	SELECT // when the mouse is released ie. clicked

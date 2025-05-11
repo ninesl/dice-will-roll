@@ -6,7 +6,6 @@ import (
 	"image"
 	"log"
 	"math/rand/v2"
-	"time"
 
 	_ "embed"
 	"image/color"
@@ -17,18 +16,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/ninesl/dice-will-roll/render"
 )
-
-type Game struct {
-	// DiceSprite *render.Sprite
-	Dice     []*Die
-	Fixed    render.Vec2
-	Time     time.Time
-	TileSize float64
-	//   can be updated with LocateCursor()
-	x, y float64 // the x/y coordinates of the cursor
-
-	DEBUG DEBUG
-}
 
 // return the pixels in the game
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
@@ -89,7 +76,7 @@ func LoadGame() *Game {
 		Dice: dice,
 	}
 
-	dieImgTransparent = render.CreateImage(dieImgSize, dieImgSize, color.RGBA{56, 56, 56, 100})
+	g.DEBUG.dieImgTransparent = render.CreateImage(dieImgSize, dieImgSize, color.RGBA{56, 56, 56, 100})
 
 	return g
 }

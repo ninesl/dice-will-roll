@@ -114,8 +114,8 @@ func SetZones() {
 		},
 		sprite: CreateImage(
 			int(GAME_BOUNDS_X),
-			int(ROLLZONE.MinHeight-1),
-			color.RGBA{R: 30, G: 30, B: 80, A: 128},
+			int(SmallRollZone.MinHeight),
+			color.RGBA{R: 100, G: 150, B: 80, A: 140},
 		),
 	}
 }

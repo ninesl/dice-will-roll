@@ -17,7 +17,7 @@ type Die struct {
 
 func (d *Die) Sprite() *ebiten.Image {
 	// g.DiceSprite.Image.SubImage(
-	// 			g.DiceSprite.SpriteSheet.Rect(die.IndexOnSheet),
+	// 			g.DiceSprite.SpriteShe// held in handet.Rect(die.IndexOnSheet),
 	// 		).(*ebiten.Image)
 
 	return d.sprite.Image.SubImage(
@@ -33,13 +33,19 @@ func (d *Die) Sprite() *ebiten.Image {
 //
 // logic based on Mode
 func (d *Die) Roll() {
+
 	switch d.Mode {
 	case ROLLING:
 		dir := render.Direction(rand.IntN(2) + render.UPLEFT) // random direction
 		direction := render.DirectionMap[dir]
 
-		d.Velocity.X = d.TileSize * direction.X
-		d.Velocity.Y = d.TileSize * direction.Y
+		// d.Theta += rand.Float64() * direction.X
 
+		d.Velocity.X = d.TileSize * rand.Float64() * direction.X
+		d.Velocity.Y = d.TileSize * rand.Float64() * direction.Y
 	}
+}
+
+func (d *Die) RollDirection(rollingLeft bool) {
+
 }
