@@ -10,6 +10,10 @@ type Vec2 struct {
 	X, Y float64
 }
 
+func (v Vec2) KageVec2() []float32 {
+	return []float32{float32(v.X), float32(v.Y)}
+}
+
 // should be renderable
 type Sprite struct {
 	Image       *ebiten.Image

@@ -15,6 +15,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/ninesl/dice-will-roll/render"
+	"github.com/ninesl/dice-will-roll/render/shaders"
 )
 
 // return the pixels in the game
@@ -55,17 +56,23 @@ func SetBounds(tileSize int) {
 	render.GAME_BOUNDS_Y = float64(GAME_BOUNDS_Y)
 }
 
+// func setDice(tileSize int) {
+
+// }
+
 func LoadGame() *Game {
 	SetFonts()
-	diceImg := ebiten.NewImageFromImage(DiceImage)
-	dieImgSize := diceImg.Bounds().Dx() / 6
+	const tileSize = 100
+	diceImg := ebiten.NewImage(tileSize, tileSize)
 
+	dieImgSize := tileSize
 	SetBounds(dieImgSize)
+
 	render.SetZones()
 
 	diceSheet := &render.Sprite{
-		Image:       diceImg,
-		SpriteSheet: render.NewSpriteSheet(6, 7, dieImgSize),
+		Image: diceImg,
+		// SpriteSheet: render.NewSpriteSheet(6, 7, dieImgSize),
 	}
 
 	dice := SetupPlayerDice(diceSheet, dieImgSize)
@@ -73,10 +80,13 @@ func LoadGame() *Game {
 	g := &Game{
 		TileSize: float64(dieImgSize),
 		// DiceSprite: diceSheet,
-		Dice: dice,
+		Dice:    dice,
+		Shaders: shaders.LoadShaders(),
 	}
 
 	g.DEBUG.dieImgTransparent = render.CreateImage(dieImgSize, dieImgSize, color.RGBA{56, 56, 56, 100})
+
+	// g.DieShader = s
 
 	return g
 }
@@ -85,41 +95,52 @@ func (g *Game) String() string {
 	return fmt.Sprintf("GAMEBOUNDS X %d\nGAMEBOUNDS Y %ds\nROLLZONE %#v\n", GAME_BOUNDS_X, GAME_BOUNDS_Y, render.ROLLZONE)
 }
 
+func SetupNewDie(dieImgSize int) *Die {
+	directionX := float64(rand.IntN(2))
+	directionY := float64(rand.IntN(2))
+	if directionX == 2 {
+		directionX = -1.0
+	}
+	if directionY == 2 {
+		directionY = -1.0
+	}
+
+	tileSize := float64(dieImgSize)
+
+	pos := render.Vec2{
+		X: render.ROLLZONE.MinWidth + tileSize*float64(rand.IntN(6))*2.0,
+		Y: render.ROLLZONE.MaxHeight/2 - tileSize*0.5,
+	}
+	dieRenderable := render.DieRenderable{
+		Fixed: pos,
+		Vec2:  pos,
+		Velocity: render.Vec2{
+			X: (rand.Float64()*40 + 20),
+			Y: (rand.Float64()*40 + 20),
+		},
+		TileSize: float64(dieImgSize),
+		// ColorSpot: 1 * 6,
+	}
+	image := ebiten.NewImage(dieImgSize, dieImgSize)
+
+	// // draws shader to image, the uniforms
+	// var vertices []ebiten.Vertex
+	// var indicies []uint16
+	// var opts *ebiten.DrawTrianglesShaderOptions
+	// image.DrawTrianglesShader(vertices, indicies, shader, opts)
+
+	return &Die{
+		image:         image,
+		DieRenderable: dieRenderable,
+		Mode:          ROLLING,
+	}
+}
+
 func SetupPlayerDice(diceSheet *render.Sprite, dieImgSize int) []*Die {
 	var dice []*Die
-	for i := range 7 {
-		directionX := float64(rand.IntN(2))
-		directionY := float64(rand.IntN(2))
-		if directionX == 2 {
-			directionX = -1.0
-		}
-		if directionY == 2 {
-			directionY = -1.0
-		}
 
-		tileSize := float64(dieImgSize)
-
-		pos := render.Vec2{
-			X: render.ROLLZONE.MinWidth + tileSize*float64(i)*2.0,
-			Y: render.ROLLZONE.MaxHeight/2 - tileSize*0.5,
-		}
-		dieRenderable := render.DieRenderable{
-			Fixed: pos,
-			Vec2:  pos,
-			Velocity: render.Vec2{
-				X: (rand.Float64()*40 + 20) * float64(i) * -1.0,
-				Y: (rand.Float64()*40 + 20) * float64(i) * -1.0,
-			},
-			TileSize:  float64(dieImgSize),
-			ColorSpot: i * 6,
-		}
-
-		die := Die{
-			sprite:        diceSheet,
-			DieRenderable: dieRenderable,
-			Mode:          ROLLING,
-		}
-		dice = append(dice, &die)
+	for range 7 {
+		dice = append(dice, SetupNewDie(dieImgSize))
 	}
 
 	return dice

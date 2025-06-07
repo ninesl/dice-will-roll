@@ -3,12 +3,38 @@ package main
 import (
 	"fmt"
 	"image/color"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/ninesl/dice-will-roll/render"
+	"github.com/ninesl/dice-will-roll/render/shaders"
 )
 
+/*
+var startTime = time.Now()
+
+func (g *Game) Draw(screen *ebiten.Image) {
+	s, ok := g.shaders[g.idx]
+	if !ok {
+		return
+	}
+
+	w, h := screen.Bounds().Dx(), screen.Bounds().Dy()
+	cx, cy := ebiten.CursorPosition()
+
+	op := &ebiten.DrawRectShaderOptions{}
+
+	// seconds :=
+	op.Uniforms = map[string]any{
+		"Time":   float32(time.Since(startTime).Milliseconds()) / float32(ebiten.TPS()),
+		"Cursor": []float32{float32(cx), float32(cy)},
+	}
+	screen.DrawRectShader(w, h, s, op)
+
+	g.debugui.Draw(screen)
+}
+*/
 // interface impl
 func (g *Game) Draw(screen *ebiten.Image) {
 	g.refreshDEBUG()
@@ -24,30 +50,53 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		}
 	}
 
-	DrawDice(screen, opts, g.Dice)
+	g.DrawDice(screen)
 
 	// DEBUGDrawCenterSCOREZONE(screen, opts, float64(g.TileSize), g.DEBUG.dieImgTransparent)
 	opts.GeoM.Reset()
 }
 
-func DrawDice(screen *ebiten.Image, opts *ebiten.DrawImageOptions, dice []*Die) {
-	for i := 0; i < len(dice); i++ {
-		die := dice[i]
+var startTime = time.Now()
+
+func (g *Game) DrawDice(screen *ebiten.Image) {
+	s := int(g.Dice[0].image.Bounds().Dx())
+
+	shader := g.Shaders[shaders.DieShaderKey]
+
+	curTime := float32(time.Since(startTime).Milliseconds()) / float32(ebiten.TPS())
+	u := map[string]any{
+		"Time": curTime,
+		// "Cursor": []float32{float32(cx), float32(cy)},
+	}
+
+	// TODO: die specific shader uniforms, gems, power ups, etc. this is the fun part
+	opts := &ebiten.DrawRectShaderOptions{
+		Uniforms: u,
+	}
+
+	for i := 0; i < len(g.Dice); i++ {
+		die := g.Dice[i]
+
+		die.image.DrawRectShader(s, s, shader, opts)
+
+		ops := &ebiten.DrawImageOptions{}
+		ops.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
+		screen.DrawImage(die.image, ops)
+
 		// halfOut := 0 - die.TileSize/2
 
-		// //lock center to middle to rotate
+		//lock center to middle to rotate
 		// opts.GeoM.Translate(halfOut, halfOut)
 		// opts.GeoM.Rotate(-die.Theta) // messes up check for PRESS
-		opts.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
+
+		// opts.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
 		//the whole 'screen' for the sprite.
 
-		// fmt.Println(die.Theta)
-
-		screen.DrawImage(
-			die.Sprite(),
-			opts,
-		)
-		opts.GeoM.Reset()
+		// opts.Uniforms["Side"] = die.ActiveFace().NumPips()
+		// opts.Images[0] = die.Sprite()
+		// opts.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
+		// die.Sprite().DrawRectShader(s, s, g.DieShader, opts)
+		// opts.GeoM.Reset()
 	}
 }
 

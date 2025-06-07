@@ -1,0 +1,224 @@
+//go:build ignore
+
+//kage:unit pixels
+
+package main
+
+var Time float
+
+// distance to scene
+func sdSphere(pos vec3, size float) float {
+	return length(pos) - size
+}
+
+func sdBox(p, b vec3) float {
+	q := vec3(abs(p) - b)
+	return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0)
+}
+
+func smin(a,b,k float) float {
+	h := max(k-abs(a-b),0)/k
+	return min(a,b)-h*h*h*k*(1.0/6.0)
+}
+
+func rotate2D(angle float) mat2 {
+	s := sin(angle)
+	c := cos(angle)
+
+    return mat2(c, -s, s, c)
+}
+
+// rodrigues' rotation formula
+func rotate3D(p, axis vec3, angle float) vec3 {
+    // axis must be a normalized vector
+    c := cos(angle)
+    s := sin(angle)
+    k := 1.0 - c
+    return p*c + cross(axis,p)*s + axis*dot(axis,p)*k
+    // An alternative common formulation:
+    // return mix(dot(axis, p) * axis, p, cos(angle)) + cross(axis, p) * sin(angle)
+}
+
+func opSubtraction(d1, d2 float) float {
+    return max(-d1,d2);
+}
+
+
+// float opCheapBend( in sdf3d primitive, in vec3 p )
+// {
+//     const float k = 10.0; // or some other amount
+//     float c = cos(k*p.x);
+//     float s = sin(k*p.x);
+//     mat2  m = mat2(c,-s,s,c);
+//     vec3  q = vec3(m*p.xy,p.z);
+//     return primitive(q);
+// }
+
+
+func sdOctahedron( p vec3, s float ) float {
+  p = abs(p);
+  return (p.x+p.y+p.z-s)*0.57735027;
+}
+
+func opOnion(sdf, thickness float) float {
+    return abs(sdf)-thickness;
+}
+
+func sdPip(p vec3, scale, d float) float {
+	return opSubtraction(opOnion(sdSphere(p, scale), .02), d)
+	// return opSubtraction(opOnion(sdOctahedron(p, scale), .04), d)
+}
+
+func shape(p vec3) float {
+	var dieScale float = 1.0
+	q := p
+	
+// --- Rotation Setup ---
+    var totalRotation float = -10.0 * 3.1415926535
+    var scaledTime float = Time * .075
+    var baseAngle float = totalRotation * (1.0 - (scaledTime + 1.0) * exp(-scaledTime))
+
+    // throwDir is assumed to be normalized, as per your existing code:
+    // throwDir := normalize(vec3(1.0, -0.2, -0.4)) 
+    // This would ideally be a uniform vec3 passed from your Go code.
+    
+	// spin along Y axis
+	// throwDir := vec3(0.0, 1.0, 0.0)
+	
+	// spin along X axis
+	// throwDir := vec3(1.0, 0.0, 0.0)
+	
+
+	// spin along Z axis
+	// throwDir := vec3(0.0, 0.0, 1.0)
+
+	// upright
+	// throwDir := vec3(-1.0,-1.0,0.0)
+	// upleft
+	// throwDir := vec3(-1.0,1.0,0.0)
+	// downright
+	throwDir := vec3(1.0,-1.0,0.0)
+	// downleft
+	// throwDir := vec3(1.0,1.0,0.0)
+
+	// throwDir := vec3(1.0,0.5,0.65)
+
+	// rollAxis := normalize(throwDir) 
+    q = rotate3D(q, normalize(throwDir), baseAngle)
+
+	thirdScale := dieScale/3
+	third175 := thirdScale * 1.75
+	third2 := thirdScale * 2
+	quarterScale := dieScale/4.5
+	box := sdBox(q, vec3(dieScale))
+
+	// 1
+	pipSpot := vec3(q.x, q.y, q.z + dieScale)
+	// pip := sdSphere(pipSpot, quarterScale)
+	// d := opSubtraction(opOnion(pip, .02), box)
+	d := sdPip(pipSpot, quarterScale, box)
+
+	var spots = [6]vec3{}
+	// 2
+	spots[0] = vec3(q.x - dieScale,  q.y - third175, q.z-third2)
+	spots[1] = vec3(q.x - dieScale,  q.y + third175, q.z+third2)
+
+	// for i := 0; i < 2; i++ {
+	d = sdPip(spots[0], quarterScale, d)
+	d = sdPip(spots[1], quarterScale, d)
+	// }
+
+	// 3
+	spots[0] = vec3(q.x + third175, q.y + dieScale, q.z+third2)
+	spots[1] = vec3(q.x, q.y + dieScale, q.z)
+	spots[2] = vec3(q.x - third175, q.y + dieScale, q.z-third2)
+
+	d = sdPip(spots[0], quarterScale, d)
+	d = sdPip(spots[1], quarterScale, d)
+	d = sdPip(spots[2], quarterScale, d)
+
+	// 4
+	spots[0] = vec3(q.x + third175, q.y - dieScale, q.z-third2)
+	spots[1] = vec3(q.x + third175, q.y - dieScale, q.z+third2)
+	spots[2] = vec3(q.x - third175, q.y - dieScale, q.z+third2)
+	spots[3] = vec3(q.x - third175, q.y - dieScale, q.z-third2)
+
+	d = sdPip(spots[0], quarterScale, d)
+	d = sdPip(spots[1], quarterScale, d)
+	d = sdPip(spots[2], quarterScale, d)
+	d = sdPip(spots[3], quarterScale, d)
+
+	// 5
+	spots[0] = vec3(q.x + dieScale, q.y - third175, q.z - third2)
+	spots[1] = vec3(q.x + dieScale, q.y + third175, q.z - third2)
+	spots[2] = vec3(q.x + dieScale, q.y, q.z)	
+	spots[3] = vec3(q.x + dieScale, q.y - third175, q.z + third2)
+	spots[4] = vec3(q.x + dieScale, q.y + third175, q.z + third2)
+	d = sdPip(spots[0], quarterScale, d)
+	d = sdPip(spots[1], quarterScale, d)
+	d = sdPip(spots[2], quarterScale, d)
+	d = sdPip(spots[3], quarterScale, d)
+	d = sdPip(spots[4], quarterScale, d)
+
+	// 6
+	spots[0] = vec3(q.x - third2, q.y - third175, q.z-dieScale)
+	spots[1] = vec3(q.x - third2, q.y, 			  q.z-dieScale)
+	spots[2] = vec3(q.x - third2, q.y + third175, q.z-dieScale)
+	spots[3] = vec3(q.x + third2, q.y - third175, q.z-dieScale)
+	spots[4] = vec3(q.x + third2, q.y, 			  q.z-dieScale)
+	spots[5] = vec3(q.x + third2, q.y + third175, q.z-dieScale)
+
+	d = sdPip(spots[0], quarterScale, d)
+	d = sdPip(spots[1], quarterScale, d)
+	d = sdPip(spots[2], quarterScale, d)
+	d = sdPip(spots[3], quarterScale, d)
+	d = sdPip(spots[4], quarterScale, d)
+	d = sdPip(spots[5], quarterScale, d)
+
+	// ground := 1 - (p.y + .25)
+
+	return d
+	spots[5] = vec3(q.x + third2, q.y + third175, q.z-dieScale)
+	// return opSubtraction(pip, box)
+
+	// d -= cos(ti)
+
+	// return d
+	// return smin(ground, smin(sphere,box,2), .2)
+}
+
+func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
+	uv := (srcPos * 2 - imageDstSize().xy) / imageDstSize().y
+
+	//ray init
+	ro := vec3(0,0,-2.5) // ray origin (0,0, -3 back)
+	rd := normalize(vec3(uv*1.5,1)) // ray direction (center, then forward (z + 1))
+	t := 0.0 // travelled
+
+	var col = vec3(1)
+
+	//march
+
+	for i := 0; i < 60; i++ {
+		//position along ray
+		pos := vec3(ro + rd * t)
+
+		//cur distance to scene
+		d := shape(pos)
+
+
+		//march ray
+		t += d
+
+		// col = vec3(float(i)) / 80
+
+		if d < .001 || t > 100{
+			break
+		}  
+	}
+
+	// col = vec3(1, t * .1, 1) // color based on distance travelled
+	col = vec3(t*.125, t*.5, t*.25)
+
+	return vec4(col, 1)
+}

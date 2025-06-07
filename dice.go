@@ -11,18 +11,9 @@ import (
 type Die struct {
 	*dice.Die
 	render.DieRenderable
-	sprite *render.Sprite
-	Mode   Action // Current mode of the die, is modified thru player Controls()
-}
-
-func (d *Die) Sprite() *ebiten.Image {
-	// g.DiceSprite.Image.SubImage(
-	// 			g.DiceSprite.SpriteShe// held in handet.Rect(die.IndexOnSheet),
-	// 		).(*ebiten.Image)
-
-	return d.sprite.Image.SubImage(
-		d.sprite.SpriteSheet.Rect(d.IndexOnSheet),
-	).(*ebiten.Image)
+	image *ebiten.Image
+	// sprite *render.Sprite
+	Mode Action // Current mode of the die, is modified thru player Controls()
 }
 
 // When spacebar/roll is pressed

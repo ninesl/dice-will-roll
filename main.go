@@ -6,6 +6,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ninesl/dice-will-roll/render"
+	"github.com/ninesl/dice-will-roll/render/shaders"
 )
 
 var (
@@ -22,7 +23,8 @@ type Game struct {
 	//   can be updated with LocateCursor()
 	x, y float64 // the x/y coordinates of the cursor
 
-	DEBUG DEBUG
+	Shaders map[shaders.ShaderKey]*ebiten.Shader
+	DEBUG   DEBUG
 }
 
 // Mode is a representation different game states that modify

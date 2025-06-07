@@ -7,6 +7,9 @@ import (
 	"math/rand/v2"
 )
 
+// TODO: determine if a 'uniforms' map is better than hardcoded consts
+//
+// DieRenderable is a container class for
 type DieRenderable struct {
 	Vec2     Vec2    // current position
 	Velocity Vec2    // traveling speed xy +-
@@ -15,8 +18,8 @@ type DieRenderable struct {
 	// Theta        float64 // turning to the right opts.GeoM.Rotate(theta)
 	// SpinningLeft bool    // left or right when rotating
 
-	ColorSpot    int // base color for spritesheet
-	IndexOnSheet int // corresponds to the Xth tile on the spritesheet
+	// ColorSpot    int // base color for spritesheet
+	// IndexOnSheet int // corresponds to the Xth tile on the spritesheet
 	// Direction Direction
 	Colliding bool // flag for collisions
 }
@@ -189,22 +192,22 @@ func BounceAndClamp(die *DieRenderable) {
 	if die.Vec2.X+die.TileSize >= ROLLZONE.MaxWidth {
 		die.Vec2.X = ROLLZONE.MaxWidth - die.TileSize - 1
 		die.Velocity.X = math.Abs(die.Velocity.X) * -1
-		die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
+		// die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
 	}
 	if die.Vec2.X < ROLLZONE.MinWidth {
 		die.Vec2.X = ROLLZONE.MinWidth + 1
 		die.Velocity.X = math.Abs(die.Velocity.X)
-		die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
+		// die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
 	}
 	if die.Vec2.Y+die.TileSize >= ROLLZONE.MaxHeight {
 		die.Vec2.Y = ROLLZONE.MaxHeight - die.TileSize - 1
 		die.Velocity.Y = math.Abs(die.Velocity.Y) * -1
-		die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
+		// die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
 	}
 	if die.Vec2.Y < ROLLZONE.MinHeight {
 		die.Vec2.Y = ROLLZONE.MinHeight + 1
 		die.Velocity.Y = math.Abs(die.Velocity.Y)
-		die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
+		// die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
 	}
 }
 
