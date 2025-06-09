@@ -6,6 +6,7 @@ import (
 	"image"
 	"log"
 	"math/rand/v2"
+	"time"
 
 	_ "embed"
 	"image/color"
@@ -80,8 +81,9 @@ func LoadGame() *Game {
 	g := &Game{
 		TileSize: float64(dieImgSize),
 		// DiceSprite: diceSheet,
-		Dice:    dice,
-		Shaders: shaders.LoadShaders(),
+		Dice:      dice,
+		Shaders:   shaders.LoadShaders(),
+		startTime: time.Now(),
 	}
 
 	g.DEBUG.dieImgTransparent = render.CreateImage(dieImgSize, dieImgSize, color.RGBA{56, 56, 56, 100})
@@ -119,6 +121,11 @@ func SetupNewDie(dieImgSize int) *Die {
 			Y: (rand.Float64()*40 + 20),
 		},
 		TileSize: float64(dieImgSize),
+		Color: render.Vec3{
+			R: rand.Float32(),
+			G: rand.Float32(),
+			B: rand.Float32(),
+		},
 		// ColorSpot: 1 * 6,
 	}
 	image := ebiten.NewImage(dieImgSize, dieImgSize)
@@ -136,10 +143,12 @@ func SetupNewDie(dieImgSize int) *Die {
 	}
 }
 
+const NUM_PLAYER_DICE = 7
+
 func SetupPlayerDice(diceSheet *render.Sprite, dieImgSize int) []*Die {
 	var dice []*Die
 
-	for range 7 {
+	for range NUM_PLAYER_DICE {
 		dice = append(dice, SetupNewDie(dieImgSize))
 	}
 

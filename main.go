@@ -16,15 +16,15 @@ var (
 
 type Game struct {
 	// DiceSprite *render.Sprite
-	Dice     []*Die
-	Fixed    render.Vec2
-	Time     time.Time
-	TileSize float64
+	Shaders   map[shaders.ShaderKey]*ebiten.Shader
+	Dice      []*Die
+	Fixed     render.Vec2
+	Time      time.Time
+	startTime time.Time
+	TileSize  float64
 	//   can be updated with LocateCursor()
-	x, y float64 // the x/y coordinates of the cursor
-
-	Shaders map[shaders.ShaderKey]*ebiten.Shader
-	DEBUG   DEBUG
+	x, y  float64 // the x/y coordinates of the cursor
+	DEBUG DEBUG
 }
 
 // Mode is a representation different game states that modify
@@ -43,6 +43,27 @@ const (
 	PRESS  // when the mouse is pressed
 	SELECT // when the mouse is released ie. clicked
 )
+
+func (a Action) String() string {
+	str := "NONE"
+	switch a {
+	case ROLLING:
+		str = "ROLLING"
+	case DRAG:
+		str = "DRAG"
+	case HELD:
+		str = "HELD"
+	case SCORE:
+		str = "SCORE"
+	case ROLL:
+		str = "ROLL"
+	case PRESS:
+		str = "PRESS"
+	case SELECT:
+		str = "SELECT"
+	}
+	return str
+}
 
 func (g *Game) UpdateCusor() {
 	x, y := ebiten.CursorPosition()

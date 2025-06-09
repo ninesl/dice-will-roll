@@ -11,16 +11,17 @@ import (
 //
 // DieRenderable is a container class for
 type DieRenderable struct {
-	Vec2     Vec2    // current position
-	Velocity Vec2    // traveling speed xy +-
-	Fixed    Vec2    // specific coordinates
-	TileSize float64 // inside here saves size? unsure
+	Vec2      Vec2    // current position
+	Velocity  Vec2    // traveling speed xy +-
+	Fixed     Vec2    // specific coordinates
+	Direction Vec2    // vec2 representation of direction the die is traveling. used in uniforms
+	Color     Vec3    // direct Kage values for the color of the die
+	TileSize  float64 // inside here saves size? unsure
 	// Theta        float64 // turning to the right opts.GeoM.Rotate(theta)
 	// SpinningLeft bool    // left or right when rotating
 
 	// ColorSpot    int // base color for spritesheet
 	// IndexOnSheet int // corresponds to the Xth tile on the spritesheet
-	// Direction Direction
 	Colliding bool // flag for collisions
 }
 
@@ -31,6 +32,28 @@ var (
 	BounceFactor  float64 = .95
 	MoveFactor    float64 = .2
 )
+
+func (d *DieRenderable) SetDirection() {
+	dir := Vec2{}
+	if math.Abs(d.Velocity.X) < .00015 {
+		dir.X = 0
+	} else if d.Velocity.X > 0 {
+		dir.X = 1.0
+	} else {
+		dir.X = -1.0
+	}
+
+	if math.Abs(d.Velocity.Y) < .00015 {
+		dir.Y = 0
+	} else if d.Velocity.Y > 0 {
+		dir.Y = 1.0
+	} else {
+		dir.Y = -1.0
+	}
+
+	d.Direction = dir
+
+}
 
 // Moves dice to fixed pos based on num of moving dice from being selected
 func HandleMovingHeldDice(dice []*DieRenderable) {
@@ -144,6 +167,10 @@ func HandleDiceCollisions(dice []*DieRenderable) {
 
 	for _, die := range dice {
 		BounceAndClamp(die)
+	}
+
+	for _, die := range dice {
+		die.SetDirection()
 	}
 }
 

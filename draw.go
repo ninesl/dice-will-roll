@@ -11,32 +11,8 @@ import (
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
 
-/*
-var startTime = time.Now()
-
 func (g *Game) Draw(screen *ebiten.Image) {
-	s, ok := g.shaders[g.idx]
-	if !ok {
-		return
-	}
-
-	w, h := screen.Bounds().Dx(), screen.Bounds().Dy()
-	cx, cy := ebiten.CursorPosition()
-
-	op := &ebiten.DrawRectShaderOptions{}
-
-	// seconds :=
-	op.Uniforms = map[string]any{
-		"Time":   float32(time.Since(startTime).Milliseconds()) / float32(ebiten.TPS()),
-		"Cursor": []float32{float32(cx), float32(cy)},
-	}
-	screen.DrawRectShader(w, h, s, op)
-
-	g.debugui.Draw(screen)
-}
-*/
-// interface impl
-func (g *Game) Draw(screen *ebiten.Image) {
+	screen.Clear()
 	g.refreshDEBUG()
 	DEBUGDrawFPS(screen, g.x, g.y, g.DEBUG.rolling, g.DEBUG.held)
 	opts := &ebiten.DrawImageOptions{}
@@ -56,18 +32,23 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	opts.GeoM.Reset()
 }
 
-var startTime = time.Now()
-
 func (g *Game) DrawDice(screen *ebiten.Image) {
 	s := int(g.Dice[0].image.Bounds().Dx())
 
 	shader := g.Shaders[shaders.DieShaderKey]
 
-	curTime := float32(time.Since(startTime).Milliseconds()) / float32(ebiten.TPS())
+	time := float32(time.Since(g.startTime).Milliseconds()) / float32(ebiten.TPS())
 	u := map[string]any{
-		"Time": curTime,
+		// "Time": g.tick,
+		"TargetFace": 0.0,
+		"Time":       time,
+		"DieScale":   1.15,
+		"Height":     -4.0,
 		// "Cursor": []float32{float32(cx), float32(cy)},
 	}
+
+	// fmt.Println(u["Time"])
+	// fmt.Println(curTime)
 
 	// TODO: die specific shader uniforms, gems, power ups, etc. this is the fun part
 	opts := &ebiten.DrawRectShaderOptions{
@@ -76,7 +57,15 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 
 	for i := 0; i < len(g.Dice); i++ {
 		die := g.Dice[i]
+		// fmt.Printf("%d ] %s\n", i, die.Mode)
 
+		die.image.Clear()
+
+		opts.Uniforms["Direction"] = die.Direction.KageVec2()
+		opts.Uniforms["Velocity"] = die.Velocity.KageVec2()
+		opts.Uniforms["DieColor"] = die.Color.KageVec3()
+
+		// fmt.Println(opts.Uniforms["Velocity"])
 		die.image.DrawRectShader(s, s, shader, opts)
 
 		ops := &ebiten.DrawImageOptions{}

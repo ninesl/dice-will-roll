@@ -10,6 +10,15 @@ type Vec2 struct {
 	X, Y float64
 }
 
+// used for determining color values
+type Vec3 struct {
+	R, G, B float32
+}
+
+func (v Vec3) KageVec3() []float32 {
+	return []float32{v.R, v.G, v.B}
+}
+
 func (v Vec2) KageVec2() []float32 {
 	return []float32{float32(v.X), float32(v.Y)}
 }

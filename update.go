@@ -6,6 +6,7 @@ import (
 
 // interface impl
 func (g *Game) Update() error {
+	// g.tick++
 	action := g.Controls()
 
 	g.ControlAction(action)
@@ -41,8 +42,11 @@ func (g *Game) UpdateDice() {
 
 			d.Vec2.X = g.x - render.XOffset
 			d.Vec2.Y = g.y - render.YOffset
+
 		} else if d.Mode == HELD {
 			held = append(held, die)
+			// continue
+			//TODO:FIXME: die gets stuck within SmallRollZone. with continue it can't be held
 		}
 		rolling = append(rolling, die)
 	}

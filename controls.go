@@ -17,6 +17,7 @@ func (g *Game) Controls() Action {
 	var action Action = ROLLING // the animation of rolling
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 		action = ROLL
+		g.startTime = time.Now()
 	} else if inpututil.IsMouseButtonJustPressed(ebiten.MouseButton0) {
 		if g.cursorWithin(render.ROLLZONE) {
 			action = PRESS

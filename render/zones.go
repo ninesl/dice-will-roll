@@ -85,7 +85,7 @@ func SetZones() {
 		sprite: CreateImage(
 			int((GAME_BOUNDS_X)),
 			int((GAME_BOUNDS_Y /* - minHeight*/)),
-			color.RGBA{R: 123, G: 123, B: 123, A: 150},
+			color.RGBA{R: 123, G: 123, B: 123, A: 128},
 		),
 	}
 
@@ -104,6 +104,7 @@ func SetZones() {
 	}
 
 	ROLLZONE = BigRollZone
+	// ROLLZONE = SmallRollZone
 
 	SCOREZONE = ZoneRenderable{
 		Zone: Zone{
