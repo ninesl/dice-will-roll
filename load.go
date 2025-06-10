@@ -97,7 +97,7 @@ func (g *Game) String() string {
 	return fmt.Sprintf("GAMEBOUNDS X %d\nGAMEBOUNDS Y %ds\nROLLZONE %#v\n", GAME_BOUNDS_X, GAME_BOUNDS_Y, render.ROLLZONE)
 }
 
-func SetupNewDie(dieImgSize int) *Die {
+func SetupNewDie(dieImgSize int, color render.Vec3) *Die {
 	directionX := float64(rand.IntN(2))
 	directionY := float64(rand.IntN(2))
 	if directionX == 2 {
@@ -121,11 +121,7 @@ func SetupNewDie(dieImgSize int) *Die {
 			Y: (rand.Float64()*40 + 20),
 		},
 		TileSize: float64(dieImgSize),
-		Color: render.Vec3{
-			R: rand.Float32(),
-			G: rand.Float32(),
-			B: rand.Float32(),
-		},
+		Color:    color,
 		// ColorSpot: 1 * 6,
 	}
 	image := ebiten.NewImage(dieImgSize, dieImgSize)
@@ -148,8 +144,18 @@ const NUM_PLAYER_DICE = 7
 func SetupPlayerDice(diceSheet *render.Sprite, dieImgSize int) []*Die {
 	var dice []*Die
 
-	for range NUM_PLAYER_DICE {
-		dice = append(dice, SetupNewDie(dieImgSize))
+	var colors = []render.Vec3{
+		render.Vec3{R: rand.Float32(), G: 1.0, B: 0.5},
+		render.Vec3{R: 1.0, G: rand.Float32(), B: 1.0},
+		render.Vec3{R: 1.0, G: 0.5, B: rand.Float32()},
+		render.Vec3{R: rand.Float32(), G: rand.Float32(), B: 1.0},
+		render.Vec3{R: rand.Float32(), G: rand.Float32(), B: rand.Float32()},
+		render.Vec3{R: 0.5, G: rand.Float32(), B: rand.Float32()},
+		render.Vec3{R: 1.0, G: 1.0, B: 1.0},
+	}
+
+	for i := range NUM_PLAYER_DICE {
+		dice = append(dice, SetupNewDie(dieImgSize, colors[i]))
 	}
 
 	return dice

@@ -4,14 +4,14 @@
 
 package main
 
+var ZRandom float
 var Time float
 var DieScale float
 var Direction vec2
 var Velocity vec2
 var DieColor vec3
 var Height float
-const pi float = 3.1415
-
+const pi = 3.141529
 
 // SDF functions
 func sdSphere(pos vec3, size float) float {
@@ -66,12 +66,19 @@ func calcDirection() vec3 {
         return vec3(0.0, 0.0, 1.0) // Fallback
     }
     
+    rollAxis.z = normalize(rollAxis.x+rollAxis.y)
+
     return normalize(rollAxis)
 }
 
 func calcRotation() float {
     velMag := length(Velocity)
     return -velMag * .01 * pi// Direct velocity-based rotation
+}
+
+// used to make the pip circle
+func circlePip(scale, d float, p vec3) float {
+    return opSubtraction(sdSphere(p, scale), d)
 }
 
 func shape(p vec3) float {
@@ -93,29 +100,87 @@ func shape(p vec3) float {
     box := sdBox(q, vec3(DieScale))
     d := box
     
-    // Add pips - NO ONION
-    d = opSubtraction(sdSphere(vec3(q.x, q.y, q.z + DieScale), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x - DieScale, q.y - third175, q.z - third2), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x - DieScale, q.y + third175, q.z + third2), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x + third175, q.y + DieScale, q.z + third2), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x, q.y + DieScale, q.z), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x - third175, q.y + DieScale, q.z - third2), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x + third175, q.y - DieScale, q.z - third2), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x + third175, q.y - DieScale, q.z + third2), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x - third175, q.y - DieScale, q.z + third2), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x - third175, q.y - DieScale, q.z - third2), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x + DieScale, q.y - third175, q.z - third2), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x + DieScale, q.y + third175, q.z - third2), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x + DieScale, q.y, q.z), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x + DieScale, q.y - third175, q.z + third2), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x + DieScale, q.y + third175, q.z + third2), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x - third2, q.y - third175, q.z - DieScale), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x - third2, q.y, q.z - DieScale), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x - third2, q.y + third175, q.z - DieScale), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x + third2, q.y - third175, q.z - DieScale), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x + third2, q.y, q.z - DieScale), quarterScale), d)
-    d = opSubtraction(sdSphere(vec3(q.x + third2, q.y + third175, q.z - DieScale), quarterScale), d)
+    //TODO:FIXME: see mindtick
+	// var pips = [6][6]vec3{
+    var pips = [21]vec3 {
+		// {
+            vec3(q.x, q.y, q.z + DieScale),
+		// },
+        // {
+            vec3(q.x - DieScale, q.y - third175, q.z - third2),
+            vec3(q.x - DieScale, q.y + third175, q.z + third2),
+        // },
+        // {
+            vec3(q.x + third175, q.y + DieScale, q.z + third2),
+            vec3(q.x, q.y + DieScale, q.z),
+            vec3(q.x - third175, q.y + DieScale, q.z - third2),
+        // },
+        // {
+            vec3(q.x + third175, q.y - DieScale, q.z - third2),
+            vec3(q.x + third175, q.y - DieScale, q.z + third2),
+            vec3(q.x - third175, q.y - DieScale, q.z + third2),
+            vec3(q.x - third175, q.y - DieScale, q.z - third2),
+        // },
+        // {
+            vec3(q.x + DieScale, q.y - third175, q.z - third2),
+            vec3(q.x + DieScale, q.y + third175, q.z - third2),
+            vec3(q.x + DieScale, q.y, q.z),
+            vec3(q.x + DieScale, q.y - third175, q.z + third2),
+            vec3(q.x + DieScale, q.y + third175, q.z + third2),
+        // },
+        // {
+            vec3(q.x - third2, q.y - third175, q.z - DieScale),
+            vec3(q.x - third2, q.y, q.z - DieScale),
+            vec3(q.x - third2, q.y + third175, q.z - DieScale),
+            vec3(q.x + third2, q.y - third175, q.z - DieScale),
+            vec3(q.x + third2, q.y, q.z - DieScale),
+            vec3(q.x + third2, q.y + third175, q.z - DieScale),
+        // },
+	}
+
+    for i := 0; i < len(pips); i++ {
+        pip := pips[i]
+        // face := pips[i]
+        // for j := 0; j < len(face); j++ {
+            // pip := face[j]
+            d = circlePip(quarterScale, d, pip)
+        // }
+    }
+    // d = circlePip(quarterScale, d, )
     
+/*
+    // Face 1 (Z+) - 1 pip
+    d = circlePip(quarterScale, d, )
+
+    // Face 2 (X-) - 2 pips
+    d = circlePip(quarterScale, d, )
+    d = circlePip(quarterScale, d, )
+
+    // Face 3 (Y+) - 3 pips
+    d = circlePip(quarterScale, d, )
+    d = circlePip(quarterScale, d, uarterScale, d, )
+
+    // Face 4 (Y-) - 4 pips
+    d = circlePip(quarterScale, d, )
+    d = circlePip(quarterScale, d, )
+    d = circlePip(quarterScale, d, )
+    d = circlePip(quarterScale, d, )
+
+    // Face 5 (X+) - 5 pips
+    d = circlePip(quarterScale, d, vec3(q.x + DieScale, q.y - third175, q.z - third2)
+    d = circlePip(quarterScale, d, vec3(q.x + DieScale, q.y + third175, q.z - third2)
+    d = circlePip(quarterScale, d, vec3(q.x + DieScale, q.y, q.z)
+    d = circlePip(quarterScale, d, vec3(q.x + DieScale, q.y - third175, q.z + third2)
+    d = circlePip(quarterScale, d, vec3(q.x + DieScale, q.y + third175, q.z + third2)
+
+    // Face 6 (Z-) - 6 pips
+    d = circlePip(quarterScale, d, vec3(q.x - third2, q.y - third175, q.z - DieScale)
+    d = circlePip(quarterScale, d, vec3(q.x - third2, q.y, q.z - DieScale)
+    d = circlePip(quarterScale, d, vec3(q.x - third2, q.y + third175, q.z - DieScale)
+    d = circlePip(quarterScale, d, vec3(q.x + third2, q.y - third175, q.z - DieScale)
+    d = circlePip(quarterScale, d, vec3(q.x + third2, q.y, q.z - DieScale)
+    d = circlePip(quarterScale, d, vec3(q.x + third2, q.y + third175, q.z - DieScale)
+*/
     return d
 }
 
