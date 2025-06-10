@@ -63,7 +63,7 @@ func SetBounds(tileSize int) {
 
 func LoadGame() *Game {
 	SetFonts()
-	const tileSize = 100
+	const tileSize = 128
 	diceImg := ebiten.NewImage(tileSize, tileSize)
 
 	dieImgSize := tileSize
@@ -145,16 +145,20 @@ func SetupPlayerDice(diceSheet *render.Sprite, dieImgSize int) []*Die {
 	var dice []*Die
 
 	var colors = []render.Vec3{
-		render.Vec3{R: rand.Float32(), G: 1.0, B: 0.5},
-		render.Vec3{R: 1.0, G: rand.Float32(), B: 1.0},
-		render.Vec3{R: 1.0, G: 0.5, B: rand.Float32()},
-		render.Vec3{R: rand.Float32(), G: rand.Float32(), B: 1.0},
-		render.Vec3{R: rand.Float32(), G: rand.Float32(), B: rand.Float32()},
-		render.Vec3{R: 0.5, G: rand.Float32(), B: rand.Float32()},
-		render.Vec3{R: 1.0, G: 1.0, B: 1.0},
+		render.Color(150, 0, 0),    // red
+		render.Color(175, 127, 25), // orange
+		render.Color(160, 160, 0),  // yellow
+		render.Color(0, 150, 50),   // green
+		render.Color(50, 50, 200),  // blue
+		render.Color(75, 0, 130),   // indigo
+		render.Color(125, 50, 183), // purple/pink
 	}
 
-	for i := range NUM_PLAYER_DICE {
+	for i := range colors {
+		fmt.Printf("%#v\n", colors[i])
+	}
+
+	for i := range len(colors) { // range NUM_PLAYER_DICE {
 		dice = append(dice, SetupNewDie(dieImgSize, colors[i]))
 	}
 

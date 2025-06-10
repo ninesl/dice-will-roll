@@ -23,6 +23,11 @@ func sdBox(p, b vec3) float {
     return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0)
 }
 
+func sdRoundBox(p, b vec3, r float) float {
+    q := abs(p) - b + vec3(r)
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r
+}
+
 // Rodrigues' rotation formula
 func rotate3D(p, axis vec3, angle float) vec3 {
     c := cos(angle)
@@ -35,19 +40,15 @@ func opSubtraction(d1, d2 float) float {
     return max(-d1, d2)
 }
 
-func opOnion(sdf, thickness float) float {
-    return abs(sdf) - thickness
-}
-
-// FIX: Restore the onion effect for pips
-func sdPip(p vec3, scale, d float) float {
-    return opSubtraction(sdSphere(p, scale), d)
+// sdPip subtracts a sphere (pip) from a distance field d.
+func sdPip(p vec3, scale float, d float) float {
+	return opSubtraction(sdSphere(p, scale), d)
 }
 
 func calcDirection() vec3 {
-    if length(Velocity) < 0.001 {
-        return vec3(0.0, 0.0, 1.0) // Default axis when stopped
-    }
+    // if length(Velocity) < 0.001 {
+    //     return vec3(0.0, 0.0, 1.0) // Default axis when stopped
+    // }
 
     // Only rotate around axes where there's actual velocity
     rollAxis := vec3(0.0, 0.0, 0.0)
@@ -66,7 +67,7 @@ func calcDirection() vec3 {
         return vec3(0.0, 0.0, 1.0) // Fallback
     }
     
-    rollAxis.z = normalize(rollAxis.x+rollAxis.y)
+    rollAxis.z = normalize(rollAxis.x-rollAxis.y)
 
     return normalize(rollAxis)
 }
@@ -76,12 +77,44 @@ func calcRotation() float {
     return -velMag * .01 * pi// Direct velocity-based rotation
 }
 
-// used to make the pip circle
-func circlePip(scale, d float, p vec3) float {
-    return opSubtraction(sdSphere(p, scale), d)
+func pipPositions() [21]vec3 {
+    thirdScale := DieScale  * .33
+    third175 := thirdScale * 1.75
+    third2 := thirdScale * 2.0
+
+
+    return [21]vec3{
+        // Face 1 (Z+)
+        vec3(0.0, 0.0, DieScale),
+        // Face 2 (X-)
+        vec3(-DieScale, -third175, -third2),
+        vec3(-DieScale, +third175, +third2),
+        // Face 3 (Y+)
+        vec3(+third175, +DieScale, +third2),
+        vec3(0.0, +DieScale, 0.0),
+        vec3(-third175, +DieScale, -third2),
+        // Face 4 (Y-)
+        vec3(+third175, -DieScale, -third2),
+        vec3(+third175, -DieScale, +third2),
+        vec3(-third175, -DieScale, +third2),
+        vec3(-third175, -DieScale, -third2),
+        // Face 5 (X+)
+        vec3(+DieScale, -third175, -third2),
+        vec3(+DieScale, +third175, -third2),
+        vec3(+DieScale, 0.0, 0.0),
+        vec3(+DieScale, -third175, +third2),
+        vec3(+DieScale, +third175, +third2),
+        // Face 6 (Z-)
+        vec3(-third2, -third175, -DieScale),
+        vec3(-third2, 0.0, -DieScale),
+        vec3(-third2, +third175, -DieScale),
+        vec3(+third2, -third175, -DieScale),
+        vec3(+third2, 0.0, -DieScale),
+        vec3(+third2, +third175, -DieScale),
+    }
 }
 
-func shape(p vec3) float {
+func shape(p vec3, pipPositions [21]vec3) float {
     q := p
     
     // Simple rotation based ONLY on uniforms
@@ -90,229 +123,97 @@ func shape(p vec3) float {
     
     throwDir := calcDirection()
     q = rotate3D(q, throwDir, baseAngle)
-    
-    // Die dimensions
-    thirdScale := DieScale / 3.0
-    third175 := thirdScale * 1.75
-    third2 := thirdScale * 2.0
-    quarterScale := DieScale / 4.5
-    
-    box := sdBox(q, vec3(DieScale))
+        
+    box := sdRoundBox(q, vec3(DieScale), .25)
     d := box
     
-    //TODO:FIXME: see mindtick
-	// var pips = [6][6]vec3{
-    var pips = [21]vec3 {
-		// {
-            vec3(q.x, q.y, q.z + DieScale),
-		// },
-        // {
-            vec3(q.x - DieScale, q.y - third175, q.z - third2),
-            vec3(q.x - DieScale, q.y + third175, q.z + third2),
-        // },
-        // {
-            vec3(q.x + third175, q.y + DieScale, q.z + third2),
-            vec3(q.x, q.y + DieScale, q.z),
-            vec3(q.x - third175, q.y + DieScale, q.z - third2),
-        // },
-        // {
-            vec3(q.x + third175, q.y - DieScale, q.z - third2),
-            vec3(q.x + third175, q.y - DieScale, q.z + third2),
-            vec3(q.x - third175, q.y - DieScale, q.z + third2),
-            vec3(q.x - third175, q.y - DieScale, q.z - third2),
-        // },
-        // {
-            vec3(q.x + DieScale, q.y - third175, q.z - third2),
-            vec3(q.x + DieScale, q.y + third175, q.z - third2),
-            vec3(q.x + DieScale, q.y, q.z),
-            vec3(q.x + DieScale, q.y - third175, q.z + third2),
-            vec3(q.x + DieScale, q.y + third175, q.z + third2),
-        // },
-        // {
-            vec3(q.x - third2, q.y - third175, q.z - DieScale),
-            vec3(q.x - third2, q.y, q.z - DieScale),
-            vec3(q.x - third2, q.y + third175, q.z - DieScale),
-            vec3(q.x + third2, q.y - third175, q.z - DieScale),
-            vec3(q.x + third2, q.y, q.z - DieScale),
-            vec3(q.x + third2, q.y + third175, q.z - DieScale),
-        // },
-	}
+    quarterScale := DieScale * .2
 
-    for i := 0; i < len(pips); i++ {
-        pip := pips[i]
-        // face := pips[i]
-        // for j := 0; j < len(face); j++ {
-            // pip := face[j]
-            d = circlePip(quarterScale, d, pip)
-        // }
+    for i := 0; i < len(pipPositions); i++ {
+        pip := pipPositions[i]
+        d = sdPip(q-pip, quarterScale, d)
     }
-    // d = circlePip(quarterScale, d, )
     
-/*
-    // Face 1 (Z+) - 1 pip
-    d = circlePip(quarterScale, d, )
-
-    // Face 2 (X-) - 2 pips
-    d = circlePip(quarterScale, d, )
-    d = circlePip(quarterScale, d, )
-
-    // Face 3 (Y+) - 3 pips
-    d = circlePip(quarterScale, d, )
-    d = circlePip(quarterScale, d, uarterScale, d, )
-
-    // Face 4 (Y-) - 4 pips
-    d = circlePip(quarterScale, d, )
-    d = circlePip(quarterScale, d, )
-    d = circlePip(quarterScale, d, )
-    d = circlePip(quarterScale, d, )
-
-    // Face 5 (X+) - 5 pips
-    d = circlePip(quarterScale, d, vec3(q.x + DieScale, q.y - third175, q.z - third2)
-    d = circlePip(quarterScale, d, vec3(q.x + DieScale, q.y + third175, q.z - third2)
-    d = circlePip(quarterScale, d, vec3(q.x + DieScale, q.y, q.z)
-    d = circlePip(quarterScale, d, vec3(q.x + DieScale, q.y - third175, q.z + third2)
-    d = circlePip(quarterScale, d, vec3(q.x + DieScale, q.y + third175, q.z + third2)
-
-    // Face 6 (Z-) - 6 pips
-    d = circlePip(quarterScale, d, vec3(q.x - third2, q.y - third175, q.z - DieScale)
-    d = circlePip(quarterScale, d, vec3(q.x - third2, q.y, q.z - DieScale)
-    d = circlePip(quarterScale, d, vec3(q.x - third2, q.y + third175, q.z - DieScale)
-    d = circlePip(quarterScale, d, vec3(q.x + third2, q.y - third175, q.z - DieScale)
-    d = circlePip(quarterScale, d, vec3(q.x + third2, q.y, q.z - DieScale)
-    d = circlePip(quarterScale, d, vec3(q.x + third2, q.y + third175, q.z - DieScale)
-*/
     return d
 }
 
 //returns the color of pips if it hit one
-func pips(col, finalPos vec3) vec3 {
-    // Same rotation as shape()
+func pipColors(originalDieSurfaceColor vec3, finalHitPos vec3, pipPositions [21]vec3) vec3 {
+    // Same rotation as shape() to get q_hit in die's local space
     totalRotation := calcRotation()
     baseAngle := totalRotation * Time
     throwDir := calcDirection()
-    q_hit := rotate3D(finalPos, throwDir, baseAngle)
-    
-    
-    // Simple pip detection - NO ONION
+    q_hit := rotate3D(finalHitPos, throwDir, baseAngle)
 
-    // Check ALL pip locations - NO ONION
-    quarterScale := DieScale / 4.5
-    thirdScale := DieScale / 3.0
-    third175 := thirdScale * 1.75
-    third2 := thirdScale * 2.0
-    
-    // Face 1 (Z+) - 1 pip
-    if abs(sdSphere(q_hit - vec3(0.0, 0.0, -DieScale), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
+    // Pip dimensions (must match shape function)
+    quarterScale := DieScale * .2
+
+    for i := 0; i < len(pipPositions); i++ {
+        pipCenter := pipPositions[i]
+        pipDist := sdSphere(q_hit - pipCenter, quarterScale)
+
+        // If the hit point is inside this pip's carving sphere, we are on the pip's inner surface.
+        if pipDist < 0.0 {
+            // Calculate normalized depth: 0.0 at pip's rim, 1.0 at pip's center
+            normalizedDepth := clamp(-pipDist/quarterScale, 0.0, 1.0)
+
+            // Define how much to darken the pip from rim to center.
+            // A higher power (e.g., 2.0) creates a more dramatic "scooped out" look.
+            rimBrightness := 0.7   // Brightness at the very edge of the dip (70% of surface color)
+            centerBrightness := 0.05 // Brightness at the deepest point (5% of surface color, almost black)
+            
+            // Calculate a darkening factor based on the depth.
+            darkeningFactor := mix(rimBrightness, centerBrightness, pow(normalizedDepth, 2.0))
+
+            // Apply the darkening factor to the original surface color.
+            return originalDieSurfaceColor * darkeningFactor
+        }
     }
-    
-    // Face 2 (X-) - 2 pips
-    if abs(sdSphere(q_hit - vec3(DieScale, third175, third2), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    if abs(sdSphere(q_hit - vec3(DieScale, -third175, -third2), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    
-    // Face 3 (Y+) - 3 pips
-    if abs(sdSphere(q_hit - vec3(-third175, -DieScale, -third2), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    if abs(sdSphere(q_hit - vec3(0.0, -DieScale, 0.0), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    if abs(sdSphere(q_hit - vec3(third175, -DieScale, third2), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    
-    // Face 4 (Y-) - 4 pips
-    if abs(sdSphere(q_hit - vec3(-third175, DieScale, third2), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    if abs(sdSphere(q_hit - vec3(-third175, DieScale, -third2), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    if abs(sdSphere(q_hit - vec3(third175, DieScale, -third2), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    if abs(sdSphere(q_hit - vec3(third175, DieScale, third2), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    
-    // Face 5 (X+) - 5 pips
-    if abs(sdSphere(q_hit - vec3(-DieScale, third175, third2), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    if abs(sdSphere(q_hit - vec3(-DieScale, -third175, third2), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    if abs(sdSphere(q_hit - vec3(-DieScale, 0.0, 0.0), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    if abs(sdSphere(q_hit - vec3(-DieScale, third175, -third2), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    if abs(sdSphere(q_hit - vec3(-DieScale, -third175, -third2), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    
-    // Face 6 (Z-) - 6 pips
-    if abs(sdSphere(q_hit - vec3(third2, third175, DieScale), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    if abs(sdSphere(q_hit - vec3(third2, 0.0, DieScale), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    if abs(sdSphere(q_hit - vec3(third2, -third175, DieScale), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    if abs(sdSphere(q_hit - vec3(-third2, third175, DieScale), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    if abs(sdSphere(q_hit - vec3(-third2, 0.0, DieScale), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    if abs(sdSphere(q_hit - vec3(-third2, -third175, DieScale), quarterScale)) < 0.02 {
-        col = vec3(0.1, 0.1, 0.1)
-    }
-    
-    return col
+
+    // If no pip was hit, return the original die surface color
+    return originalDieSurfaceColor
 }
 
 func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
     uv := (srcPos * 2.0 - imageDstSize().xy) / imageDstSize().y
-    
-    ro := vec3(0.0, 0.0, Height)
+
+    ro := vec3(0.0, 0.0, Height - 4.0)
     rd := normalize(vec3(uv * 0.5, 1.0))
     t := 0.0
-    
+
     var hit bool
     var finalPos vec3
-    
-    for i := 0; i < 60; i++ {
+
+    pips := pipPositions()
+
+    for i := 0; i < 55; i++ {
         pos := ro + rd * t
-        d := shape(pos)
-        
+        d := shape(pos, pips)
+
         if d < 0.001 {
             hit = true
             finalPos = pos
             break
         }
-        
+
         if t > 100.0 {
             break
         }
-        
+
         t += d
     }
-    
+
     if !hit {
         return vec4(0.0, 0.0, 0.0, 0.0)
     }
 
-
-    //TODO: modify color based on t for shading
     col := DieColor
-    col = pips(col, finalPos)
+
+	// Apply simple fog/shading to darken distant objects
+	// col *= (1.0 - clamp(t*0.05, 0.0, 0.8))
+    col = 0.5*t * col //shading
+
+    col = pipColors(col, finalPos, pips)
+
     return vec4(col, 1.0)
 }

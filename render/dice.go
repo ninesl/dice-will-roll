@@ -4,7 +4,6 @@ package render
 
 import (
 	"math"
-	"math/rand/v2"
 )
 
 // TODO: determine if a 'uniforms' map is better than hardcoded consts
@@ -17,6 +16,7 @@ type DieRenderable struct {
 	Direction Vec2    // vec2 representation of direction the die is traveling. used in uniforms
 	Color     Vec3    // direct Kage values for the color of the die
 	TileSize  float64 // inside here saves size? unsure
+	Height    float64
 	// Theta        float64 // turning to the right opts.GeoM.Rotate(theta)
 	// SpinningLeft bool    // left or right when rotating
 
@@ -35,16 +35,21 @@ var (
 
 func (d *DieRenderable) SetDirection() {
 	dir := Vec2{}
-	if math.Abs(d.Velocity.X) < .00015 {
+
+	// fmt.Println(d.Velocity)
+
+	if math.Abs(d.Velocity.X) < .01 {
 		dir.X = 0
+		d.Velocity.X = 0
 	} else if d.Velocity.X > 0 {
 		dir.X = 1.0
 	} else {
 		dir.X = -1.0
 	}
 
-	if math.Abs(d.Velocity.Y) < .00015 {
+	if math.Abs(d.Velocity.Y) < .01 {
 		dir.Y = 0
+		d.Velocity.Y = 0
 	} else if d.Velocity.Y > 0 {
 		dir.Y = 1.0
 	} else {
@@ -136,18 +141,18 @@ func HandleDiceCollisions(dice []*DieRenderable) {
 			die2 = dice[q]
 
 			if die.Colliding {
-				die.Vec2.X += die.Velocity.X
-				die.Vec2.Y += die.Velocity.Y
+				// die.Vec2.X += die.Velocity.X
+				// die.Vec2.Y += die.Velocity.Y
 
-				die.Velocity.Y *= rand.Float64() + .5
+				// die.Velocity.Y *= rand.Float64() + .5
 				die.Colliding = false
 			}
 
 			if die2.Colliding {
-				die2.Vec2.X += die2.Velocity.X
-				die2.Vec2.Y += die2.Velocity.Y
+				// die2.Vec2.X += die2.Velocity.X
+				// die2.Vec2.Y += die2.Velocity.Y
 
-				die2.Velocity.Y *= rand.Float64() + .5
+				// die2.Velocity.Y *= rand.Float64() + .5
 				die2.Colliding = false
 			}
 
@@ -159,10 +164,10 @@ func HandleDiceCollisions(dice []*DieRenderable) {
 			}
 		}
 
-		if math.Abs(die.Velocity.X) < .3 && math.Abs(die.Velocity.Y) < .3 {
-			die.Velocity.X = 0
-			die.Velocity.Y = 0
-		}
+		// if math.Abs(die.Velocity.X) < .3 && math.Abs(die.Velocity.Y) < .3 {
+		// 	die.Velocity.X = 0
+		// 	die.Velocity.Y = 0
+		// }
 	}
 
 	for _, die := range dice {
@@ -188,14 +193,14 @@ func BounceOffEachother(die *DieRenderable, die2 *DieRenderable) {
 	die.Velocity.Y *= factor * DampingFactor
 
 	if die.Velocity.X < 0 {
-		die.Velocity.X += 6
+		die.Velocity.X += die2.Velocity.X
 	} else {
-		die.Velocity.X -= 6
+		die.Velocity.X -= die2.Velocity.X
 	}
 	if die.Velocity.Y < 0 {
-		die.Velocity.Y += 6
+		die.Velocity.Y += die2.Velocity.Y
 	} else {
-		die.Velocity.Y -= 6
+		die.Velocity.Y -= die2.Velocity.Y
 	}
 
 	die2.Velocity.X *= factor * DampingFactor

@@ -29,6 +29,7 @@ func (g *Game) UpdateDice() {
 		die := &d.DieRenderable
 
 		if d.Mode == ROLLING {
+
 			d.Velocity.X *= .95
 			d.Velocity.Y *= .95
 
@@ -39,6 +40,11 @@ func (g *Game) UpdateDice() {
 		} else if d.Mode == DRAG {
 			d.Velocity.X = 0
 			d.Velocity.Y = 0
+
+			// d.Height = -1 - d.Height*.95
+
+			// d.image.Bounds().Overlaps()
+			// d.Height = 1
 
 			d.Vec2.X = g.x - render.XOffset
 			d.Vec2.Y = g.y - render.YOffset

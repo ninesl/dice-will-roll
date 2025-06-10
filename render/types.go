@@ -6,6 +6,37 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
+type Direction uint8
+
+const (
+	UP = iota
+	DOWN
+	LEFT
+	RIGHT
+	UPLEFT
+	UPRIGHT
+	DOWNRIGHT
+	DOWNLEFT
+)
+
+var (
+	// Usage: x to subtract when something is following cusor
+	XOffset float64
+	// Usage: y to subtract when something is following cusor
+	YOffset float64
+	// Usage: DirectionMap[Direction].X * math.Abs(renderable.Velocity.X)
+	DirectionMap = map[Direction]Vec2{
+		UP:        Vec2{X: 0, Y: -1},
+		DOWN:      Vec2{X: 0, Y: 1},
+		LEFT:      Vec2{X: -1, Y: 0},
+		RIGHT:     Vec2{X: 1, Y: 0},
+		UPLEFT:    Vec2{X: -1, Y: 1},
+		UPRIGHT:   Vec2{X: 1, Y: -1},
+		DOWNRIGHT: Vec2{X: 1, Y: 1},
+		DOWNLEFT:  Vec2{X: -1, Y: 1},
+	}
+)
+
 type Vec2 struct {
 	X, Y float64
 }
@@ -13,6 +44,19 @@ type Vec2 struct {
 // used for determining color values
 type Vec3 struct {
 	R, G, B float32
+}
+
+func normalize(v int) float32 {
+	return float32(v) / 255.0
+}
+
+// give 0-255 for r g b values return normalized to kages 0.0 - 1.0
+func Color(r, g, b int) Vec3 {
+	return Vec3{
+		R: normalize(r),
+		G: normalize(g),
+		B: normalize(b),
+	}
 }
 
 func (v Vec3) KageVec3() []float32 {

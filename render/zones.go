@@ -72,7 +72,7 @@ var (
 )
 
 func SetZones() {
-	minWidth := GAME_BOUNDS_X / 5
+	minWidth := GAME_BOUNDS_X / 8
 	minHeight := GAME_BOUNDS_Y / 5
 
 	BigRollZone = ZoneRenderable{
@@ -93,29 +93,33 @@ func SetZones() {
 		Zone: Zone{
 			MinWidth:  minWidth,
 			MaxWidth:  GAME_BOUNDS_X - minWidth,
-			MinHeight: minHeight,
+			MinHeight: 0,
+			// MinHeight: 0,
 			MaxHeight: GAME_BOUNDS_Y - minHeight,
 		},
 		sprite: CreateImage(
 			int((GAME_BOUNDS_X-minWidth)-minWidth),
-			int((GAME_BOUNDS_Y-minHeight)-minHeight),
+			int(GAME_BOUNDS_Y-minHeight),
+			// int((GAME_BOUNDS_Y-minHeight)-minHeight),
 			color.RGBA{R: 50, G: 50, B: 50, A: 128},
 		),
 	}
 
-	ROLLZONE = BigRollZone
-	// ROLLZONE = SmallRollZone
+	// ROLLZONE = BigRollZone
+	ROLLZONE = SmallRollZone
 
 	SCOREZONE = ZoneRenderable{
 		Zone: Zone{
 			MinWidth:  0,
 			MaxWidth:  GAME_BOUNDS_X,
 			MinHeight: 0,
-			MaxHeight: SmallRollZone.MinHeight,
+			MaxHeight: minHeight,
+			// MaxHeight: SmallRollZone.MinHeight,
 		},
 		sprite: CreateImage(
 			int(GAME_BOUNDS_X),
-			int(SmallRollZone.MinHeight),
+			int(minHeight),
+			// int(SmallRollZone.MinHeight),
 			color.RGBA{R: 100, G: 150, B: 80, A: 140},
 		),
 	}
@@ -123,6 +127,9 @@ func SetZones() {
 
 // helperfunction for placeholder sprites
 func CreateImage(width, height int, c color.Color) *ebiten.Image {
+
+	fmt.Println(c)
+	fmt.Println(width, height)
 	img := ebiten.NewImage(width, height)
 	img.Fill(c)
 	return img

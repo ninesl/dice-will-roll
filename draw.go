@@ -43,7 +43,6 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 		"TargetFace": 0.0,
 		"Time":       time,
 		"DieScale":   1.15,
-		"Height":     -4.0,
 		// "Cursor": []float32{float32(cx), float32(cy)},
 	}
 
@@ -61,6 +60,7 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 
 		die.image.Clear()
 
+		// opts.Uniforms["Height"] = die.Height
 		opts.Uniforms["Direction"] = die.Direction.KageVec2()
 		opts.Uniforms["Velocity"] = die.Velocity.KageVec2()
 		opts.Uniforms["DieColor"] = die.Color.KageVec3()
@@ -149,6 +149,6 @@ func DEBUGDrawFPS(screen *ebiten.Image, x, y float64, rolling, held int) {
 	op.ColorScale.ScaleWithColor(color.White)
 	text.Draw(screen, msg, &text.GoTextFace{
 		Source: DEBUG_FONT,
-		Size:   20,
+		Size:   render.GAME_BOUNDS_X * .01,
 	}, op)
 }

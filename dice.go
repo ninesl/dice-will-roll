@@ -35,5 +35,6 @@ func (d *Die) Roll() {
 		d.Velocity.X = d.TileSize * rand.Float64() * direction.X
 		d.Velocity.Y = d.TileSize * rand.Float64() * direction.Y
 		d.Direction = direction
+		// d.Height = 16.0
 	}
 }
