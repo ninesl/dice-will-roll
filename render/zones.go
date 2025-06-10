@@ -49,7 +49,7 @@ func (z *Zone) ContainsDie(die *DieRenderable) bool {
 }
 
 type ZoneRenderable struct {
-	sprite *ebiten.Image
+	image *ebiten.Image
 	Zone
 }
 
@@ -57,7 +57,7 @@ func (z *ZoneRenderable) Update() {
 }
 
 func (z *ZoneRenderable) Sprite() *ebiten.Image {
-	return z.sprite
+	return z.image
 }
 
 func (z *ZoneRenderable) Position() Vec2 {
@@ -82,7 +82,7 @@ func SetZones() {
 			MinHeight: 0, // minHeight,
 			MaxHeight: GAME_BOUNDS_Y,
 		},
-		sprite: CreateImage(
+		image: CreateImage(
 			int((GAME_BOUNDS_X)),
 			int((GAME_BOUNDS_Y /* - minHeight*/)),
 			color.RGBA{R: 123, G: 123, B: 123, A: 128},
@@ -97,7 +97,7 @@ func SetZones() {
 			// MinHeight: 0,
 			MaxHeight: GAME_BOUNDS_Y - minHeight,
 		},
-		sprite: CreateImage(
+		image: CreateImage(
 			int((GAME_BOUNDS_X-minWidth)-minWidth),
 			int(GAME_BOUNDS_Y-minHeight),
 			// int((GAME_BOUNDS_Y-minHeight)-minHeight),
@@ -116,7 +116,7 @@ func SetZones() {
 			MaxHeight: minHeight,
 			// MaxHeight: SmallRollZone.MinHeight,
 		},
-		sprite: CreateImage(
+		image: CreateImage(
 			int(GAME_BOUNDS_X),
 			int(minHeight),
 			// int(SmallRollZone.MinHeight),
