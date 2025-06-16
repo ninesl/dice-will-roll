@@ -22,7 +22,7 @@ func (g *Game) UpdateDice() {
 	// But I'm not a fan of that abstraction it'd be hard to keep track of
 	var rolling []*render.DieRenderable
 	var held []*render.DieRenderable
-	// var moving []*render.DieRenderable
+	var moving []*render.DieRenderable
 
 	for i := 0; i < len(g.Dice); i++ {
 		d := g.Dice[i]
@@ -38,26 +38,25 @@ func (g *Game) UpdateDice() {
 
 			rolling = append(rolling, die)
 		} else if d.Mode == DRAG {
-			d.Velocity.X = 0
-			d.Velocity.Y = 0
-
-			// d.Height = -1 - d.Height*.95
-
-			// d.image.Bounds().Overlaps()
-			// d.Height = 1
-
-			d.Vec2.X = g.x - render.XOffset
-			d.Vec2.Y = g.y - render.YOffset
-
+			d.Velocity.X = 0.0
+			d.Velocity.Y = 0.0
+			moveX := g.x - render.XOffset
+			moveY := g.y - render.YOffset
+			d.Vec2.X = moveX
+			d.Vec2.Y = moveY
+			moving = append(moving, die)
 		} else if d.Mode == HELD {
 			held = append(held, die)
 			// continue
 			//TODO:FIXME: die gets stuck within SmallRollZone. with continue it can't be held
 		}
-		rolling = append(rolling, die)
 	}
 
 	// render.HandleHeldDice(held)
 	render.HandleMovingHeldDice(held)
-	render.HandleDiceCollisions(rolling)
+
+	moving = append(moving, rolling...)
+	render.HandleDiceCollisions(moving)
+	render.BounceAndClamp(rolling)
+
 }

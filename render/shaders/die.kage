@@ -4,13 +4,24 @@
 
 package main
 
-var ZRandom float
+// var ZRandom float
 var Time float
 var DieScale float
 var Direction vec2
 var Velocity vec2
 var DieColor vec3
 var Height float
+var ZRotation float
+
+//TODO:FIXME: bool slices dont work. not a supported type when
+// assigning uniform types within reflections
+var FrontFace [9]int
+var LeftFace [9]int
+var BottomFace [9]int
+var TopFace [9]int
+var RightFace [9]int
+var BehindFace [9]int
+
 const pi = 3.141529
 
 // SDF functions
@@ -82,7 +93,13 @@ func pipPositions() [21]vec3 {
     third175 := thirdScale * 1.75
     third2 := thirdScale * 2.0
 
+    // for i := 0; i < 9; i++ {
+    //     if FrontFace[i] == 1 {
 
+    //     }
+    // }
+
+    // pips := [21]vec3 {}
     return [21]vec3{
         // Face 1 (Z+)
         vec3(0.0, 0.0, DieScale),
@@ -123,6 +140,10 @@ func shape(p vec3, pipPositions [21]vec3) float {
     
     throwDir := calcDirection()
     q = rotate3D(q, throwDir, baseAngle)
+    // Convert ZRotation from degrees to radians for the final Z axis rotation
+    // A ZRotation uniform value of 360 will now mean a full 360-degree rotation.
+    zRotationInRadians := -ZRotation * pi * 2.0 
+    q = rotate3D(q, vec3(0.0,0.0,1.0), zRotationInRadians)
         
     box := sdRoundBox(q, vec3(DieScale), .25)
     d := box
@@ -144,6 +165,8 @@ func pipColors(originalDieSurfaceColor vec3, finalHitPos vec3, pipPositions [21]
     baseAngle := totalRotation * Time
     throwDir := calcDirection()
     q_hit := rotate3D(finalHitPos, throwDir, baseAngle)
+    zRotationInRadians := -ZRotation * 2.0 * pi 
+    q_hit = rotate3D(q_hit, vec3(0.0,0.0,1.0), zRotationInRadians)
 
     // Pip dimensions (must match shape function)
     quarterScale := DieScale * .2
@@ -186,11 +209,11 @@ func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
 
     pips := pipPositions()
 
-    for i := 0; i < 55; i++ {
+    for i := 0; i < 60; i++ {
         pos := ro + rd * t
         d := shape(pos, pips)
 
-        if d < 0.001 {
+        if d < 0.01 {
             hit = true
             finalPos = pos
             break

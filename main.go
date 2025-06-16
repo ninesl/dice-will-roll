@@ -14,6 +14,8 @@ var (
 	GAME_BOUNDS_Y int
 )
 
+const TILE_SIZE int = 128
+
 type Game struct {
 	// DiceSprite *render.Sprite
 	Shaders   map[shaders.ShaderKey]*ebiten.Shader
@@ -81,6 +83,7 @@ func (g *Game) Bounds() (int, int) {
 
 func main() {
 	ebiten.SetWindowSize(1600, 900) // resolution
+	// ebiten.SetWindowSize(1280, 720)
 	ebiten.SetWindowTitle("Dice Will Roll")
 
 	game := LoadGame()

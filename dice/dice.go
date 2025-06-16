@@ -33,15 +33,45 @@ type Face struct {
 	pips []Modifier
 }
 
-// The highest value a face can have. (not the highest it count for??)
+// Most pips a face can have. Not the highest value
 const MAX_PIPS = 9
+
+// TODO:FIXME: will be obnoxious to add sides. maybe an interface for the die that works with all variations of faces?
+const (
+	FrontFace int = iota
+	LeftFace
+	BottomFace
+	TopFace
+	RightFace
+	BehindFace
+
+	// [0] front 1 pip
+	// [1] left 2 pip
+	// [2] bottom 3 pip
+	// [3] top 4 pip
+	// [4] right 5 pip
+	// [5] behind 6 pip
+)
+
+// ONLY WORKS FOR 6 SIDES
+func (d *Die) LocationsPips() [6][9]int {
+	pipLocations := [6][9]int{}
+	for i := range len(pipLocations) {
+		locs := d.faces[i].pipLocations()
+		pipLocations[i] = locs
+	}
+
+	return pipLocations
+}
 
 // Makes a blank die with each face being one more than the last, starting from 1
 func NewDie(sides int) Die {
 	faces := []Face{}
+
 	for i := range sides {
 		faces = append(faces, NewFace(i+1)) // so we dont have 0-5 pips
 	}
+
 	return Die{
 		faces: faces,
 	}
@@ -117,6 +147,92 @@ func (f *Face) Value() int {
 // NumPips returns len(f.pips)
 func (f *Face) NumPips() int {
 	return len(f.pips)
+}
+
+// 0 1 2
+// 3 4 5
+// 6 7 8
+// pip locations on face
+const (
+	topLeft int = iota
+	topMiddle
+	topRight
+	middleLeft
+	middle
+	middleRight
+	bottomLeft
+	bottomMiddle
+	bottomRight
+)
+
+// used for shader uniforms
+//
+// TODO: bool might not work long term, we may need another check for gems/mods in pips
+//
+// returns a 9 length true/false array
+//
+// each index corresponds to where on the die face the pip is
+//
+//	[false, false, false,
+//	 false, true, false,
+//	 false, false, false] // die face with 1 pip
+func (f *Face) pipLocations() [9]int {
+	pipLoc := [9]int{}
+
+	switch f.NumPips() {
+	case 1:
+		pipLoc[middle] = 1
+	case 2:
+		pipLoc[topRight] = 1
+		pipLoc[bottomLeft] = 1
+	case 3:
+		pipLoc[topLeft] = 1
+		pipLoc[middle] = 1
+		pipLoc[bottomRight] = 1
+	case 4:
+		pipLoc[topLeft] = 1
+		pipLoc[topRight] = 1
+		pipLoc[bottomRight] = 1
+		pipLoc[bottomLeft] = 1
+	case 5:
+		pipLoc[topLeft] = 1
+		pipLoc[topRight] = 1
+		pipLoc[middle] = 1
+		pipLoc[bottomRight] = 1
+		pipLoc[bottomLeft] = 1
+	case 6:
+		pipLoc[topLeft] = 1
+		pipLoc[middleLeft] = 1
+		pipLoc[bottomLeft] = 1
+		pipLoc[topRight] = 1
+		pipLoc[middleRight] = 1
+		pipLoc[bottomRight] = 1
+	case 7:
+		pipLoc[middle] = 1
+		pipLoc[topLeft] = 1
+		pipLoc[middleLeft] = 1
+		pipLoc[bottomLeft] = 1
+		pipLoc[topRight] = 1
+		pipLoc[middleRight] = 1
+		pipLoc[bottomRight] = 1
+	case 8:
+		pipLoc[topLeft] = 1
+		pipLoc[middleLeft] = 1
+		pipLoc[bottomLeft] = 1
+		pipLoc[topRight] = 1
+		pipLoc[middleRight] = 1
+		pipLoc[bottomRight] = 1
+		pipLoc[topMiddle] = 1
+		pipLoc[bottomMiddle] = 1
+	case 9:
+		pipLoc[topLeft] = 1
+		pipLoc[topRight] = 1
+		pipLoc[middle] = 1
+		pipLoc[bottomRight] = 1
+		pipLoc[bottomLeft] = 1
+	}
+
+	return pipLoc
 }
 
 // Score is the number that gets added to the total when the player plays a hand

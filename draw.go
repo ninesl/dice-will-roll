@@ -7,6 +7,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/ninesl/dice-will-roll/dice"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
@@ -40,9 +41,9 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 	time := float32(time.Since(g.startTime).Milliseconds()) / float32(ebiten.TPS())
 	u := map[string]any{
 		// "Time": g.tick,
-		"TargetFace": 0.0,
-		"Time":       time,
-		"DieScale":   1.15,
+		// "TargetFace": 0.0,
+		"Time":     time,
+		"DieScale": 1.15,
 		// "Cursor": []float32{float32(cx), float32(cy)},
 	}
 
@@ -60,11 +61,20 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 
 		die.image.Clear()
 
+		pipLocations := die.LocationsPips()
+		//could be a loop, but procedural is likely faster
+		opts.Uniforms["FrontFace"] = pipLocations[dice.FrontFace]
+		opts.Uniforms["LeftFace"] = pipLocations[dice.LeftFace]
+		opts.Uniforms["BottomFace"] = pipLocations[dice.BottomFace]
+		opts.Uniforms["TopFace"] = pipLocations[dice.TopFace]
+		opts.Uniforms["RightFace"] = pipLocations[dice.RightFace]
+		opts.Uniforms["BehindFace"] = pipLocations[dice.BehindFace]
+
 		// opts.Uniforms["Height"] = die.Height
 		opts.Uniforms["Direction"] = die.Direction.KageVec2()
 		opts.Uniforms["Velocity"] = die.Velocity.KageVec2()
 		opts.Uniforms["DieColor"] = die.Color.KageVec3()
-		// opts.Uniforms["ZRandom"] = die.
+		opts.Uniforms["ZRotation"] = die.ZRotation
 
 		// fmt.Println(opts.Uniforms["Velocity"])
 		die.image.DrawRectShader(s, s, shader, opts)
@@ -72,21 +82,6 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 		ops := &ebiten.DrawImageOptions{}
 		ops.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
 		screen.DrawImage(die.image, ops)
-
-		// halfOut := 0 - die.TileSize/2
-
-		//lock center to middle to rotate
-		// opts.GeoM.Translate(halfOut, halfOut)
-		// opts.GeoM.Rotate(-die.Theta) // messes up check for PRESS
-
-		// opts.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
-		//the whole 'screen' for the sprite.
-
-		// opts.Uniforms["Side"] = die.ActiveFace().NumPips()
-		// opts.Images[0] = die.Sprite()
-		// opts.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
-		// die.Sprite().DrawRectShader(s, s, g.DieShader, opts)
-		// opts.GeoM.Reset()
 	}
 }
 

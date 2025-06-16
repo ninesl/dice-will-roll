@@ -9,12 +9,14 @@ import (
 )
 
 type Die struct {
-	*dice.Die
-	render.DieRenderable
 	image *ebiten.Image
+	render.DieRenderable
+	dice.Die
 	// sprite *render.Sprite
 	Mode Action // Current mode of the die, is modified thru player Controls()
 }
+
+// func (d *Die) Rect()
 
 // When spacebar/roll is pressed
 //
@@ -24,7 +26,6 @@ type Die struct {
 //
 // logic based on Mode
 func (d *Die) Roll() {
-
 	switch d.Mode {
 	case ROLLING:
 		dir := render.Direction(rand.IntN(2) + render.UPLEFT) // random direction
@@ -35,6 +36,8 @@ func (d *Die) Roll() {
 		d.Velocity.X = d.TileSize * rand.Float64() * direction.X
 		d.Velocity.Y = d.TileSize * rand.Float64() * direction.Y
 		d.Direction = direction
+
+		d.ZRotation = rand.Float32()
 		// d.Height = 16.0
 	}
 }

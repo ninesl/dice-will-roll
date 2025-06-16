@@ -19,9 +19,9 @@ func (g *Game) Controls() Action {
 		action = ROLL
 		g.startTime = time.Now()
 	} else if inpututil.IsMouseButtonJustPressed(ebiten.MouseButton0) {
-		if g.cursorWithin(render.ROLLZONE) {
-			action = PRESS
-		}
+		// if g.cursorWithin(render.ROLLZONE) {
+		action = PRESS
+		// }
 	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButton0) {
 		action = SELECT
 	}
@@ -110,9 +110,9 @@ func (g *Game) Press() {
 		} // set the fixed position to the current position
 		die.Mode = DRAG
 	}
-	if g.cursorWithin(render.ROLLZONE) {
-		// render.Zones
-	}
+	// if g.cursorWithin(render.ROLLZONE) {
+	// 	// render.Zones
+	// }
 }
 
 func (g *Game) Select() {
@@ -128,30 +128,35 @@ func (g *Game) Select() {
 		return
 	}
 
-	// check if die was ficked
-	since := time.Since(g.Time)
-	if since < time.Second {
-		flickBuffer := d.TileSize * 3
-
-		above := g.y < d.Fixed.Y+d.TileSize/2
-		below := g.y > d.Fixed.Y-flickBuffer*2
-		left := g.x > d.Fixed.X-flickBuffer
-		right := g.x < d.Fixed.X+flickBuffer
-
-		flicked := above && below && left && right
-
-		if flicked {
-			d.Mode = HELD
-			return
-		}
+	if g.cursorWithin(render.SCOREZONE) {
+		d.Mode = HELD
+		return
 	}
+
+	// check if die was ficked
+	// since := time.Since(g.Time)
+	// if since < time.Second {
+	// 	flickBuffer := d.TileSize * 3
+
+	// 	above := g.y < d.Fixed.Y+d.TileSize/2
+	// 	below := g.y > d.Fixed.Y-flickBuffer*2
+	// 	left := g.x > d.Fixed.X-flickBuffer
+	// 	right := g.x < d.Fixed.X+flickBuffer
+
+	// 	flicked := above && below && left && right
+
+	// 	if flicked {
+	// 		d.Mode = HELD
+	// 		return
+	// 	}
+	// }
 
 	// let go of die
 	d.Mode = ROLLING
 
-	if g.cursorWithin(render.SmallRollZone) {
-		d.HoverFromFromFixed()
-		d.Fixed = render.Vec2{}
-		return
-	}
+	// if g.cursorWithin(render.SmallRollZone) {
+	// d.HoverFromFromFixed()
+	// d.Fixed = render.Vec2{}
+	// 	return
+	// }
 }

@@ -3,6 +3,7 @@ package render
 // where to render die
 
 import (
+	"image"
 	"math"
 )
 
@@ -17,6 +18,7 @@ type DieRenderable struct {
 	Color     Vec3    // direct Kage values for the color of the die
 	TileSize  float64 // inside here saves size? unsure
 	Height    float64
+	ZRotation float32 // 0.0 - 1.0 uniform, finaly angle it lands on for a natural 'spin'
 	// Theta        float64 // turning to the right opts.GeoM.Rotate(theta)
 	// SpinningLeft bool    // left or right when rotating
 
@@ -25,7 +27,31 @@ type DieRenderable struct {
 	Colliding bool // flag for collisions
 }
 
-// func (d *DieRenderable) Sprite()
+// could be a persistent rect that gets it's position updated
+//
+// TODO: benchmarking
+func (d *DieRenderable) Rect() image.Rectangle {
+	// Inset each side by a small amount, e.g., 5% of TileSize
+	// This makes the total width and height smaller by 10% of TileSize
+	insetAmount := d.TileSize * 0.15
+
+	minX := int(math.Round(d.Vec2.X + insetAmount))
+	minY := int(math.Round(d.Vec2.Y + insetAmount))
+	maxX := int(math.Round(d.Vec2.X + d.TileSize - insetAmount))
+	maxY := int(math.Round(d.Vec2.Y + d.TileSize - insetAmount))
+
+	// Ensure min is not greater than max, which can happen if TileSize is very small or insetAmount is too large
+	if minX > maxX {
+		minX = int(math.Round(d.Vec2.X + d.TileSize/2))
+		maxX = minX
+	}
+	if minY > maxY {
+		minY = int(math.Round(d.Vec2.Y + d.TileSize/2))
+		maxY = minY
+	}
+
+	return image.Rect(minX, minY, maxX, maxY)
+}
 
 var (
 	DampingFactor float64 = 0.7
@@ -95,10 +121,12 @@ func HandleMovingHeldDice(dice []*DieRenderable) {
 		die.Velocity.X = (die.Fixed.X - die.Vec2.X) * MoveFactor
 		die.Velocity.Y = (die.Fixed.Y - die.Vec2.Y) * MoveFactor
 
+		// back to 0
+		die.ZRotation *= float32(BounceFactor)
+
 		die.Vec2.X += die.Velocity.X
 		die.Vec2.Y += die.Velocity.Y
 	}
-
 }
 
 func HandleHeldDice(dice []*DieRenderable) {
@@ -131,35 +159,37 @@ func HandleHeldDice(dice []*DieRenderable) {
 
 // gross code
 func HandleDiceCollisions(dice []*DieRenderable) {
-	var die, die2 *DieRenderable
 	for i := 0; i < len(dice); i++ {
-		die = dice[i]
+		die := dice[i]
+
+		dieRect := die.Rect()
 		for q := 0; q < len(dice); q++ {
 			if i == q {
 				continue
 			}
-			die2 = dice[q]
+			die2 := dice[q]
 
-			if die.Colliding {
-				// die.Vec2.X += die.Velocity.X
-				// die.Vec2.Y += die.Velocity.Y
+			// if die.Colliding {
+			// die.Vec2.X += die.Velocity.X
+			// die.Vec2.Y += die.Velocity.Y
 
-				// die.Velocity.Y *= rand.Float64() + .5
-				die.Colliding = false
-			}
+			// die.Velocity.Y *= rand.Float64() + .5
+			// die.Colliding = false
+			// }
 
-			if die2.Colliding {
-				// die2.Vec2.X += die2.Velocity.X
-				// die2.Vec2.Y += die2.Velocity.Y
+			// if die2.Colliding {
+			// die2.Vec2.X += die2.Velocity.X
+			// die2.Vec2.Y += die2.Velocity.Y
 
-				// die2.Velocity.Y *= rand.Float64() + .5
-				die2.Colliding = false
-			}
+			// die2.Velocity.Y *= rand.Float64() + .5
+			// die2.Colliding = false
+			// }
 
-			xCollide := die.Vec2.X < die2.Vec2.X+die2.TileSize && die.Vec2.X > die2.Vec2.X
-			yCollide := die.Vec2.Y < die2.Vec2.Y+die2.TileSize && die.Vec2.Y > die2.Vec2.Y
+			// xCollide := die.Vec2.X < die2.Vec2.X+die2.TileSize && die.Vec2.X > die2.Vec2.X
+			// yCollide := die.Vec2.Y < die2.Vec2.Y+die2.TileSize && die.Vec2.Y > die2.Vec2.Y
 
-			if yCollide && xCollide {
+			die2Rect := die2.Rect()
+			if dieRect.Overlaps(die2Rect) {
 				BounceOffEachother(die, die2)
 			}
 		}
@@ -171,89 +201,123 @@ func HandleDiceCollisions(dice []*DieRenderable) {
 	}
 
 	for _, die := range dice {
-		BounceAndClamp(die)
-	}
-
-	for _, die := range dice {
 		die.SetDirection()
 	}
 }
 
-func BounceOffEachother(die *DieRenderable, die2 *DieRenderable) {
-	die.Colliding = true
-	die2.Colliding = true
+func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
+	// Calculate centers of the dice
+	// Assuming Vec2 is top-left corner and TileSize is width/height
+	c1X := die1.Vec2.X + die1.TileSize/2
+	c1Y := die1.Vec2.Y + die1.TileSize/2
+	c2X := die2.Vec2.X + die2.TileSize/2
+	c2Y := die2.Vec2.Y + die2.TileSize/2
 
-	if die.Velocity.X < BounceFactor && die.Velocity.Y < BounceFactor {
-		return
+	// Calculate distance between centers
+	distCX := c1X - c2X
+	distCY := c1Y - c2Y
+
+	// Calculate minimum non-overlapping distance (sum of half-sizes)
+	// This assumes dice have the same TileSize, if not, use die1.TileSize/2 + die2.TileSize/2
+	minDist := die1.TileSize // die1.TileSize/2 + die2.TileSize/2, if TileSize is consistent
+
+	// Calculate overlap on each axis
+	overlapX := minDist - math.Abs(distCX)
+	overlapY := minDist - math.Abs(distCY)
+
+	// Coefficient of restitution (e.g., BounceFactor)
+	e := BounceFactor
+	// Ensure e is within a reasonable range, e.g., [0, 1]
+	if e < 0 {
+		e = 0
+	}
+	if e > 1 {
+		e = 1
 	}
 
-	factor := -1.1
+	// Resolve collision based on the axis of minimum penetration
+	if overlapX > 0 && overlapY > 0 { // Check if they are actually overlapping
+		// Store original velocities for clarity
+		v1x, v1y := die1.Velocity.X, die1.Velocity.Y
+		v2x, v2y := die2.Velocity.X, die2.Velocity.Y
 
-	die.Velocity.X *= factor * DampingFactor
-	die.Velocity.Y *= factor * DampingFactor
+		if overlapX < overlapY {
+			// Horizontal collision
+			// 1D collision formulas for equal mass:
+			// v1_new = (v1*(1-e) + v2*(1+e)) / 2
+			// v2_new = (v1*(1+e) + v2*(1-e)) / 2
+			new_v1x := (v1x*(1-e) + v2x*(1+e)) / 2.0
+			new_v2x := (v1x*(1+e) + v2x*(1-e)) / 2.0
 
-	if die.Velocity.X < 0 {
-		die.Velocity.X += die2.Velocity.X
-	} else {
-		die.Velocity.X -= die2.Velocity.X
+			die1.Velocity.X = new_v1x
+			die2.Velocity.X = new_v2x
+
+			// Positional correction to resolve overlap
+			// Move each die by half the overlap
+			correction := overlapX / 2.0
+			if distCX > 0 { // die1 is to the right of die2
+				die1.Vec2.X += correction
+				die2.Vec2.X -= correction
+			} else { // die1 is to the left of die2 (or exactly centered)
+				die1.Vec2.X -= correction
+				die2.Vec2.X += correction
+			}
+
+		} else {
+			// Vertical collision
+			new_v1y := (v1y*(1-e) + v2y*(1+e)) / 2.0
+			new_v2y := (v1y*(1+e) + v2y*(1-e)) / 2.0
+
+			die1.Velocity.Y = new_v1y
+			die2.Velocity.Y = new_v2y
+
+			// Positional correction
+			correction := overlapY / 2.0
+			if distCY > 0 { // die1 is below die2 (Y typically increases downwards)
+				die1.Vec2.Y += correction
+				die2.Vec2.Y -= correction
+			} else { // die1 is above die2 (or exactly centered)
+				die1.Vec2.Y -= correction
+				die2.Vec2.Y += correction
+			}
+		}
 	}
-	if die.Velocity.Y < 0 {
-		die.Velocity.Y += die2.Velocity.Y
-	} else {
-		die.Velocity.Y -= die2.Velocity.Y
-	}
-
-	die2.Velocity.X *= factor * DampingFactor
-	die2.Velocity.Y *= factor * DampingFactor
-
-	if die2.Velocity.X < 0 {
-		die2.Velocity.X += 6
-	} else {
-		die2.Velocity.X -= 6
-	}
-
-	if die2.Velocity.Y < 0 {
-		die2.Velocity.Y += 6
-	} else {
-		die2.Velocity.Y -= 6
-	}
-
 }
 
-func BounceAndClamp(die *DieRenderable) {
-	if die.Vec2.X+die.TileSize >= ROLLZONE.MaxWidth {
-		die.Vec2.X = ROLLZONE.MaxWidth - die.TileSize - 1
-		die.Velocity.X = math.Abs(die.Velocity.X) * -1
-		// die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
-	}
-	if die.Vec2.X < ROLLZONE.MinWidth {
-		die.Vec2.X = ROLLZONE.MinWidth + 1
-		die.Velocity.X = math.Abs(die.Velocity.X)
-		// die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
-	}
-	if die.Vec2.Y+die.TileSize >= ROLLZONE.MaxHeight {
-		die.Vec2.Y = ROLLZONE.MaxHeight - die.TileSize - 1
-		die.Velocity.Y = math.Abs(die.Velocity.Y) * -1
-		// die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
-	}
-	if die.Vec2.Y < ROLLZONE.MinHeight {
-		die.Vec2.Y = ROLLZONE.MinHeight + 1
-		die.Velocity.Y = math.Abs(die.Velocity.Y)
-		// die.IndexOnSheet = die.ColorSpot + rand.IntN(5)
+func BounceAndClamp(dice []*DieRenderable) {
+	for _, die := range dice {
+		if die.Vec2.X+die.TileSize >= ROLLZONE.MaxWidth {
+			die.Vec2.X = ROLLZONE.MaxWidth - die.TileSize - 1
+			die.Velocity.X = math.Abs(die.Velocity.X) * -1
+		}
+		if die.Vec2.X < ROLLZONE.MinWidth {
+			die.Vec2.X = ROLLZONE.MinWidth + 1
+			die.Velocity.X = math.Abs(die.Velocity.X)
+		}
+		if die.Vec2.Y+die.TileSize >= ROLLZONE.MaxHeight {
+			die.Vec2.Y = ROLLZONE.MaxHeight - die.TileSize - 1
+			die.Velocity.Y = math.Abs(die.Velocity.Y) * -1
+		}
+		if die.Vec2.Y < ROLLZONE.MinHeight {
+			die.Vec2.Y = ROLLZONE.MinHeight + 1
+			die.Velocity.Y = math.Abs(die.Velocity.Y)
+		}
 	}
 }
+
+const hoverAdjust = .1
 
 // TODO: make this 'flick' the die based on mouse velocity?
 // small hover away effect
 func (d *DieRenderable) HoverFromFromFixed() {
 	if d.Vec2.X > d.Fixed.X {
-		d.Velocity.X = 3
+		d.Velocity.X = hoverAdjust
 	} else {
-		d.Velocity.X = -3
+		d.Velocity.X = -hoverAdjust
 	}
 	if d.Vec2.Y > d.Fixed.Y {
-		d.Velocity.Y = 3
+		d.Velocity.Y = hoverAdjust
 	} else {
-		d.Velocity.Y = -3
+		d.Velocity.Y = -hoverAdjust
 	}
 }

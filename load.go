@@ -15,6 +15,7 @@ import (
 	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/ninesl/dice-will-roll/dice"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
@@ -57,13 +58,9 @@ func SetBounds(tileSize int) {
 	render.GAME_BOUNDS_Y = float64(GAME_BOUNDS_Y)
 }
 
-// func setDice(tileSize int) {
-
-// }
-
 func LoadGame() *Game {
 	SetFonts()
-	const tileSize = 128
+	const tileSize = TILE_SIZE
 	diceImg := ebiten.NewImage(tileSize, tileSize)
 
 	dieImgSize := tileSize
@@ -120,8 +117,9 @@ func SetupNewDie(dieImgSize int, color render.Vec3) *Die {
 			X: (rand.Float64()*40 + 20),
 			Y: (rand.Float64()*40 + 20),
 		},
-		TileSize: float64(dieImgSize),
-		Color:    color,
+		ZRotation: rand.Float32(),
+		TileSize:  float64(dieImgSize),
+		Color:     color,
 		// ColorSpot: 1 * 6,
 	}
 	image := ebiten.NewImage(dieImgSize, dieImgSize)
@@ -133,13 +131,14 @@ func SetupNewDie(dieImgSize int, color render.Vec3) *Die {
 	// image.DrawTrianglesShader(vertices, indicies, shader, opts)
 
 	return &Die{
+		Die:           dice.NewDie(6),
 		image:         image,
 		DieRenderable: dieRenderable,
 		Mode:          ROLLING,
 	}
 }
 
-const NUM_PLAYER_DICE = 7
+var NUM_PLAYER_DICE = 7
 
 func SetupPlayerDice(diceSheet *render.Sprite, dieImgSize int) []*Die {
 	var dice []*Die
@@ -151,14 +150,16 @@ func SetupPlayerDice(diceSheet *render.Sprite, dieImgSize int) []*Die {
 		render.Color(0, 150, 50),   // green
 		render.Color(50, 50, 200),  // blue
 		render.Color(75, 0, 130),   // indigo
-		render.Color(125, 50, 183), // purple/pink
+		render.Color(125, 50, 183), // purple
 	}
 
-	for i := range colors {
-		fmt.Printf("%#v\n", colors[i])
-	}
+	NUM_PLAYER_DICE = len(colors)
 
-	for i := range len(colors) { // range NUM_PLAYER_DICE {
+	// for i := range colors {
+	// 	fmt.Printf("%#v\n", colors[i])
+	// }
+
+	for i := range NUM_PLAYER_DICE { // range NUM_PLAYER_DICE {
 		dice = append(dice, SetupNewDie(dieImgSize, colors[i]))
 	}
 
