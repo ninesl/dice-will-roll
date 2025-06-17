@@ -82,8 +82,8 @@ func (g *Game) Bounds() (int, int) {
 }
 
 func main() {
-	ebiten.SetWindowSize(1600, 900) // resolution
-	// ebiten.SetWindowSize(1280, 720)
+	// ebiten.SetWindowSize(1600, 900) // resolution
+	ebiten.SetWindowSize(1280, 720)
 	ebiten.SetWindowTitle("Dice Will Roll")
 
 	game := LoadGame()
