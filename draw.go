@@ -7,7 +7,6 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
-	"github.com/ninesl/dice-will-roll/dice"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
@@ -61,14 +60,16 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 
 		die.image.Clear()
 
-		pipLocations := die.LocationsPips()
 		//could be a loop, but procedural is likely faster
-		opts.Uniforms["FrontFace"] = pipLocations[dice.FrontFace]
-		opts.Uniforms["LeftFace"] = pipLocations[dice.LeftFace]
-		opts.Uniforms["BottomFace"] = pipLocations[dice.BottomFace]
-		opts.Uniforms["TopFace"] = pipLocations[dice.TopFace]
-		opts.Uniforms["RightFace"] = pipLocations[dice.RightFace]
-		opts.Uniforms["BehindFace"] = pipLocations[dice.BehindFace]
+		opts.Uniforms["FaceLayouts"] = die.LocationsPips()
+		// opts.Uniforms["FrontFace"] = pipLocations[dice.FrontFace]
+		// opts.Uniforms["LeftFace"] = pipLocations[dice.LeftFace]
+		// opts.Uniforms["BottomFace"] = pipLocations[dice.BottomFace]
+		// opts.Uniforms["TopFace"] = pipLocations[dice.TopFace]
+		// opts.Uniforms["RightFace"] = pipLocations[dice.RightFace]
+		// opts.Uniforms["BehindFace"] = pipLocations[dice.BehindFace]
+		// opts.Uniforms["NumPips"] = die.NumPips()
+		opts.Uniforms["ActiveFace"] = die.ActiveFaceIndex()
 
 		// opts.Uniforms["Height"] = die.Height
 		opts.Uniforms["Direction"] = die.Direction.KageVec2()

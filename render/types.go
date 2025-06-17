@@ -59,10 +59,12 @@ func Color(r, g, b int) Vec3 {
 	}
 }
 
+// Returns a Vec3 representation of itself for a Kage uniform
 func (v Vec3) KageVec3() []float32 {
 	return []float32{v.R, v.G, v.B}
 }
 
+// Returns a Vec2 representation of itself for a Kage uniform
 func (v Vec2) KageVec2() []float32 {
 	return []float32{float32(v.X), float32(v.Y)}
 }

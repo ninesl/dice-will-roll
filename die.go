@@ -28,6 +28,7 @@ type Die struct {
 func (d *Die) Roll() {
 	switch d.Mode {
 	case ROLLING:
+		d.Die.Roll()
 		dir := render.Direction(rand.IntN(2) + render.UPLEFT) // random direction
 		direction := render.DirectionMap[dir]
 

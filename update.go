@@ -30,8 +30,8 @@ func (g *Game) UpdateDice() {
 
 		if d.Mode == ROLLING {
 
-			d.Velocity.X *= .95
-			d.Velocity.Y *= .95
+			d.Velocity.X *= render.BounceFactor
+			d.Velocity.Y *= render.BounceFactor
 
 			d.Vec2.X += d.Velocity.X
 			d.Vec2.Y += d.Velocity.Y
@@ -47,8 +47,6 @@ func (g *Game) UpdateDice() {
 			moving = append(moving, die)
 		} else if d.Mode == HELD {
 			held = append(held, die)
-			// continue
-			//TODO:FIXME: die gets stuck within SmallRollZone. with continue it can't be held
 		}
 	}
 

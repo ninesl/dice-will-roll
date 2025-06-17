@@ -54,14 +54,65 @@ const (
 )
 
 // ONLY WORKS FOR 6 SIDES
-func (d *Die) LocationsPips() [6][9]int {
-	pipLocations := [6][9]int{}
-	for i := range len(pipLocations) {
-		locs := d.faces[i].pipLocations()
-		pipLocations[i] = locs
-	}
+//
+// is used to populate [6]mat3 for shader uniforms
+// func (d *Die) LocationsPips() [6][9]float32 {
+// 	pipLocations := [6][9]float32{}
+// 	for i := range len(pipLocations) {
+// 		locs := d.faces[i].pipLocations()
+// 		pipLocations[i] = locs
+// 	}
 
-	return pipLocations
+// 	return pipLocations
+// }
+
+// ONLY WORKS FOR 6 SIDES
+//
+// is used to populate [6]mat3 for shader uniforms
+// This now returns a flat []float32, with each 9-float segment representing a mat3 in column-major order.
+func (d *Die) LocationsPips() []float32 {
+	// Each mat3 has 9 floats. 6 faces * 9 floats/face = 54 floats total.
+	flattenedPipLayouts := make([]float32, 6*9)
+	flatIdx := 0
+
+	for faceIndex := 0; faceIndex < 6; faceIndex++ {
+		var currentFacePipsRowMajor [9]float32
+		// Ensure we don't go out of bounds if a die somehow has fewer than 6 faces defined,
+		// though NewDie(6) should prevent this.
+		if faceIndex < len(d.faces) {
+			currentFacePipsRowMajor = d.faces[faceIndex].pipLocations() // This is row-major based on iota constants
+		} else {
+			// Fallback for safety: an empty face (all zeros)
+			currentFacePipsRowMajor = [9]float32{}
+		}
+
+		// Transpose from row-major (from pipLocations) to column-major for the shader.
+		// Visual pip grid: V[row][col]
+		// Your iota constants produce row-major order for currentFacePipsRowMajor:
+		// Index: 0   1   2    3   4   5    6   7   8
+		// Visual:V00 V01 V02  V10 V11 V12  V20 V21 V22
+		// (e.g., currentFacePipsRowMajor[topLeft] which is currentFacePipsRowMajor[0] stores V00)
+		// (e.g., currentFacePipsRowMajor[topMiddle] which is currentFacePipsRowMajor[1] stores V01)
+
+		// We need to store it in column-major order in the flattened slice for Kage:
+		// For one mat3: [V00,V10,V20, V01,V11,V21, V02,V12,V22]
+
+		// Column 0
+		flattenedPipLayouts[flatIdx+0] = currentFacePipsRowMajor[topLeft]    // V00
+		flattenedPipLayouts[flatIdx+1] = currentFacePipsRowMajor[middleLeft] // V10
+		flattenedPipLayouts[flatIdx+2] = currentFacePipsRowMajor[bottomLeft] // V20
+		// Column 1
+		flattenedPipLayouts[flatIdx+3] = currentFacePipsRowMajor[topMiddle]    // V01
+		flattenedPipLayouts[flatIdx+4] = currentFacePipsRowMajor[middle]       // V11
+		flattenedPipLayouts[flatIdx+5] = currentFacePipsRowMajor[bottomMiddle] // V21
+		// Column 2
+		flattenedPipLayouts[flatIdx+6] = currentFacePipsRowMajor[topRight]    // V02
+		flattenedPipLayouts[flatIdx+7] = currentFacePipsRowMajor[middleRight] // V12
+		flattenedPipLayouts[flatIdx+8] = currentFacePipsRowMajor[bottomRight] // V22
+
+		flatIdx += 9
+	}
+	return flattenedPipLayouts
 }
 
 // Makes a blank die with each face being one more than the last, starting from 1
@@ -125,6 +176,13 @@ func (d *Die) ActiveFace() *Face {
 	return &d.faces[d.activeFace]
 }
 
+// Returns the index of the face that is active.
+//
+// Used for which side is visible for uniforms
+func (d *Die) ActiveFaceIndex() int {
+	return d.activeFace
+}
+
 // Set the active face to a random 0-len(faces)
 //
 //	d.ActiveFace() # is called to return the pointer to Face
@@ -133,6 +191,15 @@ func (d *Die) ActiveFace() *Face {
 func (d *Die) Roll() *Face {
 	d.activeFace = rand.Intn(len(d.faces))
 	return d.ActiveFace()
+}
+
+// Returns the sum of all faces' .NumPips()
+func (d *Die) NumPips() int {
+	sum := 0
+	for _, face := range d.faces {
+		sum += face.NumPips()
+	}
+	return sum
 }
 
 // Value is the literal NUMBER of pips on the face and relevant modifiers (to the die, not enviornment) are applied
@@ -176,60 +243,64 @@ const (
 //	[false, false, false,
 //	 false, true, false,
 //	 false, false, false] // die face with 1 pip
-func (f *Face) pipLocations() [9]int {
-	pipLoc := [9]int{}
+func (f *Face) pipLocations() [9]float32 {
+	pipLoc := [9]float32{}
 
 	switch f.NumPips() {
 	case 1:
-		pipLoc[middle] = 1
+		pipLoc[middle] = 1.0
 	case 2:
-		pipLoc[topRight] = 1
-		pipLoc[bottomLeft] = 1
+		pipLoc[topRight] = 1.0
+		pipLoc[bottomLeft] = 1.0
 	case 3:
-		pipLoc[topLeft] = 1
-		pipLoc[middle] = 1
-		pipLoc[bottomRight] = 1
+		pipLoc[topLeft] = 1.0
+		pipLoc[middle] = 1.0
+		pipLoc[bottomRight] = 1.0
 	case 4:
-		pipLoc[topLeft] = 1
-		pipLoc[topRight] = 1
-		pipLoc[bottomRight] = 1
-		pipLoc[bottomLeft] = 1
+		pipLoc[topLeft] = 1.0
+		pipLoc[topRight] = 1.0
+		pipLoc[bottomRight] = 1.0
+		pipLoc[bottomLeft] = 1.0
 	case 5:
-		pipLoc[topLeft] = 1
-		pipLoc[topRight] = 1
-		pipLoc[middle] = 1
-		pipLoc[bottomRight] = 1
-		pipLoc[bottomLeft] = 1
+		pipLoc[topLeft] = 1.0
+		pipLoc[topRight] = 1.0
+		pipLoc[middle] = 1.0
+		pipLoc[bottomRight] = 1.0
+		pipLoc[bottomLeft] = 1.0
 	case 6:
-		pipLoc[topLeft] = 1
-		pipLoc[middleLeft] = 1
-		pipLoc[bottomLeft] = 1
-		pipLoc[topRight] = 1
-		pipLoc[middleRight] = 1
-		pipLoc[bottomRight] = 1
+		pipLoc[topLeft] = 1.0
+		pipLoc[middleLeft] = 1.0
+		pipLoc[bottomLeft] = 1.0
+		pipLoc[topRight] = 1.0
+		pipLoc[middleRight] = 1.0
+		pipLoc[bottomRight] = 1.0
 	case 7:
-		pipLoc[middle] = 1
-		pipLoc[topLeft] = 1
-		pipLoc[middleLeft] = 1
-		pipLoc[bottomLeft] = 1
-		pipLoc[topRight] = 1
-		pipLoc[middleRight] = 1
-		pipLoc[bottomRight] = 1
+		pipLoc[middle] = 1.0
+		pipLoc[topLeft] = 1.0
+		pipLoc[middleLeft] = 1.0
+		pipLoc[bottomLeft] = 1.0
+		pipLoc[topRight] = 1.0
+		pipLoc[middleRight] = 1.0
+		pipLoc[bottomRight] = 1.0
 	case 8:
-		pipLoc[topLeft] = 1
-		pipLoc[middleLeft] = 1
-		pipLoc[bottomLeft] = 1
-		pipLoc[topRight] = 1
-		pipLoc[middleRight] = 1
-		pipLoc[bottomRight] = 1
-		pipLoc[topMiddle] = 1
-		pipLoc[bottomMiddle] = 1
+		pipLoc[topLeft] = 1.0
+		pipLoc[middleLeft] = 1.0
+		pipLoc[bottomLeft] = 1.0
+		pipLoc[topRight] = 1.0
+		pipLoc[middleRight] = 1.0
+		pipLoc[bottomRight] = 1.0
+		pipLoc[topMiddle] = 1.0
+		pipLoc[bottomMiddle] = 1.0
 	case 9:
-		pipLoc[topLeft] = 1
-		pipLoc[topRight] = 1
-		pipLoc[middle] = 1
-		pipLoc[bottomRight] = 1
-		pipLoc[bottomLeft] = 1
+		pipLoc[topLeft] = 1.0
+		pipLoc[topMiddle] = 1.0
+		pipLoc[topRight] = 1.0
+		pipLoc[middleLeft] = 1.0
+		pipLoc[middle] = 1.0
+		pipLoc[middleRight] = 1.0
+		pipLoc[bottomRight] = 1.0
+		pipLoc[bottomMiddle] = 1.0
+		pipLoc[bottomLeft] = 1.0
 	}
 
 	return pipLoc

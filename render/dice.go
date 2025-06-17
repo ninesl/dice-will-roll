@@ -86,6 +86,8 @@ func (d *DieRenderable) SetDirection() {
 
 }
 
+// TODO: make this determine on cursor position
+//
 // Moves dice to fixed pos based on num of moving dice from being selected
 func HandleMovingHeldDice(dice []*DieRenderable) {
 	num := len(dice)
@@ -98,7 +100,7 @@ func HandleMovingHeldDice(dice []*DieRenderable) {
 	mod := dice[0].TileSize
 
 	x = GAME_BOUNDS_X/2 - mod/2
-	y = SCOREZONE.MaxHeight/2 - mod/2
+	y = SCOREZONE.MinHeight/2 + mod/5
 
 	if num > 1 {
 		x -= mod * (float64(num) - 1.0)

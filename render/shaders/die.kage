@@ -4,7 +4,6 @@
 
 package main
 
-// var ZRandom float
 var Time float
 var DieScale float
 var Direction vec2
@@ -12,15 +11,11 @@ var Velocity vec2
 var DieColor vec3
 var Height float
 var ZRotation float
+var ActiveFace int // ActiveFace is correlated to the matrix index being used
+// var NumPips int // Not used if FaceLayouts dictates pips
 
 //TODO:FIXME: bool slices dont work. not a supported type when
-// assigning uniform types within reflections
-var FrontFace [9]int
-var LeftFace [9]int
-var BottomFace [9]int
-var TopFace [9]int
-var RightFace [9]int
-var BehindFace [9]int
+var FaceLayouts [6]mat3 // 0:Front, 1:Left, 2:Bottom, 3:Top, 4:Right, 5:Behind
 
 const pi = 3.141529
 
@@ -39,7 +34,6 @@ func sdRoundBox(p, b vec3, r float) float {
     return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r
 }
 
-// Rodrigues' rotation formula
 func rotate3D(p, axis vec3, angle float) vec3 {
     c := cos(angle)
     s := sin(angle)
@@ -51,178 +45,215 @@ func opSubtraction(d1, d2 float) float {
     return max(-d1, d2)
 }
 
-// sdPip subtracts a sphere (pip) from a distance field d.
 func sdPip(p vec3, scale float, d float) float {
-	return opSubtraction(sdSphere(p, scale), d)
+    return opSubtraction(sdSphere(p, scale), d)
 }
 
+// Rotation and direction logic
 func calcDirection() vec3 {
-    // if length(Velocity) < 0.001 {
-    //     return vec3(0.0, 0.0, 1.0) // Default axis when stopped
-    // }
-
-    // Only rotate around axes where there's actual velocity
     rollAxis := vec3(0.0, 0.0, 0.0)
-    
-    // If moving in X direction, rotate around Y axis
     if abs(Velocity.x) > 0.001 {
         rollAxis.y = Direction.x
     }
-    
-    // If moving in Y direction, rotate around X axis  
     if abs(Velocity.y) > 0.001 {
         rollAxis.x = -Direction.y
     }
-
     if length(rollAxis) < 0.001 {
         return vec3(0.0, 0.0, 1.0) // Fallback
     }
-    
-    rollAxis.z = normalize(rollAxis.x-rollAxis.y)
-
+    rollAxis.z = normalize(rollAxis.x-rollAxis.y) //FIXME: could be better
     return normalize(rollAxis)
 }
 
 func calcRotation() float {
     velMag := length(Velocity)
-    return -velMag * .01 * pi// Direct velocity-based rotation
+    return -velMag * 0.01 * pi // Direct velocity-based rotation
 }
 
-func pipPositions() [21]vec3 {
-    thirdScale := DieScale  * .33
-    third175 := thirdScale * 1.75
-    third2 := thirdScale * 2.0
+// --- MODIFIED FUNCTION ---
+func smartRotation(p vec3) vec3 {
+	// --- Step 1: Perform the standard physics-based roll ---
+	// This part is your original logic, which makes the die tumble
+	// continuously based on its velocity and the elapsed time.
+	totalRotation := calcRotation()
+	baseAngle := totalRotation * Time
+	throwDir := calcDirection()
+	q := rotate3D(p, throwDir, baseAngle)
 
-    // for i := 0; i < 9; i++ {
-    //     if FrontFace[i] == 1 {
 
-    //     }
-    // }
+	// Finally, apply the Z-axis spin to the corrected, rolling die.
+	zRotationInRadians := -ZRotation * 2.0 * pi
+	q = rotate3D(q, vec3(0.0, 0.0, 1.0), zRotationInRadians)
 
-    // pips := [21]vec3 {}
-    return [21]vec3{
-        // Face 1 (Z+)
-        vec3(0.0, 0.0, DieScale),
-        // Face 2 (X-)
-        vec3(-DieScale, -third175, -third2),
-        vec3(-DieScale, +third175, +third2),
-        // Face 3 (Y+)
-        vec3(+third175, +DieScale, +third2),
-        vec3(0.0, +DieScale, 0.0),
-        vec3(-third175, +DieScale, -third2),
-        // Face 4 (Y-)
-        vec3(+third175, -DieScale, -third2),
-        vec3(+third175, -DieScale, +third2),
-        vec3(-third175, -DieScale, +third2),
-        vec3(-third175, -DieScale, -third2),
-        // Face 5 (X+)
-        vec3(+DieScale, -third175, -third2),
-        vec3(+DieScale, +third175, -third2),
-        vec3(+DieScale, 0.0, 0.0),
-        vec3(+DieScale, -third175, +third2),
-        vec3(+DieScale, +third175, +third2),
-        // Face 6 (Z-)
-        vec3(-third2, -third175, -DieScale),
-        vec3(-third2, 0.0, -DieScale),
-        vec3(-third2, +third175, -DieScale),
-        vec3(+third2, -third175, -DieScale),
-        vec3(+third2, 0.0, -DieScale),
-        vec3(+third2, +third175, -DieScale),
-    }
+
+	// --- Step 2: Apply a corrective rotation for the ActiveFace ---
+	// This takes the already-rolling die from Step 1 and applies a
+	// single, static rotation to it. This ensures that the face you
+	// want to be "up" is oriented correctly towards the camera,
+	// without stopping the rolling animation itself.
+
+	// The baseline is ActiveFace 5 (Behind), which naturally faces the camera.
+	// We rotate every other face to match this orientation.
+	if ActiveFace == 0 { // Front (+Z) -> needs 180 deg rot around Y
+		q = rotate3D(q, vec3(0, 1, 0), pi)
+	} else if ActiveFace == 1 { // Left (-X) -> needs +90 deg rot around Y
+		q = rotate3D(q, vec3(0, 1, 0), pi * 0.5)
+	} else if ActiveFace == 2 { // Bottom (-Y) -> needs -90 deg rot around X
+		q = rotate3D(q, vec3(1, 0, 0), -pi * 0.5)
+	} else if ActiveFace == 3 { // Top (+Y) -> needs +90 deg rot around X
+		q = rotate3D(q, vec3(1, 0, 0), pi * 0.5)
+	} else if ActiveFace == 4 { // Right (+X) -> needs -90 deg rot around Y
+		q = rotate3D(q, vec3(0, 1, 0), -pi * 0.5)
+	}
+	// No 'else' needed: if ActiveFace is 5, no correction is applied.
+
+	return q
 }
 
-func shape(p vec3, pipPositions [21]vec3) float {
-    q := p
-    
-    // Simple rotation based ONLY on uniforms
-    totalRotation := calcRotation()
-    baseAngle := totalRotation * Time // No easing, no scaledTime bullshit
-    
-    throwDir := calcDirection()
-    q = rotate3D(q, throwDir, baseAngle)
-    // Convert ZRotation from degrees to radians for the final Z axis rotation
-    // A ZRotation uniform value of 360 will now mean a full 360-degree rotation.
-    zRotationInRadians := -ZRotation * pi * 2.0 
-    q = rotate3D(q, vec3(0.0,0.0,1.0), zRotationInRadians)
-        
-    box := sdRoundBox(q, vec3(DieScale), .25)
-    d := box
-    
-    quarterScale := DieScale * .2
+// --- Pip Slot Coordinate Calculation for a SINGLE Face ---
+// Calculates the 3D coordinates for all 9 potential pip slots for a specific face.
+// faceIndex: 0:Front, 1:Left, 2:Bottom, 3:Top, 4:Right, 5:Behind
+// Returns: [9]vec3 containing the pip centers for that face.
+func getPipSlotCoordinatesForFace(faceIndex int, dieScale float) [9]vec3 {
+    var slots [9]vec3
 
-    for i := 0; i < len(pipPositions); i++ {
-        pip := pipPositions[i]
-        d = sdPip(q-pip, quarterScale, d)
+    // User-defined scaling for pip slot placement on a face grid
+    thirdScale := dieScale * 0.33
+    pipSlotOffsetOnFace := thirdScale * 2.0 // This is your 'third2'
+
+    facePipSlots2D := [9]vec2{
+        vec2(-pipSlotOffsetOnFace,  pipSlotOffsetOnFace), vec2(0.0,  pipSlotOffsetOnFace), vec2( pipSlotOffsetOnFace,  pipSlotOffsetOnFace),
+        vec2(-pipSlotOffsetOnFace,  0.0),                  vec2(0.0,  0.0),                  vec2( pipSlotOffsetOnFace,  0.0),
+        vec2(-pipSlotOffsetOnFace, -pipSlotOffsetOnFace), vec2(0.0, -pipSlotOffsetOnFace), vec2( pipSlotOffsetOnFace, -pipSlotOffsetOnFace),
     }
-    
+
+    if (faceIndex == 0) { // Front (+Z)
+        for i := 0; i < 9; i++ {
+            slots[i] = vec3(facePipSlots2D[i].x, facePipSlots2D[i].y, dieScale)
+        }
+    } else if (faceIndex == 1) { // Left (-X)
+        for i := 0; i < 9; i++ {
+            slots[i] = vec3(-dieScale, facePipSlots2D[i].y, facePipSlots2D[i].x)
+        }
+    } else if (faceIndex == 2) { // Bottom (-Y)
+        for i := 0; i < 9; i++ {
+            slots[i] = vec3(facePipSlots2D[i].x, -dieScale, facePipSlots2D[i].y)
+        }
+    } else if (faceIndex == 3) { // Top (+Y)
+        for i := 0; i < 9; i++ {
+            slots[i] = vec3(facePipSlots2D[i].x, dieScale, -facePipSlots2D[i].y)
+        }
+    } else if (faceIndex == 4) { // Right (+X)
+        for i := 0; i < 9; i++ {
+            slots[i] = vec3(dieScale, facePipSlots2D[i].y, -facePipSlots2D[i].x)
+        }
+    } else if (faceIndex == 5) { // Behind (-Z)
+        for i := 0; i < 9; i++ {
+            slots[i] = vec3(facePipSlots2D[i].x, facePipSlots2D[i].y, -dieScale)
+        }
+    }
+    return slots
+}
+
+// --- Helper to carve pips for a single face ---
+func applyPipsSDFForFace(currentDist float, rotatedPoint vec3, layout mat3, facePipCoords [9]vec3, pipRadius float) float {
+    d := currentDist
+    q := rotatedPoint
+    for r := 0; r < 3; r++ {
+        for c := 0; c < 3; c++ {
+            if layout[c][r] > 0.5 { // mat3 is col-major
+                slotIndex := r*3 + c
+                pipCenter := facePipCoords[slotIndex]
+                d = sdPip(q - pipCenter, pipRadius, d)
+            }
+        }
+    }
     return d
 }
 
-//returns the color of pips if it hit one
-func pipColors(originalDieSurfaceColor vec3, finalHitPos vec3, pipPositions [21]vec3) vec3 {
-    // Same rotation as shape() to get q_hit in die's local space
-    totalRotation := calcRotation()
-    baseAngle := totalRotation * Time
-    throwDir := calcDirection()
-    q_hit := rotate3D(finalHitPos, throwDir, baseAngle)
-    zRotationInRadians := -ZRotation * 2.0 * pi 
-    q_hit = rotate3D(q_hit, vec3(0.0,0.0,1.0), zRotationInRadians)
+// --- Main Shape Function ---
+func shape(p vec3) float {
+    q := smartRotation(p)
+    d := sdRoundBox(q, vec3(DieScale), 0.25) // Base die shape
 
-    // Pip dimensions (must match shape function)
-    quarterScale := DieScale * .2
+    pipRadius := DieScale * 0.2 // Your 'quarterScale'
 
-    for i := 0; i < len(pipPositions); i++ {
-        pipCenter := pipPositions[i]
-        pipDist := sdSphere(q_hit - pipCenter, quarterScale)
+    // Carve pips for each face using FaceLayouts
+    for faceIdx := 0; faceIdx < 6; faceIdx++ {
+        layout := FaceLayouts[faceIdx]
+        faceCoords := getPipSlotCoordinatesForFace(faceIdx, DieScale)
+        d = applyPipsSDFForFace(d, q, layout, faceCoords, pipRadius)
+    }
 
-        // If the hit point is inside this pip's carving sphere, we are on the pip's inner surface.
-        if pipDist < 0.0 {
-            // Calculate normalized depth: 0.0 at pip's rim, 1.0 at pip's center
-            normalizedDepth := clamp(-pipDist/quarterScale, 0.0, 1.0)
+    return d
+}
 
-            // Define how much to darken the pip from rim to center.
-            // A higher power (e.g., 2.0) creates a more dramatic "scooped out" look.
-            rimBrightness := 0.7   // Brightness at the very edge of the dip (70% of surface color)
-            centerBrightness := 0.05 // Brightness at the deepest point (5% of surface color, almost black)
-            
-            // Calculate a darkening factor based on the depth.
-            darkeningFactor := mix(rimBrightness, centerBrightness, pow(normalizedDepth, 2.0))
+// --- Helper to check pip hit for a single face ---
+func getPipHitInfoForFace(rotatedPoint vec3, layout mat3, facePipCoords [9]vec3, pipRadius float) vec2 {
+    q := rotatedPoint
+    for r := 0; r < 3; r++ {
+        for c := 0; c < 3; c++ {
+            if layout[c][r] > 0.5 { // mat3 is col-major
+                slotIndex := r*3 + c
+                pipCenter := facePipCoords[slotIndex]
+                distToPipSphere := sdSphere(q - pipCenter, pipRadius)
+                if distToPipSphere < 0.0 {
+                    normalizedDepth := clamp(-distToPipSphere/pipRadius, 0.0, 1.0)
+                    return vec2(1.0, normalizedDepth) // vec2(isPip, depth)
+                }
+            }
+        }
+    }
+    return vec2(0.0, 0.0) // Not a pip on this face
+}
 
-            // Apply the darkening factor to the original surface color.
+// --- Pip Coloring Function ---
+func pipColors(originalDieSurfaceColor vec3, finalHitPos vec3) vec3 {
+    q := smartRotation(finalHitPos)
+    pipRadius := DieScale * 0.2 // Your 'quarterScale'
+    
+    var pipHitData vec2
+    var normalizedDepth float
+    rimBrightness := 0.7
+    centerBrightness := 0.05
+    var darkeningFactor float
+
+    // Check each face using FaceLayouts
+    for faceIdx := 0; faceIdx < 6; faceIdx++ {
+        layout := FaceLayouts[faceIdx]
+        faceCoords := getPipSlotCoordinatesForFace(faceIdx, DieScale)
+        pipHitData = getPipHitInfoForFace(q, layout, faceCoords, pipRadius)
+        
+        if (pipHitData.x > 0.5) { // If it's a pip on this face
+            normalizedDepth = pipHitData.y
+            darkeningFactor = mix(rimBrightness, centerBrightness, pow(normalizedDepth, 2.0))
             return originalDieSurfaceColor * darkeningFactor
         }
     }
 
-    // If no pip was hit, return the original die surface color
-    return originalDieSurfaceColor
+    return originalDieSurfaceColor // No pip hit on any face
 }
 
+// --- Fragment Shader Main ---
 func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
     uv := (srcPos * 2.0 - imageDstSize().xy) / imageDstSize().y
-
     ro := vec3(0.0, 0.0, Height - 4.0)
     rd := normalize(vec3(uv * 0.5, 1.0))
     t := 0.0
-
     var hit bool
     var finalPos vec3
 
-    pips := pipPositions()
-
     for i := 0; i < 60; i++ {
         pos := ro + rd * t
-        d := shape(pos, pips)
-
+        d := shape(pos)
         if d < 0.01 {
             hit = true
             finalPos = pos
             break
         }
-
         if t > 100.0 {
             break
         }
-
         t += d
     }
 
@@ -230,13 +261,11 @@ func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
         return vec4(0.0, 0.0, 0.0, 0.0)
     }
 
+    // Ensure t is not zero or too small to prevent black color if camera is on surface
+    // actual_t := max(t, 0.01) // Use a small epsilon for t
+
     col := DieColor
-
-	// Apply simple fog/shading to darken distant objects
-	// col *= (1.0 - clamp(t*0.05, 0.0, 0.8))
-    col = 0.5*t * col //shading
-
-    col = pipColors(col, finalPos, pips)
-
+    col = 0.5 * t * col // Basic shading using actual_t
+    col = pipColors(col, finalPos)
     return vec4(col, 1.0)
 }
