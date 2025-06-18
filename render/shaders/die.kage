@@ -61,7 +61,7 @@ func calcDirection() vec3 {
     if length(rollAxis) < 0.001 {
         return vec3(0.0, 0.0, 1.0) // Fallback
     }
-    rollAxis.z = normalize(rollAxis.x-rollAxis.y) //FIXME: could be better
+    rollAxis.z = sign(rollAxis.x - rollAxis.y)
     return normalize(rollAxis)
 }
 
