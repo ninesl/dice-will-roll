@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ninesl/dice-will-roll/dice"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
@@ -19,7 +20,8 @@ const TILE_SIZE int = 128
 type Game struct {
 	// DiceSprite *render.Sprite
 	Shaders   map[shaders.ShaderKey]*ebiten.Shader
-	Dice      []*Die
+	Dice      []*Die        // Player's dice
+	Hand      dice.HandRank // current hand rank of all held dice
 	Fixed     render.Vec2
 	Time      time.Time
 	startTime time.Time
@@ -82,8 +84,8 @@ func (g *Game) Bounds() (int, int) {
 }
 
 func main() {
-	// ebiten.SetWindowSize(1600, 900) // resolution
-	ebiten.SetWindowSize(1280, 720)
+	ebiten.SetWindowSize(1600, 900) // resolution
+	// ebiten.SetWindowSize(1280, 720)
 	ebiten.SetWindowTitle("Dice Will Roll")
 
 	game := LoadGame()

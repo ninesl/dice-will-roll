@@ -18,7 +18,7 @@ type DieRenderable struct {
 	Color     Vec3    // direct Kage values for the color of the die
 	TileSize  float64 // inside here saves size? unsure
 	Height    float64
-	ZRotation float32 // 0.0 - 1.0 uniform, finaly angle it lands on for a natural 'spin'
+	ZRotation float32 // 0.0 - 1.0 uniform, final angle it lands on for a natural 'spin'
 	// Theta        float64 // turning to the right opts.GeoM.Rotate(theta)
 	// SpinningLeft bool    // left or right when rotating
 

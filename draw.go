@@ -1,12 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"image/color"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/ninesl/dice-will-roll/dice"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
@@ -14,7 +14,7 @@ import (
 func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Clear()
 	g.refreshDEBUG()
-	DEBUGDrawFPS(screen, g.x, g.y, g.DEBUG.rolling, g.DEBUG.held)
+
 	opts := &ebiten.DrawImageOptions{}
 
 	DrawROLLZONE(screen, opts)
@@ -27,6 +27,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 
 	g.DrawDice(screen)
+
+	DEBUGDrawHandRank(screen, g.Hand)
 
 	// DEBUGDrawCenterSCOREZONE(screen, opts, float64(g.TileSize), g.DEBUG.dieImgTransparent)
 	opts.GeoM.Reset()
@@ -136,14 +138,11 @@ func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOption
 	)
 }
 
-// TODO: better abstraction than this
-func DEBUGDrawFPS(screen *ebiten.Image, x, y float64, rolling, held int) {
-	msg := fmt.Sprintf("T%0.2f F%0.2f x%4.0f y%4.0f ", ebiten.ActualTPS(), ebiten.ActualFPS(), x, y)
-	msg += fmt.Sprintf("Rolling %d Held %d", rolling, held)
+func DEBUGDrawHandRank(screen *ebiten.Image, rank dice.HandRank) {
 	op := &text.DrawOptions{}
-	// op.GeoM.Translate(0, 0)
+	op.GeoM.Translate(0, 0)
 	op.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, msg, &text.GoTextFace{
+	text.Draw(screen, rank.String(), &text.GoTextFace{
 		Source: DEBUG_FONT,
 		Size:   render.GAME_BOUNDS_X * .01,
 	}, op)

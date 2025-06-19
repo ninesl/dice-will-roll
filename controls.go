@@ -101,7 +101,6 @@ func (g *Game) Press() {
 	die := g.PickDie()
 	if die != nil {
 		g.Time = time.Now()
-		// g.Fixed = die.Vec2
 
 		// where the mouse was clicked
 		die.Fixed = render.Vec2{
