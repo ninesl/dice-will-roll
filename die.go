@@ -52,12 +52,22 @@ func SetupNewDie(dieImgSize int, color render.Vec3) *Die {
 	// var opts *ebiten.DrawTrianglesShaderOptions
 	// image.DrawTrianglesShader(vertices, indicies, shader, opts)
 
-	return &Die{
-		Die:           dice.NewDie(6),
+	values := [6]int{}
+
+	for i := range len(values) {
+		values[i] = rand.IntN(8) + 1
+	}
+
+	die := &Die{
+		// Die:           dice.NewDie(6),
+		Die:           dice.New6SidedDie(values),
 		image:         image,
 		DieRenderable: dieRenderable,
 		Mode:          ROLLING,
 	}
+	die.Roll()
+
+	return die
 }
 
 var NUM_PLAYER_DICE = 7

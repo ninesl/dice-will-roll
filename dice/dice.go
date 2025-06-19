@@ -2,6 +2,7 @@ package dice
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"strings"
 )
@@ -115,6 +116,17 @@ func (d *Die) LocationsPips() []float32 {
 	return flattenedPipLayouts
 }
 
+// gives values from 1-9 for each face
+func New6SidedDie(values [6]int) Die {
+	faces := []Face{}
+	for _, val := range values {
+		faces = append(faces, NewFace(val))
+	}
+	return Die{
+		faces: faces,
+	}
+}
+
 // Makes a blank die with each face being one more than the last, starting from 1
 func NewDie(sides int) Die {
 	faces := []Face{}
@@ -129,6 +141,10 @@ func NewDie(sides int) Die {
 }
 
 func NewFace(pips int) Face {
+	if pips < 1 || pips > MAX_PIPS {
+		log.Fatal("could not make a dieface with %d pips. Must be between 1 - %d", pips, MAX_PIPS)
+	}
+
 	facePips := []Modifier{}
 	for range pips {
 		facePips = append(facePips, ModNONE)

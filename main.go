@@ -22,7 +22,6 @@ type Game struct {
 	Shaders   map[shaders.ShaderKey]*ebiten.Shader
 	Dice      []*Die        // Player's dice
 	Hand      dice.HandRank // current hand rank of all held dice
-	Fixed     render.Vec2
 	Time      time.Time
 	startTime time.Time
 	TileSize  float64
