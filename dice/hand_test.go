@@ -184,6 +184,8 @@ func TestDetermineHandRank(t *testing.T) {
 		{"FULL_HOUSE with three and two", []int{1, 1, 1, 6, 6, 3}, 6, FULL_HOUSE},
 
 		// Seven dice
+		{"TWO_THREE_PAIR with 1 extra die", []int{3, 5, 5, 5, 1, 1, 1}, 6, TWO_THREE_OF_A_KIND},
+		{"THREE_OF_A_KIND with 1 extra die", []int{3, 3, 5, 5, 6, 6, 2}, 6, THREE_PAIR},
 		{"SEVEN_OF_A_KIND with seven identical dice", []int{4, 4, 4, 4, 4, 4, 4}, 6, SEVEN_OF_A_KIND},
 		{"SEVEN_SEVENS with all sevens", []int{7, 7, 7, 7, 7, 7, 7}, 7, SEVEN_SEVENS},
 		{"FULLEST_HOUSE with five and two", []int{3, 3, 3, 3, 3, 2, 2}, 6, FULLEST_HOUSE},

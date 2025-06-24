@@ -1,6 +1,7 @@
 package dice
 
 import (
+	"fmt"
 	"slices"
 	"sort"
 )
@@ -284,12 +285,10 @@ func checkHandOtherThanStraight(valueCount map[int]int, values []int, numDice in
 				valueCount[values[1]] == 5 ||
 				valueCount[values[2]] == 5 {
 				return FIVE_OF_A_KIND
-			} else if valueCount[values[0]] == valueCount[values[1]] ||
-				valueCount[values[1]] == valueCount[values[2]] {
-				if valueCount[values[0]] == 3 || valueCount[values[1]] == 3 { // at least 1 of these is the match
-					return TWO_THREE_OF_A_KIND
-				}
-				return THREE_PAIR
+			} else if valueCount[values[0]] == 3 && valueCount[values[1]] == 3 ||
+				valueCount[values[0]] == 3 && valueCount[values[2]] == 3 ||
+				valueCount[values[1]] == 3 && valueCount[values[2]] == 3 {
+				return TWO_THREE_OF_A_KIND
 			} else if (valueCount[values[0]] == 2 && valueCount[values[1]] == 4 ||
 				valueCount[values[1]] == 2 && valueCount[values[0]] == 4) ||
 
@@ -300,7 +299,12 @@ func checkHandOtherThanStraight(valueCount map[int]int, values []int, numDice in
 					valueCount[values[2]] == 2 && valueCount[values[0]] == 4) {
 				return CROWDED_HOUSE
 			} else {
-				return FULL_HOUSE
+				// values have to be 1, 1, 2, 2, 3, 3, 3
+				// if valueCount[0] == 2 && valueCount[1] == 2 ||
+				// 	valueCount[1] == 2 || valueCount[2] == 2 {
+
+				// }
+				return THREE_PAIR
 			}
 		}
 	case 4:
@@ -323,14 +327,22 @@ func checkHandOtherThanStraight(valueCount map[int]int, values []int, numDice in
 				return TWO_PAIR
 			}
 		case 7: // 1 1 1 1 2 3 4, 1 1 1 2 2 3 4, 1 1 2 2 3 3 4
+			fmt.Printf("%#+v\n%#+v\n", values, valueCount)
+
 			if valueCount[values[0]] == 4 ||
 				valueCount[values[1]] == 4 ||
 				valueCount[values[2]] == 4 ||
 				valueCount[values[3]] == 4 {
 				return FOUR_OF_A_KIND
-			} else if (valueCount[values[0]] == valueCount[values[1]] && valueCount[values[1]] == valueCount[values[2]]) ||
-				(valueCount[values[1]] == valueCount[values[2]] && valueCount[values[2]] == valueCount[values[3]]) {
+			} else if (valueCount[values[0]] == valueCount[values[1]] && valueCount[values[0]] == valueCount[values[2]]) || // 0 = 1 & 2
+				(valueCount[values[0]] == valueCount[values[2]] && valueCount[values[0]] == valueCount[values[3]]) || // 0 = 2 & 3
+				(valueCount[values[0]] == valueCount[values[1]] && valueCount[values[0]] == valueCount[values[3]]) || // 0 = 1 & 3
+				(valueCount[values[1]] == valueCount[values[2]] && valueCount[values[1]] == valueCount[values[3]]) { // 1 = 2 & 3
+
+				//  else if (valueCount[values[0]] == valueCount[values[1]] && valueCount[values[1]] == valueCount[values[2]]) ||
+				// 	(valueCount[values[1]] == valueCount[values[2]] && valueCount[values[2]] == valueCount[values[3]]) {
 				return THREE_PAIR
+
 			} else {
 				return FULL_HOUSE
 			}

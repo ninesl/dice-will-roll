@@ -142,7 +142,7 @@ func NewDie(sides int) Die {
 
 func NewFace(pips int) Face {
 	if pips < 1 || pips > MAX_PIPS {
-		log.Fatal("could not make a dieface with %d pips. Must be between 1 - %d", pips, MAX_PIPS)
+		log.Fatalf("could not make a dieface with %d pips. Must be between 1 - %d", pips, MAX_PIPS)
 	}
 
 	facePips := []Modifier{}
