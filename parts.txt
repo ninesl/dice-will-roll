@@ -1,3 +1,26 @@
+notes
+	shop/smith can make jewelry (rings, necklaces, etc) that give buffs. likely takes the slot of joker gems?
+	-- NOITA inspiration, crafting wands??? need to find right balance between complexity/worth doing
+
+	flow of gems
+		mine gem/get reward from mining (scoring and rolling dice)
+		gem has default/base ability (+2 gold per X, +1 to 2s, etc etc.)
+		gem can be broken down into garnets
+		gem types (shared with garnet) have toughnesses, amount of uses with jewelry and pips
+
+		gems can break? TBD. maybe only certain ones can
+
+		garnets AND gems can be modified
+			tumbling
+			polishing
+			cut into shape (cushion, pear, marquise etc)
+
+		garnets can be placed in to jewelry, certain gem types/cuts/modifications can change ability of ring
+		garnets are placed into the pips of dice
+			when garnet breaks (based off toughness) it will do a cool animation falling off
+
+		mine gems, determine which ones to sell/keep, use money to modify and buy things from rolland
+		
 LOOP
 	// keeping rolling and picking hands
 	// gameplay decisions with using pip mods
