@@ -1,7 +1,6 @@
 package dice
 
 import (
-	"fmt"
 	"slices"
 	"sort"
 )
@@ -327,8 +326,6 @@ func checkHandOtherThanStraight(valueCount map[int]int, values []int, numDice in
 				return TWO_PAIR
 			}
 		case 7: // 1 1 1 1 2 3 4, 1 1 1 2 2 3 4, 1 1 2 2 3 3 4
-			fmt.Printf("%#+v\n%#+v\n", values, valueCount)
-
 			if valueCount[values[0]] == 4 ||
 				valueCount[values[1]] == 4 ||
 				valueCount[values[2]] == 4 ||
