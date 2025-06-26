@@ -14,6 +14,13 @@ var ZRotation float
 var ActiveFace int // ActiveFace is correlated to the matrix index being used
 // var NumPips int // Not used if FaceLayouts dictates pips
 
+// 0	NONE Action = iota
+// 
+// 1	ROLLING // the die is moving around, collision checks etc.
+// 2	DRAG    // locked to mouse cursor
+// 3	HELD    // held in hand, waiting to be scored. will move to it's Fixed*/
+var Mode int // die.Mode/action, 
+
 //TODO:FIXME: bool slices dont work. not a supported type when
 var FaceLayouts [6]mat3 // 0:Front, 1:Left, 2:Bottom, 3:Top, 4:Right, 5:Behind
 
@@ -72,6 +79,7 @@ func calcRotation() float {
 
 // --- MODIFIED FUNCTION ---
 func smartRotation(p vec3) vec3 {
+
 	// --- Step 1: Perform the standard physics-based roll ---
 	// This part is your original logic, which makes the die tumble
 	// continuously based on its velocity and the elapsed time.
@@ -85,6 +93,15 @@ func smartRotation(p vec3) vec3 {
 	zRotationInRadians := -ZRotation * 2.0 * pi
 	q = rotate3D(q, vec3(0.0, 0.0, 1.0), zRotationInRadians)
 
+	if Mode == 2 { // DRAG
+		// A gentle, continuous rotation for the "HELD" state.
+		// It combines a slow spin around the Y-axis with a gentle rock
+		// on the X-axis to give a "dangling" or "floating" feel.
+		spinAngle := Time * 0.25 * 0.25
+		rockAngle := sin(Time * 0.2) * 0.25
+		q = rotate3D(q, vec3(0.0, 0.0, 1.0), spinAngle)
+		q = rotate3D(q, vec3(0.0, .8, 0.0), rockAngle)
+	}
 
 	// --- Step 2: Apply a corrective rotation for the ActiveFace ---
 	// This takes the already-rolling die from Step 1 and applies a
@@ -237,6 +254,14 @@ func pipColors(originalDieSurfaceColor vec3, finalHitPos vec3) vec3 {
 // --- Fragment Shader Main ---
 func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
     uv := (srcPos * 2.0 - imageDstSize().xy) / imageDstSize().y
+
+    // var h float
+    // if Mode == 2 {
+    //     h = Height - 3.5
+    // } else {
+    //     h = Height - 4.0
+    // }
+
     ro := vec3(0.0, 0.0, Height - 4.0)
     rd := normalize(vec3(uv * 0.5, 1.0))
     t := 0.0

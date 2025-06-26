@@ -79,6 +79,8 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 		opts.Uniforms["DieColor"] = die.Color.KageVec3()
 		opts.Uniforms["ZRotation"] = die.ZRotation
 
+		opts.Uniforms["Mode"] = int(die.Mode)
+
 		// fmt.Println(opts.Uniforms["Velocity"])
 		die.image.DrawRectShader(s, s, shader, opts)
 
