@@ -15,7 +15,7 @@ var (
 	GAME_BOUNDS_Y int
 )
 
-const TILE_SIZE int = 128
+const TILE_SIZE int = 64
 
 type Game struct {
 	// DiceSprite *render.Sprite

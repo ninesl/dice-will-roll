@@ -10,15 +10,18 @@ import (
 
 type Die struct {
 	image *ebiten.Image
+	// for when height/scale needs to change. is double the canvas of .image
+	// bigImage *ebiten.Image
 	render.DieRenderable
 	dice.Die
 	// sprite *render.Sprite
 	Mode Action // Current mode of the die, is modified thru player Controls()
+	// ImageIndex int    // current one to use. default is 0
 }
 
 func SetupNewDie(dieImgSize int, color render.Vec3) *Die {
-	directionX := float64(rand.IntN(2))
-	directionY := float64(rand.IntN(2))
+	directionX := float64(rand.IntN(2)) + 1
+	directionY := float64(rand.IntN(2)) + 1
 	if directionX == 2 {
 		directionX = -1.0
 	}
@@ -45,6 +48,7 @@ func SetupNewDie(dieImgSize int, color render.Vec3) *Die {
 		// ColorSpot: 1 * 6,
 	}
 	image := ebiten.NewImage(dieImgSize, dieImgSize)
+	// bigImage := ebiten.NewImage(dieImgSize*2, dieImgSize*2)
 
 	// // draws shader to image, the uniforms
 	// var vertices []ebiten.Vertex
@@ -55,13 +59,15 @@ func SetupNewDie(dieImgSize int, color render.Vec3) *Die {
 	values := [6]int{}
 
 	for i := range len(values) {
-		values[i] = rand.IntN(8) + 1
+		// values[i] = rand.IntN(8) + 1
+		values[i] = 9
 	}
 
 	die := &Die{
-		// Die:           dice.NewDie(6),
-		Die:           dice.New6SidedDie(values),
-		image:         image,
+		Die: dice.NewDie(6),
+		// Die:           dice.New6SidedDie(values),
+		image: image,
+		// bigImage:      bigImage,
 		DieRenderable: dieRenderable,
 		Mode:          ROLLING,
 	}
@@ -72,7 +78,7 @@ func SetupNewDie(dieImgSize int, color render.Vec3) *Die {
 
 var NUM_PLAYER_DICE = 7
 
-func SetupPlayerDice(diceSheet *render.Sprite, dieImgSize int) []*Die {
+func SetupPlayerDice(dieImgSize int) []*Die {
 	var dice []*Die
 
 	var colors = []render.Vec3{

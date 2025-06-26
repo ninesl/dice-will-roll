@@ -12,7 +12,6 @@ import (
 	_ "image/png" // for png encoder
 
 	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
@@ -59,19 +58,19 @@ func SetBounds(tileSize int) {
 func LoadGame() *Game {
 	SetFonts()
 	const tileSize = TILE_SIZE
-	diceImg := ebiten.NewImage(tileSize, tileSize)
+	// diceImg := ebiten.NewImage(tileSize, tileSize)
 
-	dieImgSize := tileSize
+	dieImgSize := tileSize * 2
 	SetBounds(dieImgSize)
 
 	render.SetZones()
 
-	diceSheet := &render.Sprite{
-		Image: diceImg,
-		// SpriteSheet: render.NewSpriteSheet(6, 7, dieImgSize),
-	}
+	// diceSheet := &render.Sprite{
+	// 	Image: diceImg,
+	// 	// SpriteSheet: render.NewSpriteSheet(6, 7, dieImgSize),
+	// }
 
-	dice := SetupPlayerDice(diceSheet, dieImgSize)
+	dice := SetupPlayerDice(dieImgSize)
 
 	g := &Game{
 		TileSize: float64(dieImgSize),
