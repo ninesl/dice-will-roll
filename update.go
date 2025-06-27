@@ -68,7 +68,6 @@ func (g *Game) UpdateDice() {
 		}
 	}
 
-	// render.HandleHeldDice(held)
 	render.HandleMovingHeldDice(held)
 
 	g.Hand = dice.DetermineHandRank(hand)

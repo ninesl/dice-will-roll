@@ -5,6 +5,7 @@ package render
 import (
 	"image"
 	"math"
+	"sort"
 )
 
 // TODO: determine if a 'uniforms' map is better than hardcoded consts
@@ -95,6 +96,10 @@ func HandleMovingHeldDice(dice []*DieRenderable) {
 		return
 	}
 
+	sort.Slice(dice, func(i, j int) bool {
+		return dice[i].Vec2.X < dice[j].Vec2.X
+	})
+
 	var x, y float64
 
 	mod := dice[0].TileSize
@@ -128,34 +133,6 @@ func HandleMovingHeldDice(dice []*DieRenderable) {
 
 		die.Vec2.X += die.Velocity.X
 		die.Vec2.Y += die.Velocity.Y
-	}
-}
-
-func HandleHeldDice(dice []*DieRenderable) {
-	num := len(dice)
-	if num == 0 {
-		return
-	}
-
-	var x, y float64
-
-	mod := dice[0].TileSize
-
-	x = GAME_BOUNDS_X/2 - mod/2
-	y = SCOREZONE.MaxHeight/2 - mod/2
-
-	if num > 1 {
-		x -= mod * (float64(num) - 1.0)
-	}
-
-	// go from right to left? i := len(dice)?
-	for i := 0; i < num; i++ {
-		die := dice[i]
-
-		die.Vec2.X = x
-		die.Vec2.Y = y
-
-		x += mod * 2
 	}
 }
 
