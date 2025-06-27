@@ -8,18 +8,16 @@ import (
 	"github.com/ninesl/dice-will-roll/render"
 )
 
+var NUM_PLAYER_DICE = 7
+
 type Die struct {
 	image *ebiten.Image
-	// for when height/scale needs to change. is double the canvas of .image
-	// bigImage *ebiten.Image
 	render.DieRenderable
 	dice.Die
-	// sprite *render.Sprite
 	Mode Action // Current mode of the die, is modified thru player Controls()
-	// ImageIndex int    // current one to use. default is 0
 }
 
-func SetupNewDie(dieImgSize int, color render.Vec3) *Die {
+func SetupNewDie(color render.Vec3) *Die {
 	directionX := float64(rand.IntN(2)) + 1
 	directionY := float64(rand.IntN(2)) + 1
 	if directionX == 2 {
@@ -29,12 +27,12 @@ func SetupNewDie(dieImgSize int, color render.Vec3) *Die {
 		directionY = -1.0
 	}
 
-	tileSize := float64(dieImgSize)
-
+	// random position
 	pos := render.Vec2{
-		X: render.ROLLZONE.MinWidth + tileSize*float64(rand.IntN(6))*2.0,
-		Y: render.ROLLZONE.MaxHeight/2 - tileSize*0.5,
+		X: render.ROLLZONE.MinWidth + TileSize*float64(rand.IntN(6))*2.0,
+		Y: render.ROLLZONE.MaxHeight/2 - render.HalfTileSize,
 	}
+
 	dieRenderable := render.DieRenderable{
 		Fixed: pos,
 		Vec2:  pos,
@@ -43,31 +41,22 @@ func SetupNewDie(dieImgSize int, color render.Vec3) *Die {
 			Y: (rand.Float64()*40 + 20),
 		},
 		ZRotation: rand.Float32(),
-		TileSize:  float64(dieImgSize),
 		Color:     color,
 		// ColorSpot: 1 * 6,
 	}
-	image := ebiten.NewImage(dieImgSize, dieImgSize)
-	// bigImage := ebiten.NewImage(dieImgSize*2, dieImgSize*2)
+	image := ebiten.NewImage(TILE_SIZE, TILE_SIZE)
 
-	// // draws shader to image, the uniforms
-	// var vertices []ebiten.Vertex
-	// var indicies []uint16
-	// var opts *ebiten.DrawTrianglesShaderOptions
-	// image.DrawTrianglesShader(vertices, indicies, shader, opts)
-
-	values := [6]int{}
-
-	for i := range len(values) {
-		// values[i] = rand.IntN(8) + 1
-		values[i] = 9
-	}
+	// set pips randomly 1-9
+	// values := [6]int{}
+	// for i := range len(values) {
+	// 	// values[i] = rand.IntN(8) + 1
+	// 	values[i] = 9
+	// }
 
 	die := &Die{
 		Die: dice.NewDie(6),
 		// Die:           dice.New6SidedDie(values),
-		image: image,
-		// bigImage:      bigImage,
+		image:         image,
 		DieRenderable: dieRenderable,
 		Mode:          ROLLING,
 	}
@@ -76,9 +65,8 @@ func SetupNewDie(dieImgSize int, color render.Vec3) *Die {
 	return die
 }
 
-var NUM_PLAYER_DICE = 7
-
-func SetupPlayerDice(dieImgSize int) []*Die {
+// TODO: numPlayerDice is a placeholder for future impl currently controlled by NUM_PLAYER_DICE
+func SetupPlayerDice(numPlayerDice int) []*Die {
 	var dice []*Die
 
 	var colors = []render.Vec3{
@@ -93,12 +81,8 @@ func SetupPlayerDice(dieImgSize int) []*Die {
 
 	NUM_PLAYER_DICE = len(colors)
 
-	// for i := range colors {
-	// 	fmt.Printf("%#v\n", colors[i])
-	// }
-
 	for i := range NUM_PLAYER_DICE { // range NUM_PLAYER_DICE {
-		dice = append(dice, SetupNewDie(dieImgSize, colors[i]))
+		dice = append(dice, SetupNewDie(colors[i]))
 	}
 
 	return dice
@@ -118,10 +102,8 @@ func (d *Die) Roll() {
 		dir := render.Direction(rand.IntN(2) + render.UPLEFT) // random direction
 		direction := render.DirectionMap[dir]
 
-		// d.Theta += rand.Float64() * direction.X
-
-		d.Velocity.X = d.TileSize * rand.Float64() * direction.X
-		d.Velocity.Y = d.TileSize * rand.Float64() * direction.Y
+		d.Velocity.X = TileSize * rand.Float64() * direction.X
+		d.Velocity.Y = TileSize * rand.Float64() * direction.Y
 		d.Direction = direction
 
 		d.ZRotation = rand.Float32()

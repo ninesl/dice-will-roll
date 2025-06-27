@@ -6,6 +6,18 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
+// assigned during main init()
+var (
+	GAME_BOUNDS_X float64
+	GAME_BOUNDS_Y float64
+
+	TileSize     float64
+	HalfTileSize float64
+)
+
+// generally used to make a die move into a direction.
+//
+// see
 type Direction uint8
 
 const (
@@ -24,6 +36,9 @@ var (
 	XOffset float64
 	// Usage: y to subtract when something is following cusor
 	YOffset float64
+
+	// used to force a direction
+	//
 	// Usage: DirectionMap[Direction].X * math.Abs(renderable.Velocity.X)
 	DirectionMap = map[Direction]Vec2{
 		UP:        Vec2{X: 0, Y: -1},
@@ -46,6 +61,7 @@ type Vec3 struct {
 	R, G, B float32
 }
 
+// makes it 0.0 - 1.0 for Kage
 func normalize(v int) float32 {
 	return float32(v) / 255.0
 }

@@ -7,12 +7,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
-var (
-	GAME_BOUNDS_X float64
-	GAME_BOUNDS_Y float64
-)
-
-// A zone is where the cursor is
+// A zone contains the bounds of an arbitrary defined area on the screen
 //
 // zones specific implementation is specific to what it is, see parts.txt
 //
@@ -33,13 +28,13 @@ type Zone struct {
 func (z *Zone) ContainsDie(die *DieRenderable) bool {
 	fmt.Sprintln("%+v\n%+v", z, die.Vec2)
 
-	right := die.Vec2.X+die.TileSize > z.MinWidth
+	right := die.Vec2.X+TileSize > z.MinWidth
 	left := die.Vec2.X < z.MaxWidth
 
 	xBounds := (right || left)
 
 	top := die.Vec2.Y < z.MaxHeight
-	bottom := die.Vec2.Y+die.TileSize > z.MinHeight
+	bottom := die.Vec2.Y+TileSize > z.MinHeight
 
 	if top || bottom && xBounds {
 		return true
@@ -49,26 +44,30 @@ func (z *Zone) ContainsDie(die *DieRenderable) bool {
 }
 
 type ZoneRenderable struct {
-	image *ebiten.Image
+	Image *ebiten.Image
 	Zone
 }
 
-func (z *ZoneRenderable) Update() {
-}
+// func (z *ZoneRenderable) Update() {
+// }
 
-func (z *ZoneRenderable) Sprite() *ebiten.Image {
-	return z.image
-}
+// func (z *ZoneRenderable) Sprite() *ebiten.Image {
+// 	return z.image
+// }
 
 func (z *ZoneRenderable) Position() Vec2 {
 	return Vec2{X: z.MinWidth, Y: z.MinHeight}
 }
 
 var (
-	ROLLZONE      ZoneRenderable
-	SCOREZONE     ZoneRenderable
+	// bounds of where the dice will roll
+	ROLLZONE ZoneRenderable
+	// where a die is when HELD
+	SCOREZONE ZoneRenderable
+	// small box in the middle of the screen
 	SmallRollZone ZoneRenderable
-	BigRollZone   ZoneRenderable
+	// larger area
+	BigRollZone ZoneRenderable
 )
 
 func SetZones() {
@@ -82,7 +81,7 @@ func SetZones() {
 			MinHeight: 0, // minHeight,
 			MaxHeight: GAME_BOUNDS_Y,
 		},
-		image: CreateImage(
+		Image: CreateImage(
 			int((GAME_BOUNDS_X)),
 			int((GAME_BOUNDS_Y /* - minHeight*/)),
 			color.RGBA{R: 123, G: 123, B: 123, A: 128},
@@ -97,7 +96,7 @@ func SetZones() {
 			// MinHeight: 0,
 			MaxHeight: GAME_BOUNDS_Y - minHeight,
 		},
-		image: CreateImage(
+		Image: CreateImage(
 			int(GAME_BOUNDS_X-minWidth-minWidth),
 			int(GAME_BOUNDS_Y-minHeight-minHeight),
 			// int((GAME_BOUNDS_Y-minHeight)-minHeight),
@@ -116,7 +115,7 @@ func SetZones() {
 			MaxHeight: GAME_BOUNDS_Y / 5,
 			// MaxHeight: SmallRollZone.MinHeight,
 		},
-		image: CreateImage(
+		Image: CreateImage(
 			int(GAME_BOUNDS_X),
 			int(minHeight),
 			// int(SmallRollZone.MinHeight),

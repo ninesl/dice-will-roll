@@ -17,6 +17,8 @@ func DEBUGTitleFPS(x, y float64, rolling, held int) {
 
 // interface impl
 func (g *Game) Update() error {
+	g.UpdateCusor()
+
 	DEBUGTitleFPS(g.x, g.y, g.DEBUG.rolling, g.DEBUG.held)
 
 	action := g.Controls()
@@ -27,29 +29,22 @@ func (g *Game) Update() error {
 	return nil
 }
 
-// does keeping this in the struct improve performance/cycles?
-//
-// Determine's rendering logic/move for dice
-//
-// Determine's held
 func (g *Game) UpdateDice() {
-	// Unsure if this is a good idea,probably wasting CPU cycles
-	// maybe a pointer to this during loading just to access it?
-	// But I'm not a fan of that abstraction it'd be hard to keep track of
-	var rolling []*render.DieRenderable
-	var held []*render.DieRenderable
-	var moving []*render.DieRenderable
-	var hand []dice.Die
+	var (
+		rolling []*render.DieRenderable
+		held    []*render.DieRenderable
+		moving  []*render.DieRenderable
+		hand    []dice.Die
+	)
 
 	for i := 0; i < len(g.Dice); i++ {
 		d := g.Dice[i]
 		die := &d.DieRenderable
 
+		// when logic for a d.Mode gets too complex put it in render/
 		if d.Mode == ROLLING {
-
 			d.Velocity.X *= render.BounceFactor
 			d.Velocity.Y *= render.BounceFactor
-
 			d.Vec2.X += d.Velocity.X
 			d.Vec2.Y += d.Velocity.Y
 
@@ -57,23 +52,31 @@ func (g *Game) UpdateDice() {
 		} else if d.Mode == DRAG {
 			d.Velocity.X = 0.0
 			d.Velocity.Y = 0.0
-			moveX := g.x - render.XOffset
-			moveY := g.y - render.YOffset
-			d.Vec2.X = moveX
-			d.Vec2.Y = moveY
+			d.Vec2.X = g.x - render.XOffset
+			d.Vec2.Y = g.y - render.YOffset
 			moving = append(moving, die)
 		} else if d.Mode == HELD {
 			hand = append(hand, d.Die)
 			held = append(held, die)
 		}
 	}
+	g.Hand = dice.DetermineHandRank(hand) // better to collect here than a loop somewhere else
 
 	render.HandleMovingHeldDice(held)
-
-	g.Hand = dice.DetermineHandRank(hand)
 
 	moving = append(moving, rolling...)
 	render.HandleDiceCollisions(moving)
 	render.BounceAndClamp(rolling)
 
+}
+
+// always is called at the beginning of the update loop
+func (g *Game) UpdateCusor() {
+	x, y := ebiten.CursorPosition()
+	g.x = float64(x)
+	g.y = float64(y)
+}
+
+func (g *Game) cursorWithin(zone render.ZoneRenderable) bool {
+	return g.x > zone.MinWidth && g.x < zone.MaxWidth && g.y > zone.MinHeight && g.y < zone.MaxHeight
 }

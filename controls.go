@@ -12,8 +12,6 @@ import (
 //
 // input for the controller scheme? TODO:FIXME: idk if this is final
 func (g *Game) Controls() Action {
-	g.UpdateCusor()
-
 	var action Action = ROLLING // the animation of rolling
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 		action = ROLL
@@ -52,8 +50,8 @@ func (g *Game) PickDie() *Die {
 	// the last one rendered is on top
 	for i := len(g.Dice) - 1; i >= 0; i -= 1 {
 		die := g.Dice[i]
-		withinX := x > die.Vec2.X && x < die.Vec2.X+die.TileSize
-		withinY := y > die.Vec2.Y && y < die.Vec2.Y+die.TileSize
+		withinX := x > die.Vec2.X && x < die.Vec2.X+TileSize
+		withinY := y > die.Vec2.Y && y < die.Vec2.Y+TileSize
 
 		if withinX && withinY {
 			render.XOffset = x - die.Vec2.X

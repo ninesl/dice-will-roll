@@ -93,7 +93,7 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 func DrawSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
 	opts.GeoM.Translate(render.SCOREZONE.MinWidth, render.SCOREZONE.MinHeight)
 	screen.DrawImage(
-		render.SCOREZONE.Sprite(),
+		render.SCOREZONE.Image,
 		opts,
 	)
 	opts.GeoM.Reset()
@@ -102,7 +102,7 @@ func DrawSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
 func DrawROLLZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
 	opts.GeoM.Translate(render.ROLLZONE.MinWidth, render.ROLLZONE.MinHeight)
 	screen.DrawImage(
-		render.ROLLZONE.Sprite(),
+		render.ROLLZONE.Image,
 		opts,
 	)
 	opts.GeoM.Reset()
