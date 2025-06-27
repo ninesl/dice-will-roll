@@ -115,8 +115,7 @@ func DrawROLLZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
 //
 
 type DEBUG struct {
-	dieImgTransparent *ebiten.Image
-	rolling, held     int
+	rolling, held int
 }
 
 func (g *Game) refreshDEBUG() {
