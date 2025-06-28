@@ -66,7 +66,8 @@ func SetupNewDie(color render.Vec3) *Die {
 }
 
 // TODO: numPlayerDice is a placeholder for future impl currently controlled by NUM_PLAYER_DICE
-func SetupPlayerDice(numPlayerDice int) []*Die {
+// func SetupPlayerDice(numPlayerDice int) []*Die {
+func SetupPlayerDice() []*Die {
 	var dice []*Die
 
 	var colors = []render.Vec3{

@@ -7,6 +7,63 @@ import (
 
 // This pkg is used to determine hand outcome from die.Roll().Value()
 
+var (
+	//TODO:FIXME: could be a slice
+	//TODO: maybe will need player specific mult as it will change thru a run?
+	handRankMult = map[HandRank]float32{
+		NO_HAND:             0,
+		HIGH_DIE:            1,
+		ONE_PAIR:            1,
+		SNAKE_EYES:          2,
+		TWO_PAIR:            3,
+		THREE_OF_A_KIND:     2,
+		STRAIGHT_SMALL:      5,
+		STRAIGHT_LARGE:      5.5,
+		FULL_HOUSE:          5,
+		FOUR_OF_A_KIND:      5,
+		FIVE_OF_A_KIND:      7.5,
+		THREE_PAIR:          7.5,
+		CROWDED_HOUSE:       10,
+		SIX_OF_A_KIND:       10,
+		STRAIGHT_LARGER:     12.5,
+		TWO_THREE_OF_A_KIND: 10,
+		OVERPOPULATED_HOUSE: 10,
+		STRAIGHT_LARGEST:    15,
+		FULLEST_HOUSE:       15,
+		SEVEN_OF_A_KIND:     17.5,
+		SEVEN_SEVENS:        77,
+		STRAIGHT_MAX:        25,
+		UNKNOWN_HAND:        -1,
+	}
+
+	//TODO:FIXME: could be a slice, iota matches index
+	handRankStringMap = map[HandRank]string{
+		NO_HAND:             "No Hand",
+		HIGH_DIE:            "High Die",
+		ONE_PAIR:            "One Pair",
+		SNAKE_EYES:          "Snake Eyes",
+		TWO_PAIR:            "Two Pair",
+		THREE_OF_A_KIND:     "Three of a Kind",
+		STRAIGHT_SMALL:      "Small Straight",
+		STRAIGHT_LARGE:      "Large Straight",
+		FULL_HOUSE:          "Full House",
+		FOUR_OF_A_KIND:      "Four of a Kind",
+		FIVE_OF_A_KIND:      "Five of a Kind",
+		THREE_PAIR:          "Three Pair",
+		CROWDED_HOUSE:       "Crowded House",
+		SIX_OF_A_KIND:       "Six of a Kind",
+		STRAIGHT_LARGER:     "Large-r Straight",
+		TWO_THREE_OF_A_KIND: "Three's a Crowd",
+		OVERPOPULATED_HOUSE: "Overpopulated House",
+		STRAIGHT_LARGEST:    "Ultra Straight",
+		FULLEST_HOUSE:       "Fire Code Violation",
+		SEVEN_OF_A_KIND:     "Seven of a Kind",
+		SEVEN_SEVENS:        "Lucky Sevens",
+		STRAIGHT_MAX:        "MEGA Straight",
+		UNKNOWN_HAND:        "UNKNOWN HAND (shouldn't see this)",
+	}
+)
+
 // HandRank is the type of hand played, Straight, Full House, Five of a kind, etc.
 //
 // Use .String() to get the name of the hand
@@ -63,6 +120,15 @@ const (
 	// other
 	UNKNOWN_HAND
 )
+
+// how much the rank multiplies to the total value of the hand
+func (h *HandRank) Multiplier() float32 {
+	return handRankMult[*h]
+}
+
+func (h *HandRank) String() string {
+	return handRankStringMap[*h]
+}
 
 // could be modified by gems?
 var (
@@ -498,36 +564,4 @@ func bestValues(dice []Die, x int) []Die {
 	}
 
 	return bestValues
-}
-
-var (
-	handRankStringMap = map[HandRank]string{
-		UNKNOWN_HAND:        "UNKNOWN HAND (shouldn't see this)",
-		NO_HAND:             "No Hand",
-		HIGH_DIE:            "High Die",
-		ONE_PAIR:            "One Pair",
-		SNAKE_EYES:          "Snake Eyes",
-		TWO_PAIR:            "Two Pair",
-		THREE_OF_A_KIND:     "Three of a Kind",
-		STRAIGHT_SMALL:      "Small Straight",
-		STRAIGHT_LARGE:      "Large Straight",
-		FULL_HOUSE:          "Full House",
-		FOUR_OF_A_KIND:      "Four of a Kind",
-		FIVE_OF_A_KIND:      "Five of a Kind",
-		THREE_PAIR:          "Three Pair",
-		CROWDED_HOUSE:       "Crowded House",
-		SIX_OF_A_KIND:       "Six of a Kind",
-		STRAIGHT_LARGER:     "Large-r Straight",
-		TWO_THREE_OF_A_KIND: "Three's a Crowd",
-		OVERPOPULATED_HOUSE: "Overpopulated House",
-		STRAIGHT_LARGEST:    "Ultra Straight",
-		FULLEST_HOUSE:       "Fire Code Violation",
-		SEVEN_OF_A_KIND:     "Seven of a Kind",
-		SEVEN_SEVENS:        "Lucky Sevens",
-		STRAIGHT_MAX:        "MEGA Straight",
-	}
-)
-
-func (h *HandRank) String() string {
-	return handRankStringMap[*h]
 }

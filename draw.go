@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image/color"
 	"time"
 
@@ -28,7 +29,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	g.DrawDice(screen)
 
-	DEBUGDrawHandRank(screen, g.Hand)
+	DEBUGDrawHandRank(screen, g.Hand, g.ActiveLevel.Rocks)
 
 	// DEBUGDrawCenterSCOREZONE(screen, opts, float64(g.TileSize), g.DEBUG.dieImgTransparent)
 	opts.GeoM.Reset()
@@ -139,12 +140,13 @@ func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOption
 	)
 }
 
-func DEBUGDrawHandRank(screen *ebiten.Image, rank dice.HandRank) {
+func DEBUGDrawHandRank(screen *ebiten.Image, rank dice.HandRank, currentRocks int) {
 	op := &text.DrawOptions{}
 	op.GeoM.Translate(0, 0)
 	op.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, rank.String(), &text.GoTextFace{
+	msg := fmt.Sprintf("%-4d rocks : %s %.2fx", currentRocks, rank.String(), rank.Multiplier())
+	text.Draw(screen, msg, &text.GoTextFace{
 		Source: DEBUG_FONT,
-		Size:   render.GAME_BOUNDS_X * .01,
+		Size:   render.GAME_BOUNDS_X * .015,
 	}, op)
 }
