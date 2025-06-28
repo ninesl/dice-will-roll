@@ -38,7 +38,7 @@ var (
 )
 
 const (
-	TILE_SIZE int = 64
+	TILE_SIZE int = 128
 
 	// tile size is always the width and height of the die image
 	TileSize float64 = float64(TILE_SIZE)
@@ -53,11 +53,12 @@ func init() {
 }
 
 type Game struct {
-	Shaders   map[shaders.ShaderKey]*ebiten.Shader
-	Dice      []*Die        // Player's dice
-	Hand      dice.HandRank // current hand rank of all held dice
-	Time      time.Time
-	startTime time.Time
+	Shaders     map[shaders.ShaderKey]*ebiten.Shader
+	Dice        []*Die        // Player's dice
+	Hand        dice.HandRank // current hand rank of all held dice
+	Time        time.Time
+	startTime   time.Time
+	ActiveLevel *Level // keeping track of rocks
 	// is updated with UpdateCursor() in update loop
 	x, y  float64 // the x/y coordinates of the cursor
 	DEBUG DEBUG
@@ -95,15 +96,16 @@ func SetFonts() {
 func LoadGame() *Game {
 	SetFonts()
 
-	dieImgSize := TILE_SIZE * 2
+	// dieImgSize := TILE_SIZE * 2
 	render.SetZones()
 
-	dice := SetupPlayerDice(dieImgSize)
+	dice := SetupPlayerDice()
 
 	g := &Game{
-		Dice:      dice,
-		Shaders:   shaders.LoadShaders(),
-		startTime: time.Now(),
+		Dice:        dice,
+		Shaders:     shaders.LoadShaders(),
+		startTime:   time.Now(),
+		ActiveLevel: NewLevel(100),
 	}
 
 	// g.DEBUG.dieImgTransparent = render.CreateImage(dieImgSize, dieImgSize, color.RGBA{56, 56, 56, 100})
