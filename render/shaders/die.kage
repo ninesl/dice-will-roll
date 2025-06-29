@@ -12,6 +12,8 @@ var DieColor vec3
 var Height float
 var ZRotation float
 var ActiveFace int // ActiveFace is correlated to the matrix index being used
+
+var HoveringSpeedUp int
 // var NumPips int // Not used if FaceLayouts dictates pips
 
 // 0	NONE Action = iota
@@ -97,8 +99,19 @@ func smartRotation(p vec3) vec3 {
 		// A gentle, continuous rotation for the "HELD" state.
 		// It combines a slow spin around the Y-axis with a gentle rock
 		// on the X-axis to give a "dangling" or "floating" feel.
-		spinAngle := Time * 0.25 * 0.25
-		rockAngle := sin(Time * 0.2) * 0.25
+		spinSpeed := 0.25 * 0.25
+		rockSpeed := 0.2
+		rockAmplitude := 0.25
+
+		if HoveringSpeedUp == 1 {
+			// When hovering over score zone, speed up the animation to signal interactability.
+			spinSpeed *= -6.0
+			rockSpeed *= -3.0
+		}
+
+		spinAngle := Time * spinSpeed
+		rockAngle := sin(Time * rockSpeed) * rockAmplitude
+
 		q = rotate3D(q, vec3(0.0, 0.0, 1.0), spinAngle)
 		q = rotate3D(q, vec3(0.0, .8, 0.0), rockAngle)
 	}

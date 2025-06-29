@@ -95,23 +95,29 @@ func (g *Game) ControlAction(action Action) {
 	}
 }
 
+// when a die gets clicked on for the first time
+//
+// turn's that Die's mode to DRAG
 func (g *Game) Press() {
 	die := g.PickDie()
 	if die != nil {
-		g.Time = time.Now()
+
+		// g.Time = time.Now()
 
 		// where the mouse was clicked
-		die.Fixed = render.Vec2{
-			X: g.x,
-			Y: g.y,
-		} // set the fixed position to the current position
+		// die.Fixed = render.Vec2{
+		// 	X: g.x,
+		// 	Y: g.y,
+		// } // set the fixed position to the current position
 		die.Mode = DRAG
+		// die.Modifier = .25 // for speeding up if needed
 	}
 	// if g.cursorWithin(render.ROLLZONE) {
 	// 	// render.Zones
 	// }
 }
 
+// lets go of the die. contextually
 func (g *Game) Select() {
 	var d *Die
 	for _, die := range g.Dice {

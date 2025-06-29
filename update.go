@@ -43,6 +43,10 @@ func (g *Game) UpdateDice() {
 
 		// when logic for a d.Mode gets too complex put it in render/
 		if d.Mode == ROLLING {
+			// Smoothly interpolate current velocity towards the target velocity
+			// d.Velocity.X += (d.TargetVelocity.X - d.Velocity.X) * render.VelocityInterpolationFactor
+			// d.Velocity.Y += (d.TargetVelocity.Y - d.Velocity.Y) * render.VelocityInterpolationFactor
+
 			d.Velocity.X *= render.BounceFactor
 			d.Velocity.Y *= render.BounceFactor
 			d.Vec2.X += d.Velocity.X
@@ -50,10 +54,15 @@ func (g *Game) UpdateDice() {
 
 			rolling = append(rolling, die)
 		} else if d.Mode == DRAG {
-			d.Velocity.X = 0.0
-			d.Velocity.Y = 0.0
 			d.Vec2.X = g.x - render.XOffset
 			d.Vec2.Y = g.y - render.YOffset
+			d.Velocity.X *= render.BounceFactor
+			d.Velocity.Y *= render.BounceFactor
+			// d.ZRotation = float32(rand.Intn(3)) / 10
+			// d.ZRotation = float32(math.Min(float64(d.ZRotation), 5.0))
+
+			// d.ZRotation = 0
+
 			moving = append(moving, die)
 		} else if d.Mode == HELD {
 			hand = append(hand, d.Die)

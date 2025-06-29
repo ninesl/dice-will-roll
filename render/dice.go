@@ -23,14 +23,14 @@ type DieRenderable struct {
 	Fixed     Vec2 // specific coordinates
 	Direction Vec2 // vec2 representation of direction the die is traveling. used in uniforms
 	Color     Vec3 // direct Kage values for the color of the die
-	Height    float64
+	// Modifier  float32 // used for various things
 	ZRotation float32 // 0.0 - 1.0 uniform, final angle it lands on for a natural 'spin'
 	// Theta        float64 // turning to the right opts.GeoM.Rotate(theta)
 	// SpinningLeft bool    // left or right when rotating
 
 	// ColorSpot    int // base color for spritesheet
 	// IndexOnSheet int // corresponds to the Xth tile on the spritesheet
-	Colliding bool // flag for collisions
+	Colliding bool // flag for collisions, set to true if a collision occurs in a frame
 }
 
 // could be a persistent rect that gets it's position updated
@@ -43,10 +43,10 @@ func (d *DieRenderable) Rect() image.Rectangle {
 	// This makes the total width and height smaller by 10% of TileSize
 	insetAmount := TileSize * 0.15
 
-	minX := int(math.Round(d.Vec2.X + insetAmount))
-	minY := int(math.Round(d.Vec2.Y + insetAmount))
-	maxX := int(math.Round(d.Vec2.X + TileSize - insetAmount))
-	maxY := int(math.Round(d.Vec2.Y + TileSize - insetAmount))
+	minX := int(d.Vec2.X + insetAmount)
+	minY := int(d.Vec2.Y + insetAmount)
+	maxX := int(d.Vec2.X + TileSize - insetAmount)
+	maxY := int(d.Vec2.Y + TileSize - insetAmount)
 
 	// Ensure min is not greater than max, which can happen if TileSize is very small or insetAmount is too large
 	if minX > maxX {
@@ -159,94 +159,106 @@ func HandleDiceCollisions(dice []*DieRenderable) {
 }
 
 func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
+	// --- 2D Elastic Collision Resolution ---
+
 	// Calculate centers of the dice
-	// Assuming Vec2 is top-left corner and TileSize is width/height
 	c1X := die1.Vec2.X + HalfTileSize
 	c1Y := die1.Vec2.Y + HalfTileSize
 	c2X := die2.Vec2.X + HalfTileSize
 	c2Y := die2.Vec2.Y + HalfTileSize
 
-	// Calculate distance between centers
-	distCX := c1X - c2X
-	distCY := c1Y - c2Y
+	// Calculate distance and collision normal vector
+	collNormalX := c1X - c2X
+	collNormalY := c1Y - c2Y
+	distSq := collNormalX*collNormalX + collNormalY*collNormalY
 
-	// Calculate minimum non-overlapping distance (sum of half-sizes)
-	// This assumes dice have the same TileSize TODO: if needed: use die1.TileSize/2 + die2.TileSize/2
-	minDist := TileSize
+	// Check if they are actually overlapping
+	if distSq < TileSize*TileSize {
+		dist := math.Sqrt(distSq)
 
-	// Calculate overlap on each axis
-	overlapX := minDist - math.Abs(distCX)
-	overlapY := minDist - math.Abs(distCY)
-
-	// Resolve collision based on the axis of minimum penetration
-	if overlapX > 0 && overlapY > 0 { // Check if they are actually overlapping
-		// Store original velocities for clarity
-		v1x, v1y := die1.Velocity.X, die1.Velocity.Y
-		v2x, v2y := die2.Velocity.X, die2.Velocity.Y
-
-		//TODO: FIXME: get rid of this e shit?
-		if overlapX < overlapY {
-			// Horizontal collision
-			// 1D collision formulas for equal mass:
-			// v1_new = (v1*(1-e) + v2*(1+e)) / 2
-			// v2_new = (v1*(1+e) + v2*(1-e)) / 2
-			new_v1x := (v1x + v2x) / 2.0
-			new_v2x := (v1x + v2x) / 2.0
-
-			die1.Velocity.X = new_v1x
-			die2.Velocity.X = new_v2x
-
-			// Positional correction to resolve overlap
-			// Move each die by half the overlap
-			correction := overlapX / 2.0
-			if distCX > 0 { // die1 is to the right of die2
-				die1.Vec2.X += correction
-				die2.Vec2.X -= correction
-			} else { // die1 is to the left of die2 (or exactly centered)
-				die1.Vec2.X -= correction
-				die2.Vec2.X += correction
-			}
-
-		} else {
-			// Vertical collision
-			// new_v1y := (v1y*(1-e) + v2y*(1+e)) / 2.0
-			// new_v2y := (v1y*(1+e) + v2y*(1-e)) / 2.0
-			new_v1y := (v1y + v2y) / 2.0
-			new_v2y := (v1y + v2y) / 2.0
-
-			die1.Velocity.Y = new_v1y
-			die2.Velocity.Y = new_v2y
-
-			// Positional correction
-			correction := overlapY / 2.0
-			if distCY > 0 { // die1 is below die2 (Y typically increases downwards)
-				die1.Vec2.Y += correction
-				die2.Vec2.Y -= correction
-			} else { // die1 is above die2 (or exactly centered)
-				die1.Vec2.Y -= correction
-				die2.Vec2.Y += correction
-			}
+		// Avoid division by zero if dice are perfectly on top of each other
+		if dist == 0 {
+			// Apply a small random separation
+			die1.Vec2.X += 0.1
+			die1.Vec2.Y += 0.1
+			return
 		}
+
+		// --- Positional Correction ---
+		// Move dice apart so they no longer overlap
+		overlap := (TileSize - dist) / 2.0
+		correctionX := (collNormalX / dist) * overlap
+		correctionY := (collNormalY / dist) * overlap
+		die1.Vec2.X += correctionX
+		die1.Vec2.Y += correctionY
+		die2.Vec2.X -= correctionX
+		die2.Vec2.Y -= correctionY
+
+		// --- Velocity Calculation ---
+		// 1. Find the unit normal and unit tangent vectors
+		unitNormalX := collNormalX / dist
+		unitNormalY := collNormalY / dist
+		unitTangentX := -unitNormalY
+		unitTangentY := unitNormalX
+
+		// 2. Project the velocity of each die onto the normal and tangent vectors
+		v1n := unitNormalX*die1.Velocity.X + unitNormalY*die1.Velocity.Y
+		v1t := unitTangentX*die1.Velocity.X + unitTangentY*die1.Velocity.Y
+		v2n := unitNormalX*die2.Velocity.X + unitNormalY*die2.Velocity.Y
+		v2t := unitTangentX*die2.Velocity.X + unitTangentY*die2.Velocity.Y
+
+		// 3. The tangent velocities remain the same. Swap the normal velocities.
+		// This is the core of the elastic collision calculation.
+		newV1n := v2n
+		newV2n := v1n
+
+		// 4. Convert the scalar normal and tangent velocities back into vectors
+		v1nVecX := newV1n * unitNormalX
+		v1nVecY := newV1n * unitNormalY
+		v1tVecX := v1t * unitTangentX
+		v1tVecY := v1t * unitTangentY
+
+		v2nVecX := newV2n * unitNormalX
+		v2nVecY := newV2n * unitNormalY
+		v2tVecX := v2t * unitTangentX
+		v2tVecY := v2t * unitTangentY
+
+		// 5. Sum the normal and tangent vectors and apply bounce factor for energy loss
+		die1.Velocity.X = (v1nVecX + v1tVecX) * BounceFactor
+		die1.Velocity.Y = (v1nVecY + v1tVecY) * BounceFactor
+		die2.Velocity.X = (v2nVecX + v2tVecX) * BounceFactor
+		die2.Velocity.Y = (v2nVecY + v2tVecY) * BounceFactor
 	}
 }
 
 func BounceAndClamp(dice []*DieRenderable) {
 	for _, die := range dice {
-		if die.Vec2.X+TileSize >= ROLLZONE.MaxWidth {
-			die.Vec2.X = ROLLZONE.MaxWidth - TileSize - 1
-			die.Velocity.X = math.Abs(die.Velocity.X) * -1
+		// Handle X-axis collisions
+		if (die.Vec2.X+TileSize >= ROLLZONE.MaxWidth && die.Velocity.X > 0) || (die.Vec2.X < ROLLZONE.MinWidth && die.Velocity.X < 0) {
+			// Correct position to be just inside the boundary
+			if die.Velocity.X > 0 {
+				die.Vec2.X = ROLLZONE.MaxWidth - TileSize - 1
+			} else {
+				die.Vec2.X = ROLLZONE.MinWidth + 1
+			}
+
+			// Wall normal for vertical walls is purely horizontal.
+			// Reflect the velocity vector across the normal.
+			die.Velocity.X *= -1 * BounceFactor
 		}
-		if die.Vec2.X < ROLLZONE.MinWidth {
-			die.Vec2.X = ROLLZONE.MinWidth + 1
-			die.Velocity.X = math.Abs(die.Velocity.X)
-		}
-		if die.Vec2.Y+TileSize >= ROLLZONE.MaxHeight {
-			die.Vec2.Y = ROLLZONE.MaxHeight - TileSize - 1
-			die.Velocity.Y = math.Abs(die.Velocity.Y) * -1
-		}
-		if die.Vec2.Y < ROLLZONE.MinHeight {
-			die.Vec2.Y = ROLLZONE.MinHeight + 1
-			die.Velocity.Y = math.Abs(die.Velocity.Y)
+
+		// Handle Y-axis collisions
+		if (die.Vec2.Y+TileSize >= ROLLZONE.MaxHeight && die.Velocity.Y > 0) || (die.Vec2.Y < ROLLZONE.MinHeight && die.Velocity.Y < 0) {
+			// Correct position to be just inside the boundary
+			if die.Velocity.Y > 0 {
+				die.Vec2.Y = ROLLZONE.MaxHeight - TileSize - 1
+			} else {
+				die.Vec2.Y = ROLLZONE.MinHeight + 1
+			}
+
+			// Wall normal for horizontal walls is purely vertical.
+			// Reflect the velocity vector across the normal.
+			die.Velocity.Y *= -1 * BounceFactor
 		}
 	}
 }

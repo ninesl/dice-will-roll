@@ -1,7 +1,6 @@
 package render
 
 import (
-	"fmt"
 	"image/color"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -17,30 +16,19 @@ import (
 //	SCORE
 //
 // TODO: zones make up Game Screens, ie LOOP MINE BASE etc.
+
+// TODO:FIXME: refactor zone and zonerender into 1 struct. minwidth/max etc determined by image rect/Bounds?
 type Zone struct {
 	MinWidth  float64
 	MaxWidth  float64
 	MinHeight float64
 	MaxHeight float64
+	// Image     *ebiten.Image
 }
 
-// helper function
-func (z *Zone) ContainsDie(die *DieRenderable) bool {
-	fmt.Sprintln("%+v\n%+v", z, die.Vec2)
-
-	right := die.Vec2.X+TileSize > z.MinWidth
-	left := die.Vec2.X < z.MaxWidth
-
-	xBounds := (right || left)
-
-	top := die.Vec2.Y < z.MaxHeight
-	bottom := die.Vec2.Y+TileSize > z.MinHeight
-
-	if top || bottom && xBounds {
-		return true
-	}
-
-	return false
+// is true if any part of the die is within the bounds of the zone
+func (z *ZoneRenderable) ContainsDie(die *DieRenderable) bool {
+	return die.Rect().Overlaps(z.Image.Bounds())
 }
 
 type ZoneRenderable struct {
@@ -112,7 +100,7 @@ func SetZones() {
 			MinWidth:  0,
 			MaxWidth:  GAME_BOUNDS_X,
 			MinHeight: 0,
-			MaxHeight: GAME_BOUNDS_Y / 5,
+			MaxHeight: minHeight,
 			// MaxHeight: SmallRollZone.MinHeight,
 		},
 		Image: CreateImage(

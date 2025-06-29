@@ -46,6 +46,8 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 		// "TargetFace": 0.0,
 		"Time":     time,
 		"DieScale": 1.15,
+		// opts.Uniforms["HoveringSpeedUp"] = false
+		"HoveringSpeedUp": 0,
 		// "Cursor": []float32{float32(cx), float32(cy)},
 	}
 
@@ -62,6 +64,14 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 		// fmt.Printf("%d ] %s\n", i, die.Mode)
 
 		die.image.Clear()
+
+		// if die.Mode == DRAG && render.SCOREZONE.ContainsDie(&die.DieRenderable) {
+		if die.Mode == DRAG && g.cursorWithin(render.SCOREZONE) {
+			opts.Uniforms["HoveringSpeedUp"] = 1
+
+		} else {
+			opts.Uniforms["HoveringSpeedUp"] = 0
+		}
 
 		//could be a loop, but procedural is likely faster
 		opts.Uniforms["FaceLayouts"] = die.LocationsPips()
