@@ -51,6 +51,7 @@ type Game struct {
 	// Scoring     bool   // flag if currently scoring or not
 	// is updated with UpdateCursor() in update loop
 	cx, cy float64 // the x/y coordinates of the cursor
+	time   float32 // tracks time for shaders. updated in g.Update()
 	// DEBUG  DEBUG
 
 	// ScoringDice []*Die // dice that are scoring

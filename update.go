@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ninesl/dice-will-roll/dice"
@@ -17,6 +18,7 @@ func DEBUGTitleFPS(x, y float64) {
 // interface impl
 func (g *Game) Update() error {
 	g.UpdateCusor()
+	g.time = float32(time.Since(g.startTime).Milliseconds()) / float32(ebiten.TPS())
 
 	DEBUGTitleFPS(g.cx, g.cy)
 

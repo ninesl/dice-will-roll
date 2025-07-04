@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"image/color"
-	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
@@ -29,28 +28,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	g.DrawDice(screen)
 
-	// DEBUGDrawHandRank(screen, g.Hand, g.ActiveLevel.Rocks)
-	var (
-		Rolling []*Die
-		Held    []*Die
-		Scoring []*Die
-	)
-
-	for i := 0; i < len(g.Dice); i++ {
-		d := g.Dice[i]
-		switch d.Mode {
-		case ROLLING:
-			Rolling = append(Rolling, d)
-		case HELD:
-			Held = append(Held, d)
-		case SCORING:
-			Scoring = append(Scoring, d)
-		}
-	}
-	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Rolling)), FONT_SIZE)
-	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Held)), FONT_SIZE*2)
-	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Scoring)), FONT_SIZE*3)
 	DEBUGDrawMessage(screen, g.ActiveLevel.String(), 0.0)
+	DEBUGDiceValues(screen, g.Dice)
 
 	// DEBUGDrawCenterSCOREZONE(screen, opts, float64(g.TileSize), g.DEBUG.dieImgTransparent)
 	opts.GeoM.Reset()
@@ -72,19 +51,15 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 
 	shader := g.Shaders[shaders.DieShaderKey]
 
-	time := float32(time.Since(g.startTime).Milliseconds()) / float32(ebiten.TPS())
 	u := map[string]any{
 		// "Time": g.tick,
 		// "TargetFace": 0.0,
-		"Time":     time,
+		"Time":     g.time,
 		"DieScale": 1.15,
 		// opts.Uniforms["HoveringSpeedUp"] = false
 		"HoveringSpeedUp": 0,
 		// "Cursor": []float32{float32(cx), float32(cy)},
 	}
-
-	// fmt.Println(u["Time"])
-	// fmt.Println(curTime)
 
 	// TODO: die specific shader uniforms, gems, power ups, etc. this is the fun part
 	opts := &ebiten.DrawRectShaderOptions{
@@ -93,11 +68,8 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 
 	for i := 0; i < len(g.Dice); i++ {
 		die := g.Dice[i]
-		// fmt.Printf("%d ] %s\n", i, die.Mode)
-
 		die.image.Clear()
 
-		// if die.Mode == DRAG && render.SCOREZONE.ContainsDie(&die.DieRenderable) {
 		if die.Mode == DRAG && g.cursorWithin(render.SCOREZONE) {
 			opts.Uniforms["HoveringSpeedUp"] = 1
 
@@ -107,16 +79,13 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 
 		opts.Uniforms["FaceLayouts"] = die.LocationsPips()
 		opts.Uniforms["ActiveFace"] = die.ActiveFaceIndex()
-
 		opts.Uniforms["Height"] = die.Height
 		opts.Uniforms["Direction"] = die.Direction.KageVec2()
 		opts.Uniforms["Velocity"] = die.Velocity.KageVec2()
 		opts.Uniforms["DieColor"] = die.Color.KageVec3()
 		opts.Uniforms["ZRotation"] = die.ZRotation
-
 		opts.Uniforms["Mode"] = int(die.Mode)
 
-		// fmt.Println(opts.Uniforms["Velocity"])
 		die.image.DrawRectShader(s, s, shader, opts)
 
 		ops := &ebiten.DrawImageOptions{}
@@ -200,4 +169,26 @@ func DEBUGValuesFromDice(dice []*Die) []int {
 		track = append(track, dice[i].ActiveFace().NumPips())
 	}
 	return track
+}
+
+func DEBUGDiceValues(screen *ebiten.Image, dice []*Die) {
+	var (
+		Rolling []*Die
+		Held    []*Die
+		Scoring []*Die
+	)
+	for i := 0; i < len(dice); i++ {
+		d := dice[i]
+		switch d.Mode {
+		case ROLLING:
+			Rolling = append(Rolling, d)
+		case HELD:
+			Held = append(Held, d)
+		case SCORING:
+			Scoring = append(Scoring, d)
+		}
+	}
+	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Rolling)), FONT_SIZE)
+	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Held)), FONT_SIZE*2)
+	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Scoring)), FONT_SIZE*3)
 }

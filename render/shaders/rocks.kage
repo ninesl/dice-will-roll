@@ -23,10 +23,10 @@ func sdEllipsoid(p vec3, r vec3) float {
 // }
 
 func shape(p vec3) float {
-    q := rotate3D(p, vec3(0.0, 0.5, 0.0), 5)
+    // q := rotate3D(p, vec3(0.0, 0.5, 0.0), 5)
     // q := smartRotation(p)
     // d := sdRoundBox(q, vec3(DieScale), 0.25) // Base die shape
-    d := sdEllipsoid(q, vec3(.1))
+    d := sdEllipsoid(p, vec3(.1))
 
 
     // // Carve pips for each face using FaceLayouts
@@ -69,6 +69,6 @@ func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
     // actual_t := max(t, 0.01) // Use a small epsilon for t
 
     col := vec3(.27, .26, .25)
-    col = 0.5 * t * col // Basic shading using actual_t
+    col = 0.75 * t * col // Basic shading using actual_t
     return vec4(col, .5)
 }
