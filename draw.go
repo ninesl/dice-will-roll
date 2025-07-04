@@ -29,7 +29,27 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.DrawDice(screen)
 
 	// DEBUGDrawHandRank(screen, g.Hand, g.ActiveLevel.Rocks)
-	DEBUGDrawMessage(screen, g.ActiveLevel.String())
+	DEBUGDrawMessage(screen, g.ActiveLevel.String(), 0.0)
+	var (
+		Rolling []*Die
+		Held    []*Die
+		Scoring []*Die
+	)
+
+	for i := 0; i < len(g.Dice); i++ {
+		d := g.Dice[i]
+		switch d.Mode {
+		case ROLLING:
+			Rolling = append(Rolling, d)
+		case HELD:
+			Held = append(Held, d)
+		case SCORING:
+			Scoring = append(Scoring, d)
+		}
+	}
+	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Rolling)), 32.0)
+	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Held)), 64.0)
+	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Scoring)), 96.0)
 
 	// DEBUGDrawCenterSCOREZONE(screen, opts, float64(g.TileSize), g.DEBUG.dieImgTransparent)
 	opts.GeoM.Reset()
@@ -152,12 +172,20 @@ func DEBUGDrawHandRank(screen *ebiten.Image, rank dice.HandRank, currentRocks in
 	}, op)
 }
 
-func DEBUGDrawMessage(screen *ebiten.Image, msg string) {
+func DEBUGDrawMessage(screen *ebiten.Image, msg string, y float64) {
 	op := &text.DrawOptions{}
-	op.GeoM.Translate(0, 0)
+	op.GeoM.Translate(0, y)
 	op.ColorScale.ScaleWithColor(color.White)
 	text.Draw(screen, msg, &text.GoTextFace{
 		Source: DEBUG_FONT,
 		Size:   32,
 	}, op)
+}
+
+func DEBUGValuesFromDice(dice []*Die) []int {
+	var track []int
+	for i := 0; i < len(dice); i++ {
+		track = append(track, dice[i].ActiveFace().NumPips())
+	}
+	return track
 }
