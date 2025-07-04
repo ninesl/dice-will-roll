@@ -20,7 +20,10 @@ var (
 )
 
 //go:embed die.kage
-var kageDie []byte
+var dieKage []byte
+
+//go:embed rocks.kage
+var rocksKage []byte
 
 func loadShader(kageShader []byte) *ebiten.Shader {
 	shader, err := ebiten.NewShader(kageShader)
@@ -34,12 +37,14 @@ type ShaderKey uint16
 
 const (
 	DieShaderKey ShaderKey = iota
+	RocksShaderKey
 )
 
 func LoadShaders() map[ShaderKey]*ebiten.Shader {
 	var shaders = map[ShaderKey]*ebiten.Shader{}
 
-	shaders[DieShaderKey] = loadShader(kageDie)
+	shaders[DieShaderKey] = loadShader(dieKage)
+	shaders[RocksShaderKey] = loadShader(rocksKage)
 
 	return shaders
 }
