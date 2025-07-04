@@ -19,10 +19,26 @@ func DEBUGTitleFPS(x, y float64, rolling, held int) {
 func (g *Game) Update() error {
 	g.UpdateCusor()
 
-	DEBUGTitleFPS(g.x, g.y, g.DEBUG.rolling, g.DEBUG.held)
+	DEBUGTitleFPS(g.cx, g.cy, g.DEBUG.rolling, g.DEBUG.held)
+
+	// find/assign handrank
+	var held []*Die
+	var hold []dice.Die
+	for i := 0; i < len(g.Dice); i++ {
+		d := g.Dice[i]
+		if d.Mode == HELD {
+			d.Height = -.5
+			hold = append(hold, d.Die)
+			held = append(held, d)
+		}
+	}
+	g.ActiveLevel.Hand = dice.DetermineHandRank(hold)
+	g.ActiveLevel.ScoringHand = FindHandRankDice(held, g.ActiveLevel.Hand)
+	for _, die := range g.ActiveLevel.ScoringHand {
+		die.Height = .1
+	}
 
 	action := g.Controls()
-
 	g.ControlAction(action)
 	g.UpdateDice()
 
@@ -31,61 +47,58 @@ func (g *Game) Update() error {
 
 func (g *Game) UpdateDice() {
 	var (
-		rolling []*render.DieRenderable
-		held    []*render.DieRenderable
-		moving  []*render.DieRenderable
-		hand    []dice.Die
+		rolling     []*render.DieRenderable
+		held        []*render.DieRenderable
+		moving      []*render.DieRenderable
+		scoringDice []*Die
+		// heldDice    []*Die
+		// hand        []dice.Die
 	)
 
 	for i := 0; i < len(g.Dice); i++ {
-		d := g.Dice[i]
-		die := &d.DieRenderable
+		die := g.Dice[i]
+		d := &die.DieRenderable
 
 		// when logic for a d.Mode gets too complex put it in render/
-		if d.Mode == ROLLING {
-			// Smoothly interpolate current velocity towards the target velocity
-			// d.Velocity.X += (d.TargetVelocity.X - d.Velocity.X) * render.VelocityInterpolationFactor
-			// d.Velocity.Y += (d.TargetVelocity.Y - d.Velocity.Y) * render.VelocityInterpolationFactor
-
+		if die.Mode == ROLLING {
 			d.Velocity.X *= render.BounceFactor
 			d.Velocity.Y *= render.BounceFactor
 			d.Vec2.X += d.Velocity.X
 			d.Vec2.Y += d.Velocity.Y
 
-			rolling = append(rolling, die)
-		} else if d.Mode == DRAG {
-			d.Vec2.X = g.x - render.XOffset
-			d.Vec2.Y = g.y - render.YOffset
+			rolling = append(rolling, d)
+		} else if die.Mode == DRAG {
+			d.Vec2.X = g.cx - render.XOffset
+			d.Vec2.Y = g.cy - render.YOffset
 			d.Velocity.X *= render.BounceFactor
 			d.Velocity.Y *= render.BounceFactor
-			// d.ZRotation = float32(rand.Intn(3)) / 10
-			// d.ZRotation = float32(math.Min(float64(d.ZRotation), 5.0))
 
-			// d.ZRotation = 0
-
-			moving = append(moving, die)
-		} else if d.Mode == HELD {
-			hand = append(hand, d.Die)
-			held = append(held, die)
+			moving = append(moving, d)
+		} else if die.Mode == HELD {
+			// hand = append(hand, die.Die)
+			held = append(held, d)
+			// heldDice = append(heldDice, die)
+		} else if die.Mode == SCORING {
+			// hand = append(hand, die.Die)
+			scoringDice = append(scoringDice, die)
 		}
 	}
-	g.Hand = dice.DetermineHandRank(hand) // better to collect here than a loop somewhere else
+	moving = append(moving, rolling...)
 
 	render.HandleMovingHeldDice(held)
-
-	moving = append(moving, rolling...)
 	render.HandleDiceCollisions(moving)
 	render.BounceAndClamp(rolling)
 
+	g.ActiveLevel.HandleScoring(scoringDice)
 }
 
 // always is called at the beginning of the update loop
 func (g *Game) UpdateCusor() {
 	x, y := ebiten.CursorPosition()
-	g.x = float64(x)
-	g.y = float64(y)
+	g.cx = float64(x)
+	g.cy = float64(y)
 }
 
 func (g *Game) cursorWithin(zone render.ZoneRenderable) bool {
-	return g.x > zone.MinWidth && g.x < zone.MaxWidth && g.y > zone.MinHeight && g.y < zone.MaxHeight
+	return g.cx > zone.MinWidth && g.cx < zone.MaxWidth && g.cy > zone.MinHeight && g.cy < zone.MaxHeight
 }

@@ -2,6 +2,8 @@ package main
 
 import (
 	"math/rand/v2"
+	"slices"
+	"sort"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ninesl/dice-will-roll/dice"
@@ -99,6 +101,8 @@ func SetupPlayerDice() []*Die {
 func (d *Die) Roll() {
 	switch d.Mode {
 	case ROLLING:
+		d.Height = 0 // reset to normal height no matter where it is
+
 		d.Die.Roll()
 		dir := render.Direction(rand.IntN(2) + render.UPLEFT) // random direction
 		direction := render.DirectionMap[dir]
@@ -109,5 +113,208 @@ func (d *Die) Roll() {
 
 		d.ZRotation = rand.Float32()
 		// d.Height = 16.0
+	case HELD:
+		d.ZRotation = -rand.Float32() + rand.Float32() // they spin a lil when you roll and they're held
 	}
+}
+
+/*
+
+TOP LEVEL DIE HAND CHECKS
+
+*/
+
+// HAS IMPLEMENTATION FOR dice.Die in dice/score.go
+//
+// Find the hand that is associated with the given handrank.
+//
+// # The given handrank assumes that it is the BEST hand possible for the input dice
+//
+// Returns an error if not?? FIXME: not sure if this is worth doing
+//
+// # Returns the die that make up input handrank, assumes handrank is the best hand
+func FindHandRankDice(handDice []*Die, hand dice.HandRank) []*Die {
+	var foundDice []*Die
+	switch hand {
+	case dice.HIGH_DIE:
+		var dieIndex, bestVal int
+		for i, die := range handDice {
+			thisVal := die.ActiveFace().Value()
+			if thisVal > bestVal {
+				bestVal = thisVal
+				dieIndex = i
+			}
+		}
+		foundDice = append(foundDice, handDice[dieIndex])
+	case dice.ONE_PAIR, dice.SNAKE_EYES, dice.THREE_OF_A_KIND, dice.FOUR_OF_A_KIND, dice.FIVE_OF_A_KIND,
+		dice.SIX_OF_A_KIND, dice.SEVEN_OF_A_KIND, dice.SEVEN_SEVENS:
+
+		foundDice = findMatchingValues(handDice)
+	case dice.FULL_HOUSE, dice.CROWDED_HOUSE, dice.TWO_PAIR, dice.TWO_THREE_OF_A_KIND,
+		dice.OVERPOPULATED_HOUSE, dice.FULLEST_HOUSE: // broken up for readability
+
+		foundDice = findMatchingValues(handDice)
+	case dice.THREE_PAIR:
+
+		foundDice = findMatchingValues(handDice)
+		foundDice = filterThreePair(foundDice)
+	case dice.STRAIGHT_SMALL, dice.STRAIGHT_LARGE, dice.STRAIGHT_LARGER, dice.STRAIGHT_LARGEST:
+		foundDice = findBestSingleConsecutive(handDice)
+	case dice.STRAIGHT_MAX:
+		// TODO: impl
+		// ? MustLen(len(foundDice), 7)
+	case dice.UNKNOWN_HAND, dice.NO_HAND:
+	default:
+		return nil
+	}
+
+	return foundDice
+}
+
+// TODO: determine if this should return more info.
+// maybe meta-data/better dice info available?
+// don't want to enapsulate too much of the dice logic inside itself
+func trackUniqueValues(dice []*Die) map[int][]*Die {
+	tracker := map[int][]*Die{}
+
+	for _, die := range dice {
+		x := die.ActiveFace().Value()
+		tracker[x] = append(tracker[x], die)
+	}
+
+	return tracker
+}
+
+// TODO:FIXME: this will need to be 100% sure it's the right die being passed
+// makes sure threepair is ACTUALLY THREE pairs
+func filterThreePair(dice []*Die) []*Die {
+	tracker := trackUniqueValues(dice)
+
+	var collect []*Die
+	for _, curValueDice := range tracker {
+		collect = append(collect, bestValues(curValueDice, 1)[:2]...) // top 2 hopefully
+	}
+
+	return collect
+}
+
+// TOP LEVEL DIE IMPLEMENTATION IN die.go
+//
+// TODO: make this more efficient
+//
+// returns slice of Die from input die that share valuess.
+//
+//	dice values [1, 2, 1, 3, 4, 2]
+//	return pairs [1, 1, 2, 2] // order not guaranteed
+//
+//	dice := [1, 2, 2, 2, 3]
+//	return [2, 2, 2]
+//
+//	dice [1, 3, 2, 2, 2, 3]
+//	return [3, 3, 2, 2, 2]
+func findMatchingValues(dice []*Die) []*Die {
+	tracker := trackUniqueValues(dice)
+
+	var matchingValues []*Die
+
+	for _, diceThisValue := range tracker {
+		if len(diceThisValue) > 1 {
+			matchingValues = append(matchingValues, diceThisValue...)
+		}
+	}
+	return matchingValues
+}
+
+// TOP LEVEL DIE IMPLEMENTATION IN /die.go
+//
+// returns straight with the BEST values for the conesecutive.
+//
+// # for modifiers, etc the tie breaker is ALWAYS the true number of .pips on the die.
+//
+// The dice given MUST be a straight
+func findBestSingleConsecutive(checkDice []*Die) []*Die {
+	tracker := trackUniqueValues(checkDice)
+
+	// trackedLen := len(tracker)
+
+	// if trackedLen < STRAIGHT_SMALL_LENGTH { // this check might not be needed bc dice WILL be straights when they get here
+	// 	return []Die{} // explicitly empty
+	// }
+
+	// going from the top gets best straight - but idk how to do it smartly
+	// dont love this. could be found in trackUniqueValues but would be wasted elsewhere?
+	var topValue int
+	for value := range tracker {
+		if value > topValue {
+			topValue = value
+		}
+	}
+
+	var inARow int = 1
+	for i := topValue; i > 0; i -= 1 {
+		if len(tracker[i-1]) > 0 { // if there is dice below our current Value, 1 more in a row=
+			inARow += 1
+			if i > topValue {
+				topValue = i - 1
+			}
+		} else {
+			if inARow < dice.STRAIGHT_SMALL_LENGTH {
+				topValue = 0 // set to 0 for topval find
+				inARow = 0   // resets to 0. when going from a blank index it'll still add 1, so it's 0 to 1 in a row from a new found number
+			} else {
+				// could assume that there will never be a sequence once one is found
+				// TODO: would not work with 1-3 straight or more than 7 dice
+				break
+			}
+		}
+	}
+
+	var sequenceDice []*Die
+	for i := topValue - inARow + 1; i <= topValue; i++ {
+		var die *Die
+		if len(tracker[i]) > 1 {
+			die = bestValues(tracker[i], 1)[0]
+		} else {
+			die = tracker[i][0]
+		}
+		sequenceDice = append(sequenceDice, die)
+	}
+
+	// probably the most innefficient way to check for straights.
+	//TODO: make this better. it just stinks
+	return sequenceDice
+}
+
+// TODO: clean this up. refactor etc
+//
+// returns the X values with the most .Value() of input die.
+//
+//	dice [1, 1, 2, 2] x = 1
+//	return [2, 2]
+//	dice [1, 1, 2, 2, 2, 3, 3] x = 2
+//	return [2, 2, 2, 3, 3] // order not guaranteed
+func bestValues(dice []*Die, x int) []*Die {
+	var uniqueValues []int
+	var bestValues []*Die
+
+	for _, die := range dice {
+		pips := die.ActiveFace().NumPips()
+		if !slices.Contains(uniqueValues, pips) {
+			uniqueValues = append(uniqueValues, pips)
+		}
+	}
+
+	sort.Slice(uniqueValues, func(i, j int) bool {
+		return uniqueValues[i] < uniqueValues[j]
+	})
+
+	uniqueValues = uniqueValues[:x] // 0 - x exclusive
+
+	for _, die := range dice {
+		if slices.Contains(uniqueValues, die.ActiveFace().NumPips()) { // TODO: figure out if this should be numpip or value
+			bestValues = append(bestValues, die)
+		}
+	}
+
+	return bestValues
 }

@@ -12,6 +12,8 @@ import (
 //
 // input for the controller scheme? TODO:FIXME: idk if this is final
 func (g *Game) Controls() Action {
+
+	// Rolling/mining a cave actions
 	var action Action = ROLLING // the animation of rolling
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 		action = ROLL
@@ -22,6 +24,17 @@ func (g *Game) Controls() Action {
 		// }
 	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButton0) {
 		action = SELECT
+	} else if inpututil.IsKeyJustReleased(ebiten.KeyQ) {
+		action = SCORE
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyP) {
+		for _, die := range g.Dice {
+			die.Mode = HELD
+		}
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyO) {
+		for _, die := range g.Dice {
+			die.Mode = ROLLING
+			die.Roll()
+		}
 	}
 
 	return action
@@ -40,8 +53,8 @@ func (g *Game) PickDie() *Die {
 		return nil
 	}
 
-	x := g.x
-	y := g.y
+	x := g.cx
+	y := g.cy
 
 	var index int // to put on last element of g.Dice to have it render on top
 	var PickedDie *Die
@@ -92,6 +105,23 @@ func (g *Game) ControlAction(action Action) {
 		g.Press()
 	case SELECT:
 		g.Select()
+	case SCORE:
+		g.SetToScore()
+	}
+}
+
+// assigns hand within ActiveLevel to SCORING
+func (g *Game) SetToScore() {
+	for i := 0; i < len(g.ActiveLevel.ScoringHand); i++ {
+		d := g.ActiveLevel.ScoringHand[i]
+		d.Mode = SCORING
+	}
+
+	for _, die := range g.Dice {
+		if die.Mode == HELD {
+			die.Mode = ROLLING
+			die.Roll()
+		}
 	}
 }
 
@@ -117,7 +147,7 @@ func (g *Game) Press() {
 	// }
 }
 
-// lets go of the die. contextually
+// lets go of the die. contextually knows what to do with it
 func (g *Game) Select() {
 	var d *Die
 	for _, die := range g.Dice {

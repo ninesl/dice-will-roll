@@ -14,7 +14,6 @@ import (
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Clear()
-	g.refreshDEBUG()
 
 	opts := &ebiten.DrawImageOptions{}
 
@@ -29,7 +28,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	g.DrawDice(screen)
 
-	DEBUGDrawHandRank(screen, g.Hand, g.ActiveLevel.Rocks)
+	// DEBUGDrawHandRank(screen, g.Hand, g.ActiveLevel.Rocks)
+	DEBUGDrawMessage(screen, g.ActiveLevel.String())
 
 	// DEBUGDrawCenterSCOREZONE(screen, opts, float64(g.TileSize), g.DEBUG.dieImgTransparent)
 	opts.GeoM.Reset()
@@ -73,18 +73,10 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 			opts.Uniforms["HoveringSpeedUp"] = 0
 		}
 
-		//could be a loop, but procedural is likely faster
 		opts.Uniforms["FaceLayouts"] = die.LocationsPips()
-		// opts.Uniforms["FrontFace"] = pipLocations[dice.FrontFace]
-		// opts.Uniforms["LeftFace"] = pipLocations[dice.LeftFace]
-		// opts.Uniforms["BottomFace"] = pipLocations[dice.BottomFace]
-		// opts.Uniforms["TopFace"] = pipLocations[dice.TopFace]
-		// opts.Uniforms["RightFace"] = pipLocations[dice.RightFace]
-		// opts.Uniforms["BehindFace"] = pipLocations[dice.BehindFace]
-		// opts.Uniforms["NumPips"] = die.NumPips()
 		opts.Uniforms["ActiveFace"] = die.ActiveFaceIndex()
 
-		// opts.Uniforms["Height"] = die.Height
+		opts.Uniforms["Height"] = die.Height
 		opts.Uniforms["Direction"] = die.Direction.KageVec2()
 		opts.Uniforms["Velocity"] = die.Velocity.KageVec2()
 		opts.Uniforms["DieColor"] = die.Color.KageVec3()
@@ -129,18 +121,17 @@ type DEBUG struct {
 	rolling, held int
 }
 
-func (g *Game) refreshDEBUG() {
-	g.DEBUG.rolling = 0
-	g.DEBUG.held = 0
-
-	for _, die := range g.Dice {
-		if die.Mode == ROLLING {
-			g.DEBUG.rolling++
-		} else if die.Mode == HELD {
-			g.DEBUG.held++
-		}
-	}
-}
+// func (g *Game) refreshDEBUG() {
+// 	g.DEBUG.rolling = 0
+// 	g.DEBUG.held = 0
+// 	for _, die := range g.Dice {
+// 		if die.Mode == ROLLING {
+// 			g.DEBUG.rolling++
+// 		} else if die.Mode == HELD {
+// 			g.DEBUG.held++
+// 		}
+// 	}
+// }
 
 func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions, tileSize float64, dieImgTransparent *ebiten.Image) {
 	opts.GeoM.Translate(render.GAME_BOUNDS_X/2.0-tileSize/2.0, render.SCOREZONE.MaxHeight/2.0-tileSize/2.0)
@@ -157,6 +148,16 @@ func DEBUGDrawHandRank(screen *ebiten.Image, rank dice.HandRank, currentRocks in
 	msg := fmt.Sprintf("%-4d rocks : %s %.2fx", currentRocks, rank.String(), rank.Multiplier())
 	text.Draw(screen, msg, &text.GoTextFace{
 		Source: DEBUG_FONT,
-		Size:   render.GAME_BOUNDS_X * .015,
+		Size:   32,
+	}, op)
+}
+
+func DEBUGDrawMessage(screen *ebiten.Image, msg string) {
+	op := &text.DrawOptions{}
+	op.GeoM.Translate(0, 0)
+	op.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, msg, &text.GoTextFace{
+		Source: DEBUG_FONT,
+		Size:   32,
 	}, op)
 }

@@ -449,6 +449,8 @@ func checkHandOtherThanStraight(valueCount map[int]int, values []int, numDice in
 	return UNKNOWN_HAND // SHOULD NOT GET HERE!
 }
 
+// TOP LEVEL DIE IMPLEMENTATION IN /die.go
+//
 // returns straight with the BEST values for the conesecutive.
 //
 // # for modifiers, etc the tie breaker is ALWAYS the true number of .pips on the die.
@@ -507,6 +509,8 @@ func findBestSingleConsecutive(dice []Die) []Die {
 	return sequenceDice
 }
 
+// TOP LEVEL DIE IMPLEMENTATION IN die.go
+//
 // TODO: make this more efficient
 //
 // returns slice of Die from input die that share valuess.

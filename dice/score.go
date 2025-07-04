@@ -20,6 +20,17 @@ func Score(dice []Die) int {
 	return total
 }
 
+// takes a set of dice, determines their value and returns the int depending on the hand mult
+func ScoreHand(dice []Die, hand HandRank) int {
+	var total int
+	for _, d := range dice {
+		total += d.ActiveFace().Score()
+	}
+	return int(float32(total) * hand.Multiplier())
+}
+
+// HAS IMPLEMENTATION FOR TOP LEVEL DIE IN /die.go
+//
 // Find the hand that is associated with the given handrank.
 //
 // # The given handrank assumes that it is the BEST hand possible for the input dice

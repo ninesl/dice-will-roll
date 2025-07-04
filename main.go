@@ -12,7 +12,6 @@ import (
 	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
-	"github.com/ninesl/dice-will-roll/dice"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
@@ -54,14 +53,17 @@ func init() {
 
 type Game struct {
 	Shaders     map[shaders.ShaderKey]*ebiten.Shader
-	Dice        []*Die        // Player's dice
-	Hand        dice.HandRank // current hand rank of all held dice
+	Dice        []*Die // Player's dice
 	Time        time.Time
 	startTime   time.Time
 	ActiveLevel *Level // keeping track of rocks
+	// Scoring     bool   // flag if currently scoring or not
 	// is updated with UpdateCursor() in update loop
-	x, y  float64 // the x/y coordinates of the cursor
-	DEBUG DEBUG
+	cx, cy float64 // the x/y coordinates of the cursor
+	DEBUG  DEBUG
+
+	// ScoringDice []*Die // dice that are scoring
+	// Hand        dice.HandRank // current hand rank of all held dice
 }
 
 // Mode is a representation different game states that modify
@@ -74,11 +76,12 @@ const (
 	ROLLING // the die is moving around, collision checks etc.
 	DRAG    // locked to mouse cursor
 	HELD    // held in hand, waiting to be scored. will move to it's Fixed
+	SCORING // actively scoring
 
-	SCORE  // when the score button is pressed
 	ROLL   // when the spacebar is pressed
 	PRESS  // when the mouse is pressed
 	SELECT // when the mouse is released ie. clicked
+	SCORE  // when the score button is pressed
 )
 
 var (

@@ -25,6 +25,7 @@ type DieRenderable struct {
 	Color     Vec3 // direct Kage values for the color of the die
 	// Modifier  float32 // used for various things
 	ZRotation float32 // 0.0 - 1.0 uniform, final angle it lands on for a natural 'spin'
+	Height    float32 // used for emphasizing a die during animations like scoring
 	// Theta        float64 // turning to the right opts.GeoM.Rotate(theta)
 	// SpinningLeft bool    // left or right when rotating
 
@@ -126,7 +127,7 @@ func HandleMovingHeldDice(dice []*DieRenderable) {
 		die.Velocity.X = (die.Fixed.X - die.Vec2.X) * MoveFactor
 		die.Velocity.Y = (die.Fixed.Y - die.Vec2.Y) * MoveFactor
 
-		// pus it back to 0
+		// puts it back to 0
 		die.ZRotation *= float32(BounceFactor)
 
 		die.Vec2.X += die.Velocity.X
@@ -159,17 +160,9 @@ func HandleDiceCollisions(dice []*DieRenderable) {
 }
 
 func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
-	// --- 2D Elastic Collision Resolution ---
-
-	// Calculate centers of the dice
-	c1X := die1.Vec2.X + HalfTileSize
-	c1Y := die1.Vec2.Y + HalfTileSize
-	c2X := die2.Vec2.X + HalfTileSize
-	c2Y := die2.Vec2.Y + HalfTileSize
-
 	// Calculate distance and collision normal vector
-	collNormalX := c1X - c2X
-	collNormalY := c1Y - c2Y
+	collNormalX := (die1.Vec2.X + HalfTileSize) - (die2.Vec2.X + HalfTileSize)
+	collNormalY := (die1.Vec2.Y + HalfTileSize) - (die2.Vec2.Y + HalfTileSize)
 	distSq := collNormalX*collNormalX + collNormalY*collNormalY
 
 	// Check if they are actually overlapping
@@ -186,7 +179,7 @@ func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
 
 		// --- Positional Correction ---
 		// Move dice apart so they no longer overlap
-		overlap := (TileSize - dist) / 2.0
+		overlap := (TileSize - dist) * 0.5
 		correctionX := (collNormalX / dist) * overlap
 		correctionY := (collNormalY / dist) * overlap
 		die1.Vec2.X += correctionX
@@ -202,15 +195,13 @@ func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
 		unitTangentY := unitNormalX
 
 		// 2. Project the velocity of each die onto the normal and tangent vectors
-		v1n := unitNormalX*die1.Velocity.X + unitNormalY*die1.Velocity.Y
 		v1t := unitTangentX*die1.Velocity.X + unitTangentY*die1.Velocity.Y
-		v2n := unitNormalX*die2.Velocity.X + unitNormalY*die2.Velocity.Y
 		v2t := unitTangentX*die2.Velocity.X + unitTangentY*die2.Velocity.Y
 
 		// 3. The tangent velocities remain the same. Swap the normal velocities.
 		// This is the core of the elastic collision calculation.
-		newV1n := v2n
-		newV2n := v1n
+		newV1n := (unitNormalX*die2.Velocity.X + unitNormalY*die2.Velocity.Y)
+		newV2n := (unitNormalX*die1.Velocity.X + unitNormalY*die1.Velocity.Y)
 
 		// 4. Convert the scalar normal and tangent velocities back into vectors
 		v1nVecX := newV1n * unitNormalX
