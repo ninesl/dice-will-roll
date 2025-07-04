@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"sort"
 
 	"github.com/ninesl/dice-will-roll/dice"
 	"github.com/ninesl/dice-will-roll/render"
@@ -19,22 +20,42 @@ const (
 
 // A level keep track of state and scoring for an 'instance' of a run
 type Level struct {
-	Rocks        int           // how many rocks are left
-	scoringIndex int           // which die is currently being scored
 	ScoringHand  []*Die        // the dice that are being scored
+	Rocks        int           // how many rocks are left
+	CurrentScore int           // current amount of rocks that are getting removed
+	scoringIndex int           // which die is currently being scored
 	Hand         dice.HandRank // current hand for the level
 
+	MaxRolls  int // max rolls per hand
+	RollsLeft int // rolls left this hand
+	MaxHands  int // max hands this level
+	HandsLeft int // hands remaining this level
+
 	// State machine fields
-	scoringState ScoringState // The current state of the scoring animation
+	// gets decremented/incremented every call bc it hits through a tick each time
 	scoringTimer int          // A tick-based timer for delays
-	scoringDelay int          // How many ticks to wait between scoring each die
+	scoringState ScoringState // The current state of the scoring animation
+
 }
 
-func NewLevel(startRocks int) *Level {
+// TODO:FIXME: should be determined in options?
+const scoringDelay int = 15 //  How many ticks to wait between scoring each die e.g., pause for 15 ticks (1/4 of a second at 60 TPS)
+
+// parameters for a level. Used in NewLevel(levelOps)
+type LevelOptions struct {
+	Rocks int // number of rocks to start on this level
+	Hands int // number of hands that can be scored (level specific, player)
+	Rolls int // number of rolls that can be made a hand (level specific, player)
+}
+
+func NewLevel(ops LevelOptions) *Level {
 	return &Level{
-		Rocks:        startRocks,
-		scoringState: SCORING_IDLE,
-		scoringDelay: 15, // e.g., pause for 15 ticks (1/4 of a second at 60 TPS)
+		Rocks:        ops.Rocks,
+		MaxHands:     ops.Hands,
+		HandsLeft:    ops.Hands,
+		MaxRolls:     ops.Rolls,
+		RollsLeft:    ops.Rolls,
+		scoringState: SCORING_IDLE, // default
 	}
 }
 
@@ -58,6 +79,12 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 		return // Wait until the timer is done
 	}
 
+	// when a die that just became HELD it's x/y is determined on it's position from
+	// where the cursor was, essentially 'slotting' it between the other dice
+	sort.Slice(heldDice, func(i, j int) bool {
+		return heldDice[i].ActiveFace().NumPips() < heldDice[j].ActiveFace().NumPips()
+	})
+
 	// --- State Machine Logic ---
 
 	// Are we done with all the dice?
@@ -66,7 +93,7 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 			die.Mode = ROLLING
 			die.Roll()
 		}
-		l.ScoringHand = nil // Clear the hand
+		l.ScoringHand = l.ScoringHand[:0] // Clear the hand
 		l.scoringState = SCORING_IDLE
 		return
 	}
@@ -74,19 +101,19 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 	die := heldDice[l.scoringIndex]
 
 	if l.scoringState == SCORING_MOVING {
-		// --- Positioning and Movement (Your existing logic) ---
-		// Center the dice
-		totalWidth := float64(len(heldDice)) * TileSize
-		startX := (render.SCOREZONE.MaxWidth - render.SCOREZONE.MinWidth - totalWidth) / 2
-		x := float64(l.scoringIndex)*TileSize + TileSize + startX
-		y := render.SCOREZONE.MaxHeight - TileSize
+		// positioning
+		x := float64(GAME_BOUNDS_X)/2 - render.HalfTileSize
+		y := render.SCOREZONE.MinHeight/2 + TileSize/5
+		if len(heldDice) > 1 {
+			x += TileSize * (float64(len(heldDice) - l.scoringIndex))
+		}
 
 		die.Fixed.X = x
 		die.Fixed.Y = y
 
 		// Apply velocity to move towards the fixed point
-		die.Velocity.X = (die.Fixed.X - die.Vec2.X) * render.MoveFactor
-		die.Velocity.Y = (die.Fixed.Y - die.Vec2.Y) * render.MoveFactor
+		die.Velocity.X = (die.Fixed.X - die.Vec2.X) * 0.15
+		die.Velocity.Y = (die.Fixed.Y - die.Vec2.Y) * 0.15
 
 		die.Vec2.X += die.Velocity.X
 		die.Vec2.Y += die.Velocity.Y
@@ -94,13 +121,13 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 		// --- Arrival Check ---
 		// The "code smell" is still here, but its job has changed.
 		// Instead of rushing to the next die, it now transitions to a pause.
-		if math.Abs(die.Vec2.Y-die.Fixed.Y) < 0.01 && math.Abs(die.Vec2.X-die.Fixed.X) < 0.01 {
+		if math.Abs(die.Vec2.Y-die.Fixed.Y) < 0.05 && math.Abs(die.Vec2.X-die.Fixed.X) < 0.05 {
 			// Die has arrived. Stop it and start the pause.
 			die.Velocity.X = 0
 			die.Velocity.Y = 0
 			l.Rocks -= die.ActiveFace().Value() // Score it
 			l.scoringState = SCORING_PAUSING
-			l.scoringTimer = l.scoringDelay // Start the timer
+			l.scoringTimer = scoringDelay // Start the timer
 		}
 	} else if l.scoringState == SCORING_PAUSING {
 		// The timer has finished. Move to the next die.
@@ -111,5 +138,5 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 
 // We need to adjust the String() method as well
 func (l Level) String() string {
-	return fmt.Sprintf("%-4d rocks : %s %.2fx", l.Rocks, l.Hand.String(), l.Hand.Multiplier())
+	return fmt.Sprintf("%-2d/%2d hands | %-2d/%2d rolls | %-4d rocks | %s %.2fx", l.HandsLeft, l.MaxHands, l.RollsLeft, l.MaxRolls, l.Rocks, l.Hand.String(), l.Hand.Multiplier())
 }

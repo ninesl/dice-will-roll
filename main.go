@@ -16,28 +16,16 @@ import (
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
 
-// TODO: embedded FS for loading assets
-//
-// //go:embed assets/images/dice.png
-// var dicePng []byte
-
-// func LoadImage() image.Image {
-// 	img, _, err := image.Decode(bytes.NewReader(dicePng))
-// 	if err != nil {
-// 		log.Fatalf("failed to decode embedded image: %v", err)
-// 	}
-// 	return img
-// }
-
 var (
 	GAME_BOUNDS_X int = TILE_SIZE * 16
 	GAME_BOUNDS_Y int = TILE_SIZE * 9
 	ResolutionX   int = 1600
 	ResolutionY   int = 900
+	FONT_SIZE     float64
 )
 
 const (
-	TILE_SIZE int = 128
+	TILE_SIZE int = 80
 
 	// tile size is always the width and height of the die image
 	TileSize float64 = float64(TILE_SIZE)
@@ -49,10 +37,13 @@ func init() {
 
 	render.TileSize = TileSize
 	render.HalfTileSize = float64(TILE_SIZE / 2)
+
+	FONT_SIZE = float64(ResolutionY / 64)
 }
 
 type Game struct {
 	Shaders     map[shaders.ShaderKey]*ebiten.Shader
+	RocksImage  *ebiten.Image
 	Dice        []*Die // Player's dice
 	Time        time.Time
 	startTime   time.Time
@@ -60,7 +51,7 @@ type Game struct {
 	// Scoring     bool   // flag if currently scoring or not
 	// is updated with UpdateCursor() in update loop
 	cx, cy float64 // the x/y coordinates of the cursor
-	DEBUG  DEBUG
+	// DEBUG  DEBUG
 
 	// ScoringDice []*Die // dice that are scoring
 	// Hand        dice.HandRank // current hand rank of all held dice
@@ -105,11 +96,18 @@ func LoadGame() *Game {
 	dice := SetupPlayerDice()
 
 	g := &Game{
-		Dice:        dice,
-		Shaders:     shaders.LoadShaders(),
-		startTime:   time.Now(),
-		ActiveLevel: NewLevel(100),
+		Dice:      dice,
+		Shaders:   shaders.LoadShaders(),
+		startTime: time.Now(),
+		ActiveLevel: NewLevel(LevelOptions{
+			Rocks: 100,
+			Hands: 3,
+			Rolls: 2,
+		}),
 	}
+
+	var rocksImage *ebiten.Image = ebiten.NewImage(g.Bounds())
+	g.RocksImage = rocksImage
 
 	// g.DEBUG.dieImgTransparent = render.CreateImage(dieImgSize, dieImgSize, color.RGBA{56, 56, 56, 100})
 
