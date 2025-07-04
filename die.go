@@ -114,7 +114,10 @@ func (d *Die) Roll() {
 		d.ZRotation = rand.Float32()
 		// d.Height = 16.0
 	case HELD:
-		d.ZRotation = -rand.Float32() + rand.Float32() // they spin a lil when you roll and they're held
+		// they spin a lil when you roll and they're held and are in g.ActiveLevel.ScoringHand. height is changed
+		if d.Height > 0.0 {
+			d.ZRotation = -rand.Float32() + rand.Float32()
+		}
 	}
 }
 

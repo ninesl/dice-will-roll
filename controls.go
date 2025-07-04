@@ -115,9 +115,11 @@ func (g *Game) SetToScore() {
 	for i := 0; i < len(g.ActiveLevel.ScoringHand); i++ {
 		d := g.ActiveLevel.ScoringHand[i]
 		d.Mode = SCORING
+		d.ZRotation = 0
 	}
 
-	for _, die := range g.Dice {
+	for i := 0; i < len(g.Dice); i++ {
+		die := g.Dice[i]
 		if die.Mode == HELD {
 			die.Mode = ROLLING
 			die.Roll()
