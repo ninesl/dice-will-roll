@@ -9,9 +9,8 @@ import (
 )
 
 // TODO: better abstraction than this
-func DEBUGTitleFPS(x, y float64, rolling, held int) {
+func DEBUGTitleFPS(x, y float64) {
 	msg := fmt.Sprintf("T%0.2f F%0.2f x%4.0f y%4.0f ", ebiten.ActualTPS(), ebiten.ActualFPS(), x, y)
-	msg += fmt.Sprintf("Rolling %d Held %d", rolling, held)
 	ebiten.SetWindowTitle("Dice Will Roll " + msg)
 }
 
@@ -19,7 +18,7 @@ func DEBUGTitleFPS(x, y float64, rolling, held int) {
 func (g *Game) Update() error {
 	g.UpdateCusor()
 
-	DEBUGTitleFPS(g.cx, g.cy, g.DEBUG.rolling, g.DEBUG.held)
+	DEBUGTitleFPS(g.cx, g.cy)
 
 	// find/assign handrank
 	var held []*Die
@@ -40,6 +39,7 @@ func (g *Game) Update() error {
 
 	action := g.Controls()
 	g.ControlAction(action)
+
 	g.UpdateDice()
 
 	return nil

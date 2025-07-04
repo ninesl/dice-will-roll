@@ -17,7 +17,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	opts := &ebiten.DrawImageOptions{}
 
-	DrawROLLZONE(screen, opts)
+	// DrawROLLZONE(screen, opts)
+	g.DrawRocks(screen)
 
 	if g.cursorWithin(render.SCOREZONE) {
 		//TODO:FIXME: have to make this work for standard input, etc. will probably change with shaders anyways later
@@ -29,7 +30,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.DrawDice(screen)
 
 	// DEBUGDrawHandRank(screen, g.Hand, g.ActiveLevel.Rocks)
-	DEBUGDrawMessage(screen, g.ActiveLevel.String(), 0.0)
 	var (
 		Rolling []*Die
 		Held    []*Die
@@ -47,12 +47,24 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			Scoring = append(Scoring, d)
 		}
 	}
-	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Rolling)), 32.0)
-	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Held)), 64.0)
-	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Scoring)), 96.0)
+	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Rolling)), FONT_SIZE)
+	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Held)), FONT_SIZE*2)
+	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Scoring)), FONT_SIZE*3)
+	DEBUGDrawMessage(screen, g.ActiveLevel.String(), 0.0)
 
 	// DEBUGDrawCenterSCOREZONE(screen, opts, float64(g.TileSize), g.DEBUG.dieImgTransparent)
 	opts.GeoM.Reset()
+}
+
+func (g *Game) DrawRocks(screen *ebiten.Image) {
+	g.RocksImage.Clear()
+
+	shader := g.Shaders[shaders.RocksShaderKey]
+
+	opts := &ebiten.DrawRectShaderOptions{}
+
+	g.RocksImage.DrawRectShader(GAME_BOUNDS_X, GAME_BOUNDS_Y, shader, opts)
+	screen.DrawImage(g.RocksImage, &ebiten.DrawImageOptions{})
 }
 
 func (g *Game) DrawDice(screen *ebiten.Image) {
@@ -178,7 +190,7 @@ func DEBUGDrawMessage(screen *ebiten.Image, msg string, y float64) {
 	op.ColorScale.ScaleWithColor(color.White)
 	text.Draw(screen, msg, &text.GoTextFace{
 		Source: DEBUG_FONT,
-		Size:   32,
+		Size:   FONT_SIZE,
 	}, op)
 }
 

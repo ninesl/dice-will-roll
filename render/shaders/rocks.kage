@@ -3,3 +3,72 @@
 //kage:unit pixels
 
 package main
+
+func rotate3D(p, axis vec3, angle float) vec3 {
+    c := cos(angle)
+    s := sin(angle)
+    k := 1.0 - c
+    return p*c + cross(axis, p)*s + axis*dot(axis, p)*k
+}
+
+func sdEllipsoid(p vec3, r vec3) float {
+    k0 := length(p/r)
+    k1 := length(p/(r*r))
+    return k0*(k0-1.0)/k1
+}
+
+// func sdOctahedron(p vec3, scale float) float {
+//     p = abs(p)
+//     return (p.x+p.y+p.z-scale)*0.57735027
+// }
+
+func shape(p vec3) float {
+    q := rotate3D(p, vec3(0.0, 0.5, 0.0), 5)
+    // q := smartRotation(p)
+    // d := sdRoundBox(q, vec3(DieScale), 0.25) // Base die shape
+    d := sdEllipsoid(q, vec3(.1))
+
+
+    // // Carve pips for each face using FaceLayouts
+    // for faceIdx := 0; faceIdx < 6; faceIdx++ {
+    //     layout := FaceLayouts[faceIdx]
+    //     faceCoords := getPipSlotCoordinatesForFace(faceIdx, DieScale)
+    //     d = applyPipsSDFForFace(d, q, layout, faceCoords, pipRadius)
+    // }
+
+    return d
+}
+
+func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
+    uv := (srcPos * 2.0 - imageDstSize().xy) / imageDstSize()
+    ro := vec3(0.0, 0.0, -3.0)
+    rd := normalize(vec3(uv * 0.5, 1.0))
+    t := 0.0
+
+    var hit bool
+
+    for i := 0; i < 60; i++ {
+        pos := ro + rd * t
+        d := shape(pos)
+       if d < 0.01 {
+            hit = true
+            break
+        }
+         
+        if t > 5.0 {
+            break
+        }
+        t += d
+    }
+    if !hit {
+        return vec4(0.0, 0.0, 0.0, 0.0)
+    }
+
+
+    // Ensure t is not zero or too small to prevent black color if camera is on surface
+    // actual_t := max(t, 0.01) // Use a small epsilon for t
+
+    col := vec3(.27, .26, .25)
+    col = 0.5 * t * col // Basic shading using actual_t
+    return vec4(col, .5)
+}
