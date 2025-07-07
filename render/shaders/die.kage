@@ -236,8 +236,8 @@ func getPipHitInfoForFace(rotatedPoint vec3, layout mat3, facePipCoords [9]vec3,
     }
     return vec2(0.0, 0.0) // Not a pip on this face
 }
-
 // --- Pip Coloring Function ---
+
 func pipColors(originalDieSurfaceColor vec3, finalHitPos vec3) vec3 {
     q := smartRotation(finalHitPos)
     pipRadius := DieScale * 0.2 // Your 'quarterScale'

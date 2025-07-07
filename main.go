@@ -25,7 +25,7 @@ var (
 )
 
 const (
-	TILE_SIZE int = 80
+	TILE_SIZE int = 72
 
 	// tile size is always the width and height of the die image
 	TileSize float64 = float64(TILE_SIZE)

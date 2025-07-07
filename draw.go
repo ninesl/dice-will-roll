@@ -6,7 +6,6 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
-	"github.com/ninesl/dice-will-roll/dice"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
@@ -52,11 +51,8 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 	shader := g.Shaders[shaders.DieShaderKey]
 
 	u := map[string]any{
-		// "Time": g.tick,
-		// "TargetFace": 0.0,
-		"Time":     g.time,
-		"DieScale": 1.15,
-		// opts.Uniforms["HoveringSpeedUp"] = false
+		"Time":            g.time,
+		"DieScale":        1.15,
 		"HoveringSpeedUp": 0,
 		// "Cursor": []float32{float32(cx), float32(cy)},
 	}
@@ -115,24 +111,7 @@ func DrawROLLZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
 
 //
 // printf debugging for the window lmao
-// DEBUG
 //
-
-type DEBUG struct {
-	rolling, held int
-}
-
-// func (g *Game) refreshDEBUG() {
-// 	g.DEBUG.rolling = 0
-// 	g.DEBUG.held = 0
-// 	for _, die := range g.Dice {
-// 		if die.Mode == ROLLING {
-// 			g.DEBUG.rolling++
-// 		} else if die.Mode == HELD {
-// 			g.DEBUG.held++
-// 		}
-// 	}
-// }
 
 func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions, tileSize float64, dieImgTransparent *ebiten.Image) {
 	opts.GeoM.Translate(render.GAME_BOUNDS_X/2.0-tileSize/2.0, render.SCOREZONE.MaxHeight/2.0-tileSize/2.0)
@@ -140,17 +119,6 @@ func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOption
 		dieImgTransparent,
 		opts,
 	)
-}
-
-func DEBUGDrawHandRank(screen *ebiten.Image, rank dice.HandRank, currentRocks int) {
-	op := &text.DrawOptions{}
-	op.GeoM.Translate(0, 0)
-	op.ColorScale.ScaleWithColor(color.White)
-	msg := fmt.Sprintf("%-4d rocks : %s %.2fx", currentRocks, rank.String(), rank.Multiplier())
-	text.Draw(screen, msg, &text.GoTextFace{
-		Source: DEBUG_FONT,
-		Size:   32,
-	}, op)
 }
 
 func DEBUGDrawMessage(screen *ebiten.Image, msg string, y float64) {
@@ -188,7 +156,7 @@ func DEBUGDiceValues(screen *ebiten.Image, dice []*Die) {
 			Scoring = append(Scoring, d)
 		}
 	}
-	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Rolling)), FONT_SIZE)
-	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Held)), FONT_SIZE*2)
-	DEBUGDrawMessage(screen, fmt.Sprintf("%v", DEBUGValuesFromDice(Scoring)), FONT_SIZE*3)
+	DEBUGDrawMessage(screen, fmt.Sprintf("%5s%v", "roll", DEBUGValuesFromDice(Rolling)), render.GAME_BOUNDS_Y-FONT_SIZE)
+	DEBUGDrawMessage(screen, fmt.Sprintf("%5s%v", "held", DEBUGValuesFromDice(Held)), render.GAME_BOUNDS_Y-FONT_SIZE*2)
+	DEBUGDrawMessage(screen, fmt.Sprintf("%5s%v", "score", DEBUGValuesFromDice(Scoring)), render.GAME_BOUNDS_Y-FONT_SIZE*3)
 }

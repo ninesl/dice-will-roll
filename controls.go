@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math/rand"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -30,12 +31,13 @@ func (g *Game) Controls() Action {
 		for _, die := range g.Dice {
 			die.Mode = HELD
 		}
-	} else if inpututil.IsKeyJustPressed(ebiten.KeyO) {
-		for _, die := range g.Dice {
-			die.Mode = ROLLING
-			die.Roll()
-		}
 	}
+	// else if inpututil.IsKeyJustPressed(ebiten.KeyR) {
+	// for _, die := range g.Dice {
+	// die.Mode = ROLLING
+	// die.Roll()
+	// }
+	// }
 
 	return action
 }
@@ -96,22 +98,45 @@ func (g *Game) ControlAction(action Action) {
 		return
 	}
 
+	// cant make an action if scoring
+	if g.ActiveLevel.scoringState != SCORING_IDLE {
+		return
+	}
+
 	switch action {
 	case ROLL:
-		for _, die := range g.Dice {
-			die.Roll()
+		if g.ActiveLevel.RollsLeft > 0 {
+			g.ActiveLevel.RollsLeft--
+			for _, die := range g.Dice {
+				die.Roll()
+			}
+		} else {
+			for _, die := range g.Dice {
+				if die.Mode == ROLLING {
+					// specific impl if roll was pressed and no more rolls
+					die.ZRotation = rand.Float32() + -rand.Float32() // rotate changes
+				} else {
+					die.Roll()
+				}
+			}
 		}
 	case PRESS:
 		g.Press()
 	case SELECT:
 		g.Select()
 	case SCORE:
-		g.SetToScore()
+		if g.ActiveLevel.HandsLeft > 0 {
+			g.ActiveLevel.HandsLeft--
+			g.ActiveLevel.RollsLeft = g.ActiveLevel.MaxRolls
+			g.SetToScore()
+		}
 	}
 }
 
 // assigns hand within ActiveLevel to SCORING
 func (g *Game) SetToScore() {
+	g.ActiveLevel.ScoreHand = g.ActiveLevel.Hand
+
 	for i := 0; i < len(g.ActiveLevel.ScoringHand); i++ {
 		d := g.ActiveLevel.ScoringHand[i]
 		d.Mode = SCORING
@@ -142,6 +167,7 @@ func (g *Game) Press() {
 		// 	Y: g.y,
 		// } // set the fixed position to the current position
 		die.Mode = DRAG
+		die.Height = 0 //reset height if needed
 		// die.Modifier = .25 // for speeding up if needed
 	}
 	// if g.cursorWithin(render.ROLLZONE) {
@@ -167,8 +193,8 @@ func (g *Game) Select() {
 		d.Mode = HELD
 		return
 	}
-
 	// check if die was ficked
+
 	// since := time.Since(g.Time)
 	// if since < time.Second {
 	// 	flickBuffer := d.TileSize * 3

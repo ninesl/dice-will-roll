@@ -25,6 +25,7 @@ type Level struct {
 	CurrentScore int           // current amount of rocks that are getting removed
 	scoringIndex int           // which die is currently being scored
 	Hand         dice.HandRank // current hand for the level
+	ScoreHand    dice.HandRank // current hand that will apply mult to the score
 
 	MaxRolls  int // max rolls per hand
 	RollsLeft int // rolls left this hand
@@ -75,6 +76,7 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 
 	// Decrement the timer if it's running.
 	if l.scoringTimer > 0 {
+		// fmt.Printf("%2d %d %d\n", l.scoringTimer, len(heldDice), l.scoringIndex)
 		l.scoringTimer--
 		return // Wait until the timer is done
 	}
@@ -89,6 +91,16 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 
 	// Are we done with all the dice?
 	if l.scoringIndex >= len(heldDice) {
+		if l.scoringIndex == len(heldDice) {
+			l.scoringIndex++ // skips this final mult animation
+			l.scoringTimer = scoringDelay * 3
+			l.CurrentScore = int(float32(l.CurrentScore) * l.ScoreHand.Multiplier())
+			return
+		}
+
+		l.Rocks -= l.CurrentScore
+		l.CurrentScore = 0
+		//
 		for _, die := range heldDice {
 			die.Mode = ROLLING
 			die.Roll()
@@ -125,9 +137,16 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 			// Die has arrived. Stop it and start the pause.
 			die.Velocity.X = 0
 			die.Velocity.Y = 0
-			l.Rocks -= die.ActiveFace().Value() // Score it
+			// l.Rocks -= die.ActiveFace().Value() // Score it
+
+			l.CurrentScore += die.ActiveFace().Value()
+
 			l.scoringState = SCORING_PAUSING
 			l.scoringTimer = scoringDelay // Start the timer
+
+			if l.scoringIndex == len(heldDice)-1 {
+				l.scoringTimer *= 2
+			}
 		}
 	} else if l.scoringState == SCORING_PAUSING {
 		// The timer has finished. Move to the next die.
@@ -138,5 +157,14 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 
 // We need to adjust the String() method as well
 func (l Level) String() string {
-	return fmt.Sprintf("%-2d/%2d hands | %-2d/%2d rolls | %-4d rocks | %s %.2fx", l.HandsLeft, l.MaxHands, l.RollsLeft, l.MaxRolls, l.Rocks, l.Hand.String(), l.Hand.Multiplier())
+	if l.ScoreHand != dice.NO_HAND {
+		return fmt.Sprintf("%-2d/%2d hands | %-2d/%2d rolls | %-4d rocks | %s %.2fx | %d",
+			l.HandsLeft, l.MaxHands, l.RollsLeft, l.MaxRolls, l.Rocks,
+			l.ScoreHand.String(), l.ScoreHand.Multiplier(), l.CurrentScore)
+
+	}
+
+	return fmt.Sprintf("%-2d/%2d hands | %-2d/%2d rolls | %-4d rocks | %s %.2fx | %d",
+		l.HandsLeft, l.MaxHands, l.RollsLeft, l.MaxRolls, l.Rocks,
+		l.Hand.String(), l.Hand.Multiplier(), l.CurrentScore)
 }
