@@ -222,6 +222,24 @@ func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
 	}
 }
 
+// takes a single die and clamps it within the zone
+//
+// does not modify velocity, only Vec2 positioning
+func ClampInZone(die *DieRenderable, zone ZoneRenderable) {
+	// Handle X-axis collisions
+	if die.Vec2.X+TileSize >= zone.MaxWidth {
+		die.Vec2.X = zone.MaxWidth - TileSize - 1
+	} else if die.Vec2.X < zone.MinWidth {
+		die.Vec2.X = zone.MinWidth + 1
+	}
+
+	if die.Vec2.Y+TileSize >= zone.MaxHeight {
+		die.Vec2.Y = zone.MaxHeight - TileSize - 1
+	} else if die.Vec2.Y < zone.MinHeight {
+		die.Vec2.Y = zone.MinWidth + 1
+	}
+}
+
 func BounceAndClamp(dice []*DieRenderable) {
 	for _, die := range dice {
 		// Handle X-axis collisions

@@ -2,7 +2,7 @@
 
 //kage:unit pixels
 
-package main
+package shaders
 
 func rotate3D(p, axis vec3, angle float) vec3 {
     c := cos(angle)

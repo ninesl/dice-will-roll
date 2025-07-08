@@ -31,13 +31,12 @@ func (g *Game) Controls() Action {
 		for _, die := range g.Dice {
 			die.Mode = HELD
 		}
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyR) {
+		for _, die := range g.Dice {
+			die.Mode = ROLLING
+			die.Roll()
+		}
 	}
-	// else if inpututil.IsKeyJustPressed(ebiten.KeyR) {
-	// for _, die := range g.Dice {
-	// die.Mode = ROLLING
-	// die.Roll()
-	// }
-	// }
 
 	return action
 }
@@ -177,23 +176,23 @@ func (g *Game) Press() {
 
 // lets go of the die. contextually knows what to do with it
 func (g *Game) Select() {
-	var d *Die
-	for _, die := range g.Dice {
-		if die.Mode == DRAG {
-			d = die
+	var die *Die
+	for _, d := range g.Dice {
+		if d.Mode == DRAG {
+			die = d
 			break
 		}
 	}
 
-	if d == nil {
+	if die == nil {
 		return
 	}
 
 	if g.cursorWithin(render.SCOREZONE) {
-		d.Mode = HELD
+		die.Mode = HELD
 		return
 	}
-	// check if die was ficked
+	// check if die was flicked
 
 	// since := time.Since(g.Time)
 	// if since < time.Second {
@@ -213,8 +212,12 @@ func (g *Game) Select() {
 	// }
 
 	// let go of die
-	d.Mode = ROLLING
+	die.Mode = ROLLING
 
+	// clamp workaround, needed if no more rolls
+	if !g.cursorWithin(render.ROLLZONE) {
+		render.ClampInZone(&die.DieRenderable, render.ROLLZONE)
+	}
 	// if g.cursorWithin(render.SmallRollZone) {
 	// d.HoverFromFromFixed()
 	// d.Fixed = render.Vec2{}

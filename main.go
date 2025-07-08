@@ -16,17 +16,14 @@ import (
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
 
+// will need a way to update these in settings
 var (
 	GAME_BOUNDS_X int = TILE_SIZE * 16
 	GAME_BOUNDS_Y int = TILE_SIZE * 9
-	ResolutionX   int = 1600
-	ResolutionY   int = 900
+	ResolutionX   int = 1920 * 4
+	ResolutionY   int = 1080 * 4
+	TILE_SIZE     int = ResolutionY / 9
 	FONT_SIZE     float64
-)
-
-const (
-	TILE_SIZE int = 72
-
 	// tile size is always the width and height of the die image
 	TileSize float64 = float64(TILE_SIZE)
 )
@@ -39,6 +36,9 @@ func init() {
 	render.HalfTileSize = float64(TILE_SIZE / 2)
 
 	FONT_SIZE = float64(ResolutionY / 64)
+
+	ebiten.SetFullscreen(true)
+
 }
 
 type Game struct {
@@ -48,17 +48,15 @@ type Game struct {
 	Time        time.Time
 	startTime   time.Time
 	ActiveLevel *Level // keeping track of rocks
-	// Scoring     bool   // flag if currently scoring or not
 	// is updated with UpdateCursor() in update loop
 	cx, cy float64 // the x/y coordinates of the cursor
 	time   float32 // tracks time for shaders. updated in g.Update()
-	// DEBUG  DEBUG
-
-	// ScoringDice []*Die // dice that are scoring
-	// Hand        dice.HandRank // current hand rank of all held dice
 }
 
-// Mode is a representation different game states that modify
+//TODO: make mode and action different types
+
+// Action is the underlying type for
+// die.Mode that represents different game states that modify
 // controls, what is getting displayed, etc.
 type Action uint16
 

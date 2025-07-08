@@ -18,12 +18,20 @@ var (
 	ErrShader    error = fmt.Errorf("shader could not be set")
 	ErrNilShader error = fmt.Errorf("shader could not be found")
 )
+var (
+	// GAME OBJECTS
 
-//go:embed die.kage
-var dieKage []byte
+	//go:embed die.kage
+	dieKage []byte
 
-//go:embed rocks.kage
-var rocksKage []byte
+	//go:embed rocks.kage
+	rocksKage []byte
+
+	// POST PROCESSING
+
+	//go:embed fxaa.kage
+	fxaaKage []byte
+)
 
 func loadShader(kageShader []byte) *ebiten.Shader {
 	shader, err := ebiten.NewShader(kageShader)
@@ -38,6 +46,7 @@ type ShaderKey uint16
 const (
 	DieShaderKey ShaderKey = iota
 	RocksShaderKey
+	FXAAShaderKey
 )
 
 func LoadShaders() map[ShaderKey]*ebiten.Shader {
@@ -45,6 +54,7 @@ func LoadShaders() map[ShaderKey]*ebiten.Shader {
 
 	shaders[DieShaderKey] = loadShader(dieKage)
 	shaders[RocksShaderKey] = loadShader(rocksKage)
+	shaders[FXAAShaderKey] = loadShader(fxaaKage)
 
 	return shaders
 }

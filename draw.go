@@ -10,7 +10,10 @@ import (
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
 
-func (g *Game) Draw(screen *ebiten.Image) {
+var screen = ebiten.NewImage(GAME_BOUNDS_X, GAME_BOUNDS_Y)
+
+func (g *Game) Draw(s *ebiten.Image) {
+	// screen.Clear()
 	screen.Clear()
 
 	opts := &ebiten.DrawImageOptions{}
@@ -27,8 +30,16 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	g.DrawDice(screen)
 
-	DEBUGDrawMessage(screen, g.ActiveLevel.String(), 0.0)
-	DEBUGDiceValues(screen, g.Dice)
+	s.DrawRectShader(
+		screen.Bounds().Dx(), screen.Bounds().Dy(),
+		g.Shaders[shaders.FXAAShaderKey],
+		&ebiten.DrawRectShaderOptions{
+			Images: [4]*ebiten.Image{screen},
+		},
+	)
+
+	DEBUGDrawMessage(s, g.ActiveLevel.String(), 0.0)
+	DEBUGDiceValues(s, g.Dice)
 
 	// DEBUGDrawCenterSCOREZONE(screen, opts, float64(g.TileSize), g.DEBUG.dieImgTransparent)
 	opts.GeoM.Reset()
