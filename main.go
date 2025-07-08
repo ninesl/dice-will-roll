@@ -20,8 +20,8 @@ import (
 var (
 	GAME_BOUNDS_X int = TILE_SIZE * 16
 	GAME_BOUNDS_Y int = TILE_SIZE * 9
-	ResolutionX   int = 1920 * 4
-	ResolutionY   int = 1080 * 4
+	ResolutionX   int = 1920
+	ResolutionY   int = 1080
 	TILE_SIZE     int = ResolutionY / 9
 	FONT_SIZE     float64
 	// tile size is always the width and height of the die image
