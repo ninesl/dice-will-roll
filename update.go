@@ -53,8 +53,6 @@ func (g *Game) UpdateDice() {
 		held        []*render.DieRenderable
 		moving      []*render.DieRenderable
 		scoringDice []*Die
-		// heldDice    []*Die
-		// hand        []dice.Die
 	)
 
 	for i := 0; i < len(g.Dice); i++ {
@@ -77,11 +75,8 @@ func (g *Game) UpdateDice() {
 
 			moving = append(moving, d)
 		} else if die.Mode == HELD {
-			// hand = append(hand, die.Die)
 			held = append(held, d)
-			// heldDice = append(heldDice, die)
 		} else if die.Mode == SCORING {
-			// hand = append(hand, die.Die)
 			scoringDice = append(scoringDice, die)
 		}
 	}

@@ -18,14 +18,15 @@ import (
 
 // will need a way to update these in settings
 var (
-	GAME_BOUNDS_X int = TILE_SIZE * 16
-	GAME_BOUNDS_Y int = TILE_SIZE * 9
-	ResolutionX   int = 1920
-	ResolutionY   int = 1080
-	TILE_SIZE     int = ResolutionY / 9
-	FONT_SIZE     float64
+	GAME_BOUNDS_X, GAME_BOUNDS_Y int     = ebiten.Monitor().Size()
+	ResolutionX                  int     = GAME_BOUNDS_X // placeholder, options later
+	ResolutionY                  int     = GAME_BOUNDS_Y
+	TILE_SIZE                    int     = GAME_BOUNDS_Y / 9
+	FONT_SIZE                    float64 = float64(ResolutionY / 64)
 	// tile size is always the width and height of the die image
 	TileSize float64 = float64(TILE_SIZE)
+
+	NUM_PLAYER_DICE int = 7
 )
 
 func init() {
@@ -35,7 +36,7 @@ func init() {
 	render.TileSize = TileSize
 	render.HalfTileSize = float64(TILE_SIZE / 2)
 
-	FONT_SIZE = float64(ResolutionY / 64)
+	FONT_SIZE = float64(GAME_BOUNDS_Y / 64)
 
 	ebiten.SetFullscreen(true)
 

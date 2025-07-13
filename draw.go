@@ -39,6 +39,7 @@ func (g *Game) Draw(s *ebiten.Image) {
 	)
 
 	DEBUGDrawMessage(s, g.ActiveLevel.String(), 0.0)
+	DEBUGDrawMessage(s, fmt.Sprintf("%.2f tps / %.2f fps\n", ebiten.ActualFPS(), ebiten.ActualTPS()), FONT_SIZE)
 	DEBUGDiceValues(s, g.Dice)
 
 	// DEBUGDrawCenterSCOREZONE(screen, opts, float64(g.TileSize), g.DEBUG.dieImgTransparent)
