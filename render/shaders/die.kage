@@ -308,10 +308,16 @@ func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
     // 6. Calculate lighting
     // Simple Lambertian lighting model. The light comes from above and slightly to the left.
     // lightDir := normalize(vec3(-0.5, 0.5, -1.0))
-    lightDir := normalize(vec3(0.0, 0.0, -5.0)) // from above, z towards you
+    var lightDir vec3
+    if Height < 0 {
+        lightDir = normalize(vec3(0.0, 0.0, 5.0))
+    } else {
+        lightDir = normalize(vec3(0.0, 0.0, -5.0)) // from above, z towards you
+    }
     diffuse := max(dot(normal, lightDir), 0.0)
     ambient := 0.4 // Base ambient light to prevent shadows from being pitch black
     shading := ambient + diffuse*0.8
+
 
     // 7. Calculate final color with lighting and pip coloring
     col := DieColor * shading
