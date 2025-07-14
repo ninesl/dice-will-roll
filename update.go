@@ -24,16 +24,16 @@ func (g *Game) Update() error {
 	deltaTime := 1.0 / float32(ebiten.TPS())
 	g.RocksRenderer.Update(deltaTime, 2000.0) // 2000 unit world bounds
 
-	// Update camera (simple forward movement for now)
-	cameraPos := render.Vector3{
-		X: 0,
-		Y: 0,
-		Z: 0,
-		// Z: g.time * 10.0,
-	} // Move forward over time
-	cameraForward := render.Vector3{X: 0, Y: 0, Z: 1}
-	cameraUp := render.Vector3{X: 0, Y: 1, Z: 0}
-	g.RocksRenderer.UpdateCamera(cameraPos, cameraForward, cameraUp)
+	// // Update camera (simple forward movement for now)
+	// cameraPos := render.Vector3{
+	// 	X: 0,
+	// 	Y: 0,
+	// 	Z: 0,
+	// 	// Z: g.time * 10.0,
+	// } // Move forward over time
+	// cameraForward := render.Vector3{X: 0, Y: 0, Z: 1}
+	// cameraUp := render.Vector3{X: 0, Y: 1, Z: 0}
+	// g.RocksRenderer.UpdateCamera(cameraPos, cameraForward, cameraUp)
 
 	DEBUGTitleFPS(g.cx, g.cy)
 
