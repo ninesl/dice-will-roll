@@ -43,12 +43,13 @@ func init() {
 }
 
 type Game struct {
-	Shaders     map[shaders.ShaderKey]*ebiten.Shader
-	RocksImage  *ebiten.Image
-	Dice        []*Die // Player's dice
-	Time        time.Time
-	startTime   time.Time
-	ActiveLevel *Level // keeping track of rocks
+	Shaders       map[shaders.ShaderKey]*ebiten.Shader
+	RocksImage    *ebiten.Image
+	RocksRenderer *render.RocksRenderer // New rocks rendering system
+	Dice          []*Die                // Player's dice
+	Time          time.Time
+	startTime     time.Time
+	ActiveLevel   *Level // keeping track of rocks
 	// is updated with UpdateCursor() in update loop
 	cx, cy float64 // the x/y coordinates of the cursor
 	time   float32 // tracks time for shaders. updated in g.Update()
@@ -95,10 +96,23 @@ func LoadGame() *Game {
 
 	dice := SetupPlayerDice()
 
+	// Initialize rocks renderer with 1M rocks
+	rocksConfig := render.RocksConfig{
+		TotalRocks:    1000000, // 1 million rocks
+		SpriteSize:    64,      // 64x64 pixel sprites
+		NumVariants:   20,      // 20 different rock shapes
+		MaxVisible:    10000,   // Max 10k visible at once
+		WorldSize:     2000.0,  // 2000 unit world
+		MinRockSize:   0.5,
+		MaxRockSize:   2.0,
+		MovementSpeed: 50.0,
+	}
+
 	g := &Game{
-		Dice:      dice,
-		Shaders:   shaders.LoadShaders(),
-		startTime: time.Now(),
+		Dice:          dice,
+		Shaders:       shaders.LoadShaders(),
+		RocksRenderer: render.NewRocksRenderer(rocksConfig),
+		startTime:     time.Now(),
 		ActiveLevel: NewLevel(LevelOptions{
 			Rocks: 100,
 			Hands: 3,

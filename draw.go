@@ -30,31 +30,38 @@ func (g *Game) Draw(s *ebiten.Image) {
 
 	g.DrawDice(screen)
 
-	s.DrawRectShader(
-		screen.Bounds().Dx(), screen.Bounds().Dy(),
-		g.Shaders[shaders.FXAAShaderKey],
-		&ebiten.DrawRectShaderOptions{
-			Images: [4]*ebiten.Image{screen},
-		},
-	)
+	// s.DrawRectShader(
+	// 	screen.Bounds().Dx(), screen.Bounds().Dy(),
+	// 	g.Shaders[shaders.FXAAShaderKey],
+	// 	&ebiten.DrawRectShaderOptions{
+	// 		Images: [4]*ebiten.Image{screen},
+	// 	},
+	// )
 
-	DEBUGDrawMessage(s, g.ActiveLevel.String(), 0.0)
-	DEBUGDrawMessage(s, fmt.Sprintf("%.2f tps / %.2f fps\n", ebiten.ActualFPS(), ebiten.ActualTPS()), FONT_SIZE)
-	DEBUGDiceValues(s, g.Dice)
+	DEBUGDrawMessage(screen, g.ActiveLevel.String(), 0.0)
+	DEBUGDrawMessage(screen, fmt.Sprintf("%.2f fps / %.2f tps\n", ebiten.ActualFPS(), ebiten.ActualTPS()), FONT_SIZE)
+	DEBUGDiceValues(screen, g.Dice)
 
-	// DEBUGDrawCenterSCOREZONE(screen, opts, float64(g.TileSize), g.DEBUG.dieImgTransparent)
+	s.DrawImage(screen, opts)
 	opts.GeoM.Reset()
 }
 
 func (g *Game) DrawRocks(screen *ebiten.Image) {
-	g.RocksImage.Clear()
+	// Use the new efficient rocks renderer
+	g.RocksRenderer.Draw(screen)
 
-	shader := g.Shaders[shaders.RocksShaderKey]
+	// Display stats
+	visible, total := g.RocksRenderer.GetStats()
+	statsText := fmt.Sprintf("Rocks: %d/%d visible", visible, total)
 
-	opts := &ebiten.DrawRectShaderOptions{}
+	textOpts := &text.DrawOptions{}
+	textOpts.GeoM.Translate(0, FONT_SIZE*2)
+	textOpts.ColorScale.ScaleWithColor(color.White)
 
-	g.RocksImage.DrawRectShader(GAME_BOUNDS_X, GAME_BOUNDS_Y, shader, opts)
-	screen.DrawImage(g.RocksImage, &ebiten.DrawImageOptions{})
+	text.Draw(screen, statsText, &text.GoTextFace{
+		Source: DEBUG_FONT,
+		Size:   FONT_SIZE,
+	}, textOpts)
 }
 
 func (g *Game) DrawDice(screen *ebiten.Image) {
