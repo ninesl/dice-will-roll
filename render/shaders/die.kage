@@ -92,7 +92,7 @@ func smartRotation(p vec3) vec3 {
 
 
 	// Finally, apply the Z-axis spin to the corrected, rolling die.
-	zRotationInRadians := -ZRotation * 2.0 * pi
+	zRotationInRadians := -ZRotation * 1.5 * pi
 	q = rotate3D(q, vec3(0.0, 0.0, 1.0), zRotationInRadians)
 
 	if Mode == 2 { // DRAG
