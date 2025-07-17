@@ -20,9 +20,8 @@ func (g *Game) Update() error {
 	g.UpdateCusor()
 	g.time = float32(time.Since(g.startTime).Milliseconds()) / float32(ebiten.TPS())
 
-	// Update rocks
-	deltaTime := 1.0 / float32(ebiten.TPS())
-	g.RocksRenderer.Update(deltaTime, 2000.0) // 2000 unit world bounds
+	// Update rocks (frame-based, no deltaTime needed)
+	g.RocksRenderer.Update()
 
 	// // Update camera (simple forward movement for now)
 	// cameraPos := render.Vector3{

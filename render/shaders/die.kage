@@ -92,7 +92,7 @@ func smartRotation(p vec3) vec3 {
 
 
 	// Finally, apply the Z-axis spin to the corrected, rolling die.
-	zRotationInRadians := -ZRotation * 1.5 * pi
+	zRotationInRadians := -ZRotation * 2.0 * pi
 	q = rotate3D(q, vec3(0.0, 0.0, 1.0), zRotationInRadians)
 
 	if Mode == 2 { // DRAG
@@ -238,7 +238,7 @@ func getPipHitInfoForFace(rotatedPoint vec3, layout mat3, facePipCoords [9]vec3,
 }
 // --- Pip Coloring Function ---
 
-func pipColors(originalDieSurfaceColor vec3, finalHitPos vec3) vec3 {
+func pipColors(originalDieSurfaceColor vec3, finalHitPos vec3, normal vec3) vec3 {
     q := smartRotation(finalHitPos)
     pipRadius := DieScale * 0.2 // Your 'quarterScale'
     
@@ -257,7 +257,27 @@ func pipColors(originalDieSurfaceColor vec3, finalHitPos vec3) vec3 {
         if (pipHitData.x > 0.5) { // If it's a pip on this face
             normalizedDepth = pipHitData.y
             darkeningFactor = mix(rimBrightness, centerBrightness, pow(normalizedDepth, 2.0))
-            return originalDieSurfaceColor * darkeningFactor
+
+                    
+            var lightDir vec3
+
+            // 6. Calculate lighting
+            // Simple Lambertian lighting model. The light comes from above and slightly to the left.
+            if Height > 0 {
+                lightDir = normalize(vec3(sin(Time), cos(Time), -1.0)) // from above, z towards you
+                // lightDir = normalize(vec3(0,-.5,-.5))
+            }
+            // } else if Height < 0 {
+                // lightDir = normalize(vec3(.5,.5, .5)) //top right
+            // } else {
+                // lightDir = normalize(vec3(0, 0, -1.0))
+            // }
+
+            diffuse := max(dot(normal, lightDir), 0.0)
+            ambient := 0.4 // Base ambient light to prevent shadows from being pitch black
+            shading := ambient + diffuse*0.8
+
+            return originalDieSurfaceColor * darkeningFactor * shading
         }
     }
 
@@ -276,7 +296,7 @@ func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
     var d float
     for i := 0; i < 80; i++ {
         d = shape(ro + rd*t)
-        if d < 0.00005 { // Use a smaller epsilon for higher precision
+        if d < 0.001 { // Use a smaller epsilon for higher precision
             break
         }
         if t > 100.0 {
@@ -305,70 +325,26 @@ func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
         shape(finalPos + eps.yyx) - shape(finalPos - eps.yyx),
     ))
 
+    var lightDir vec3
+
     // 6. Calculate lighting
     // Simple Lambertian lighting model. The light comes from above and slightly to the left.
-    // lightDir := normalize(vec3(-0.5, 0.5, -1.0))
-    var lightDir vec3
-    if Height < 0 {
-        lightDir = normalize(vec3(0.0, 0.0, 5.0))
+    if Height > 0 {
+        // lightDir = normalize(vec3(sin(Time/6), cos(Time/6), -1.0)) // from above, z towards you
+        lightDir = normalize(vec3(0,-.5,-.5))
+    } else if Height < 0 {
+        lightDir = normalize(vec3(.5,.5, .5)) //top right
     } else {
-        lightDir = normalize(vec3(0.0, 0.0, -5.0)) // from above, z towards you
+        lightDir = normalize(vec3(0, 0, -1.0))
     }
+
     diffuse := max(dot(normal, lightDir), 0.0)
     ambient := 0.4 // Base ambient light to prevent shadows from being pitch black
     shading := ambient + diffuse*0.8
 
-
     // 7. Calculate final color with lighting and pip coloring
     col := DieColor * shading
-    col = pipColors(col, finalPos)
-
-    // 5. --- THE ROBUST ANTI-ALIASING METHOD ---
-    // This calculates the distance to the surface in units of screen pixels.
-    // 'd' is the final distance from the loop. fwidth(d) estimates how
-    // much 'd' changes over one pixel. Their ratio is the distance in pixels.
-    // This works reliably on both flat and curved surfaces.
-    // px_dist := d / fwidth(d)
-
-    // We want alpha to go from 1 (solid) to 0 (transparent) as our pixel
-    // distance goes from -0.5 (half a pixel inside) to 0.5 (half a pixel outside).
-    // This creates a perfect, one-pixel-wide anti-aliased edge.
-    // alpha := smoothstep(0.5, -0.5, px_dist)
-
-    // 6. Return the PRE-MULTIPLIED color for correct blending in Ebitengine.
-    // return vec4(col * alpha, alpha)
-
-    // ro := vec3(0.0, 0.0, Height - 4.0)
-    // rd := normalize(vec3(uv * 0.5, 1.0))
-    // t := 0.0
-    // var finalPos vec3
-
-    // var d float
-
-    // for i := 0; i < 60; i++ {
-    //     pos := ro + rd * t
-    //     d = shape(pos)
-    //     if d < 0.01 {
-    //         finalPos = pos
-    //         break
-    //     }
-    //     if t > 100.0 {
-    //         break
-    //     }
-    //     t += d
-    // }
-
-    // if d > 0.01 { // if we did not hit a pixel
-    //     return vec4(0.0, 0.0, 0.0, 0.0)
-    // }
-
-    // // Ensure t is not zero or too small to prevent black color if camera is on surface
-    // // actual_t := max(t, 0.01) // Use a small epsilon for t
-
-    // col := DieColor
-    // col = 0.5 * t * col // Basic shading using actual_t
-    // col = pipColors(col, finalPos)
-
+    col = pipColors(col, finalPos, normal)
     
     return vec4(col, 1.0)
 }

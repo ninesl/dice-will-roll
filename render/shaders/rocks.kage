@@ -10,6 +10,11 @@ var (
     RockSize float
     Roughness float
     
+    // Explicit 3D rotation parameters
+    RotationX float
+    RotationY float
+    RotationZ float
+    
     // Lighting parameters
     LightDirection vec3
     AmbientLight float
@@ -18,14 +23,12 @@ var (
     // Color parameters
     BaseColor vec3
     ColorVariation float
-    
-    // Animation parameters
-    Time float
 )
 
 // Hash function for deterministic variation
 func hash3D(p vec3) float {
-    return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453)
+    val := sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453
+    return val - floor(val) // Manual fract implementation
 }
 
 // 3D rotation function
@@ -84,55 +87,52 @@ func generateRock(p vec3, seed float) float {
 }
 
 func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
-    // Setup ray using die.kage approach
+    // Setup UV coordinates centered at origin
     uv := (srcPos*2.0 - imageDstSize().xy) / imageDstSize().y
-    ro := vec3(0.0, 0.0, -3.0) // Camera position
-    rd := normalize(vec3(uv*0.5, 1.0)) // Ray direction
     
-    // Raymarch to find the surface
-    t := 0.0
-    var d float
-    for i := 0; i < 60; i++ {
-        pos := ro + rd*t
-        d = generateRock(pos, RockSeed)
-        if d < 0.001 {
-            break
-        }
-        if t > 10.0 {
-            t = 10.0
-            break
-        }
-        t += d
-    }
+    // Create 3D position from UV at fixed Z depth
+    pos := vec3(uv * RockSize, 0.0)
     
-    // If we missed, return transparent
-    if t >= 10.0 {
+    // Apply real-time 3D rotations
+    pos = rotate3D(pos, vec3(1.0, 0.0, 0.0), RotationX)
+    pos = rotate3D(pos, vec3(0.0, 1.0, 0.0), RotationY)
+    pos = rotate3D(pos, vec3(0.0, 0.0, 1.0), RotationZ)
+    
+    // Single SDF evaluation
+    d := generateRock(pos, RockSeed)
+    
+    // Early exit if outside rock
+    if d > 0.0 {
         return vec4(0.0, 0.0, 0.0, 0.0)
     }
     
-    // Calculate final position and normal
-    finalPos := ro + rd*t
-    eps := vec2(0.001, 0)
+    // Calculate proper normal for good lighting
+    eps := vec2(0.01, 0)
     normal := normalize(vec3(
-        generateRock(finalPos + eps.xyy, RockSeed) - generateRock(finalPos - eps.xyy, RockSeed),
-        generateRock(finalPos + eps.yxy, RockSeed) - generateRock(finalPos - eps.yxy, RockSeed),
-        generateRock(finalPos + eps.yyx, RockSeed) - generateRock(finalPos - eps.yyx, RockSeed),
+        generateRock(pos + eps.xyy, RockSeed) - generateRock(pos - eps.xyy, RockSeed),
+        generateRock(pos + eps.yxy, RockSeed) - generateRock(pos - eps.yxy, RockSeed),
+        generateRock(pos + eps.yyx, RockSeed) - generateRock(pos - eps.yyx, RockSeed),
     ))
     
-    // Calculate lighting
+    // Proper lighting calculation
     lightDir := normalize(LightDirection)
     diffuse := max(dot(normal, lightDir), 0.0)
     
+    // Add some rim lighting for better 3D appearance
+    viewDir := normalize(vec3(0.0, 0.0, -1.0))
+    rim := 1.0 - abs(dot(normal, viewDir))
+    rim = pow(rim, 2.0) * 0.3
+    
     // Generate color variation based on position and seed
-    colorVar := hash3D(finalPos * 2.0 + vec3(RockSeed))
+    colorVar := hash3D(pos * 2.0 + vec3(RockSeed))
     rockColor := BaseColor + vec3(colorVar - 0.5) * ColorVariation
     
     // Combine lighting
-    lighting := AmbientLight + diffuse * DiffuseStrength
+    lighting := AmbientLight + diffuse * DiffuseStrength + rim
     finalColor := rockColor * lighting
     
     // Anti-aliasing using distance
-    alpha := 1.0 - smoothstep(-0.01, 0.01, d)
+    alpha := 1.0 - smoothstep(-0.02, 0.02, d)
     
     return vec4(finalColor, alpha)
 }
