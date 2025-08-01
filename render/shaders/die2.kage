@@ -1,0 +1,330 @@
+//go:build ignore
+
+//kage:unit pixels
+
+package shaders
+
+var Time float
+var DieScale float
+var Direction vec2
+var Velocity vec2
+var DieColor vec3
+var Height float
+var ZRotation float
+var ActiveFace int // ActiveFace is correlated to the matrix index being used
+
+var HoveringSpeedUp int
+// var NumPips int // Not used if FaceLayouts dictates pips
+
+// 0	NONE Action = iota
+// 
+// 1	ROLLING // the die is moving around, collision checks etc.
+// 2	DRAG    // locked to mouse cursor
+// 3	HELD    // held in hand, waiting to be scored. will move to it's Fixed*/
+var Mode int // die.Mode/action, 
+
+//TODO:FIXME: bool slices dont work. not a supported type when
+var FaceLayouts [6]mat3 // 0:Front, 1:Left, 2:Bottom, 3:Top, 4:Right, 5:Behind
+
+const pi = 3.141529
+
+// SDF functions
+func sdSphere(pos vec3, size float) float {
+    return length(pos) - size
+}
+
+func sdBox(p, b vec3) float {
+    q := abs(p) - b
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0)
+}
+
+func sdRoundBox(p, b vec3, r float) float {
+    q := abs(p) - b + vec3(r)
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r
+}
+
+func rotate3D(p, axis vec3, angle float) vec3 {
+    c := cos(angle)
+    s := sin(angle)
+    k := 1.0 - c
+    return p*c + cross(axis, p)*s + axis*dot(axis, p)*k
+}
+
+func opSubtraction(d1, d2 float) float {
+    return max(-d1, d2)
+}
+
+func sdPip(p vec3, scale float, d float) float {
+    return opSubtraction(sdSphere(p, scale), d)
+}
+
+// Rotation and direction logic
+func calcDirection() vec3 {
+    rollAxis := vec3(0.0, 0.0, 0.0)
+    if abs(Velocity.x) > 0.001 {
+        rollAxis.y = Direction.x
+    }
+    if abs(Velocity.y) > 0.001 {
+        rollAxis.x = -Direction.y
+    }
+    if length(rollAxis) < 0.001 {
+        return vec3(0.0, 0.0, 1.0) // Fallback
+    }
+    rollAxis.z = ZRotation
+    return normalize(rollAxis)
+}
+
+func calcRotation() float {
+    velMag := length(Velocity)
+    return -velMag * 0.01 * pi // Direct velocity-based rotation
+}
+
+// --- MODIFIED FUNCTION ---
+func smartRotation(p vec3) vec3 {
+
+	// --- Step 1: Perform the standard physics-based roll ---
+	// This part is your original logic, which makes the die tumble
+	// continuously based on its velocity and the elapsed time.
+	totalRotation := calcRotation()
+	baseAngle := totalRotation * Time
+	throwDir := calcDirection()
+	q := rotate3D(p, throwDir, baseAngle)
+
+
+	// Finally, apply the Z-axis spin to the corrected, rolling die.
+	zRotationInRadians := -ZRotation * 2.0 * pi
+	q = rotate3D(q, vec3(0.0, 0.0, 1.0), zRotationInRadians)
+
+	if Mode == 2 { // DRAG
+		// A gentle, continuous rotation for the "HELD" state.
+		// It combines a slow spin around the Y-axis with a gentle rock
+		// on the X-axis to give a "dangling" or "floating" feel.
+		spinSpeed := 0.25 * 0.25
+		rockSpeed := 0.2
+		rockAmplitude := 0.25
+
+		if HoveringSpeedUp == 1 {
+			// When hovering over score zone, speed up the animation to signal interactability.
+			spinSpeed *= -6.0
+			rockSpeed *= -3.0
+		}
+
+		spinAngle := Time * spinSpeed
+		rockAngle := sin(Time * rockSpeed) * rockAmplitude
+
+		q = rotate3D(q, vec3(0.0, 0.0, 1.0), spinAngle)
+		q = rotate3D(q, vec3(0.0, .8, 0.0), rockAngle)
+	}
+
+	// --- Step 2: Apply a corrective rotation for the ActiveFace ---
+	// This takes the already-rolling die from Step 1 and applies a
+	// single, static rotation to it. This ensures that the face you
+	// want to be "up" is oriented correctly towards the camera,
+	// without stopping the rolling animation itself.
+
+	// The baseline is ActiveFace 5 (Behind), which naturally faces the camera.
+	// We rotate every other face to match this orientation.
+	if ActiveFace == 0 { // Front (+Z) -> needs 180 deg rot around Y
+		q = rotate3D(q, vec3(0, 1, 0), pi)
+	} else if ActiveFace == 1 { // Left (-X) -> needs +90 deg rot around Y
+		q = rotate3D(q, vec3(0, 1, 0), pi * 0.5)
+	} else if ActiveFace == 2 { // Bottom (-Y) -> needs -90 deg rot around X
+		q = rotate3D(q, vec3(1, 0, 0), -pi * 0.5)
+	} else if ActiveFace == 3 { // Top (+Y) -> needs +90 deg rot around X
+		q = rotate3D(q, vec3(1, 0, 0), pi * 0.5)
+	} else if ActiveFace == 4 { // Right (+X) -> needs -90 deg rot around Y
+		q = rotate3D(q, vec3(0, 1, 0), -pi * 0.5)
+	}
+	// No 'else' needed: if ActiveFace is 5, no correction is applied.
+
+	return q
+}
+
+// --- Pip Slot Coordinate Calculation for a SINGLE Face ---
+// Calculates the 3D coordinates for all 9 potential pip slots for a specific face.
+// faceIndex: 0:Front, 1:Left, 2:Bottom, 3:Top, 4:Right, 5:Behind
+// Returns: [9]vec3 containing the pip centers for that face.
+func getPipSlotCoordinatesForFace(faceIndex int, dieScale float) [9]vec3 {
+    var slots [9]vec3
+
+    // User-defined scaling for pip slot placement on a face grid
+    thirdScale := dieScale * 0.33
+    pipSlotOffsetOnFace := thirdScale * 2.0 // This is your 'third2'
+
+    facePipSlots2D := [9]vec2{
+        vec2(-pipSlotOffsetOnFace,  pipSlotOffsetOnFace), vec2(0.0,  pipSlotOffsetOnFace), vec2( pipSlotOffsetOnFace,  pipSlotOffsetOnFace),
+        vec2(-pipSlotOffsetOnFace,  0.0),                  vec2(0.0,  0.0),                  vec2( pipSlotOffsetOnFace,  0.0),
+        vec2(-pipSlotOffsetOnFace, -pipSlotOffsetOnFace), vec2(0.0, -pipSlotOffsetOnFace), vec2( pipSlotOffsetOnFace, -pipSlotOffsetOnFace),
+    }
+
+    if (faceIndex == 0) { // Front (+Z)
+        for i := 0; i < 9; i++ {
+            slots[i] = vec3(facePipSlots2D[i].x, facePipSlots2D[i].y, dieScale)
+        }
+    } else if (faceIndex == 1) { // Left (-X)
+        for i := 0; i < 9; i++ {
+            slots[i] = vec3(-dieScale, facePipSlots2D[i].y, facePipSlots2D[i].x)
+        }
+    } else if (faceIndex == 2) { // Bottom (-Y)
+        for i := 0; i < 9; i++ {
+            slots[i] = vec3(facePipSlots2D[i].x, -dieScale, facePipSlots2D[i].y)
+        }
+    } else if (faceIndex == 3) { // Top (+Y)
+        for i := 0; i < 9; i++ {
+            slots[i] = vec3(facePipSlots2D[i].x, dieScale, -facePipSlots2D[i].y)
+        }
+    } else if (faceIndex == 4) { // Right (+X)
+        for i := 0; i < 9; i++ {
+            slots[i] = vec3(dieScale, facePipSlots2D[i].y, -facePipSlots2D[i].x)
+        }
+    } else if (faceIndex == 5) { // Behind (-Z)
+        for i := 0; i < 9; i++ {
+            slots[i] = vec3(facePipSlots2D[i].x, facePipSlots2D[i].y, -dieScale)
+        }
+    }
+    return slots
+}
+
+// --- Helper to carve pips for a single face ---
+func applyPipsSDFForFace(currentDist float, rotatedPoint vec3, layout mat3, facePipCoords [9]vec3, pipRadius float) float {
+    d := currentDist
+    q := rotatedPoint
+    for r := 0; r < 3; r++ {
+        for c := 0; c < 3; c++ {
+            if layout[c][r] > 0.5 { // mat3 is col-major
+                slotIndex := r*3 + c
+                pipCenter := facePipCoords[slotIndex]
+                d = sdPip(q - pipCenter, pipRadius, d)
+            }
+        }
+    }
+    return d
+}
+
+// --- Main Shape Function ---
+func shape(p vec3) float {
+    q := smartRotation(p)
+    d := sdRoundBox(q, vec3(DieScale), 0.25) // Base die shape
+
+    pipRadius := DieScale * 0.2 // Your 'quarterScale'
+
+    // Carve pips for each face using FaceLayouts
+    for faceIdx := 0; faceIdx < 6; faceIdx++ {
+        layout := FaceLayouts[faceIdx]
+        faceCoords := getPipSlotCoordinatesForFace(faceIdx, DieScale)
+        d = applyPipsSDFForFace(d, q, layout, faceCoords, pipRadius)
+    }
+
+    return d
+}
+
+// --- Helper to check pip hit for a single face ---
+func getPipHitInfoForFace(rotatedPoint vec3, layout mat3, facePipCoords [9]vec3, pipRadius float) vec2 {
+    q := rotatedPoint
+    for r := 0; r < 3; r++ {
+        for c := 0; c < 3; c++ {
+            if layout[c][r] > 0.5 { // mat3 is col-major
+                slotIndex := r*3 + c
+                pipCenter := facePipCoords[slotIndex]
+                distToPipSphere := sdSphere(q - pipCenter, pipRadius)
+                if distToPipSphere < 0.0 {
+                    normalizedDepth := clamp(-distToPipSphere/pipRadius, 0.0, 1.0)
+                    return vec2(1.0, normalizedDepth) // vec2(isPip, depth)
+                }
+            }
+        }
+    }
+    return vec2(0.0, 0.0) // Not a pip on this face
+}
+// --- Pip Coloring Function ---
+
+func pipColors(originalDieSurfaceColor vec3, finalHitPos vec3) vec3 {
+    q := smartRotation(finalHitPos)
+    pipRadius := DieScale * 0.2 // Your 'quarterScale'
+    
+    var pipHitData vec2
+    var normalizedDepth float
+    rimBrightness := 0.7
+    centerBrightness := 0.05
+    var darkeningFactor float
+
+    // Check each face using FaceLayouts
+    for faceIdx := 0; faceIdx < 6; faceIdx++ {
+        layout := FaceLayouts[faceIdx]
+        faceCoords := getPipSlotCoordinatesForFace(faceIdx, DieScale)
+        pipHitData = getPipHitInfoForFace(q, layout, faceCoords, pipRadius)
+        
+        if (pipHitData.x > 0.5) { // If it's a pip on this face
+            normalizedDepth = pipHitData.y
+            darkeningFactor = mix(rimBrightness, centerBrightness, pow(normalizedDepth, 2.0))
+            return originalDieSurfaceColor * darkeningFactor
+        }
+    }
+
+    return originalDieSurfaceColor // No pip hit on any face
+}
+
+// --- Fragment Shader Main ---
+func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
+// 1. Setup ray
+    uv := (srcPos*2.0 - imageDstSize().xy) / imageDstSize().y
+    ro := vec3(0.0, 0.0, Height - 4.0)
+    rd := normalize(vec3(uv*0.5, 1.0))
+
+    // 2. Raymarch to find the surface
+    t := 0.0
+    var d float
+    for i := 0; i < 80; i++ {
+        d = shape(ro + rd*t)
+        if d < 0.00005 { // Use a smaller epsilon for higher precision
+            break
+        }
+        if t > 100.0 {
+            t = 100.0 // Cap distance if we miss
+            break
+        }
+        t += d
+    }
+
+    // 3. If we missed, return fully transparent
+    if t >= 100.0 {
+        return vec4(0)
+    }
+
+    // --- We have a hit. Now for high-quality rendering ---
+    
+    // 4. Calculate final position
+    finalPos := ro + rd*t
+
+    // 5. Calculate the surface normal (for lighting)
+    // This is done by checking the SDF in tiny offsets around the hit point.
+    eps := vec2(0.001, 0)
+    normal := normalize(vec3(
+        shape(finalPos + eps.xyy) - shape(finalPos - eps.xyy),
+        shape(finalPos + eps.yxy) - shape(finalPos - eps.yxy),
+        shape(finalPos + eps.yyx) - shape(finalPos - eps.yyx),
+    ))
+
+    var lightDir vec3
+
+    // 6. Calculate lighting
+    // Simple Lambertian lighting model. The light comes from above and slightly to the left.
+    if Height > 0 {
+        // lightDir = normalize(vec3(sin(Time/6), cos(Time/6), -1.0)) // from above, z towards you
+        lightDir = normalize(vec3(0,-.5,-.5))
+    } else if Height < 0 {
+        lightDir = normalize(vec3(.5,.5, .5)) //top right
+    } else {
+        lightDir = normalize(vec3(0, 0, -1.0))
+    }
+
+    diffuse := max(dot(normal, lightDir), 0.0)
+    ambient := 0.4 // Base ambient light to prevent shadows from being pitch black
+    shading := ambient + diffuse*0.8
+
+    // 7. Calculate final color with lighting and pip coloring
+    col := DieColor * shading
+    col = pipColors(col, finalPos)
+    
+    return vec4(col, 1.0)
+}
