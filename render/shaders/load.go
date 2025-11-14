@@ -24,7 +24,10 @@ var (
 	//go:embed die.kage
 	dieKage []byte
 
-	//go:embed rocks.kage
+	// //go:embed rocks.kage
+	// rocksKage []byte
+
+	//go:embed moon_rock.kage
 	rocksKage []byte
 
 	// POST PROCESSING

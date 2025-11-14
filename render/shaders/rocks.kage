@@ -25,11 +25,11 @@ var (
     ColorVariation float
 )
 
-// Hash function for deterministic variation
-func hash3D(p vec3) float {
-    val := sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453
-    return val - floor(val) // Manual fract implementation
-}
+// // Hash function for deterministic variation
+// func hash3D(p vec3) float {
+//     val := sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453
+//     return val - floor(val) // Manual fract implementation
+// }
 
 // 3D rotation function
 func rotate3D(p, axis vec3, angle float) vec3 {
@@ -57,9 +57,9 @@ func sdRoundBox(p, b vec3, r float) float {
 // Generate procedural rock shape using 3D SDFs
 func generateRock(p vec3, seed float) float {
     // Use seed to create deterministic variation
-    h1 := hash3D(vec3(seed, seed * 1.618, seed * 2.718))
-    h2 := hash3D(vec3(seed * 3.141, seed * 1.414, seed * 0.577))
-    h3 := hash3D(vec3(seed * 2.236, seed * 1.732, seed * 0.707))
+    h1 := vec3(seed, seed * 1.618, seed * 2.718)
+    h2 := vec3(seed * 3.141, seed * 1.414, seed * 0.577)
+    h3 := vec3(seed * 2.236, seed * 1.732, seed * 0.707)
     
     // Base rock shape - slightly irregular sphere
     baseShape := sdSphere(p, RockSize)
@@ -124,7 +124,7 @@ func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
     rim = pow(rim, 2.0) * 0.3
     
     // Generate color variation based on position and seed
-    colorVar := hash3D(pos * 2.0 + vec3(RockSeed))
+    colorVar := pos * 2.0 + vec3(RockSeed)
     rockColor := BaseColor + vec3(colorVar - 0.5) * ColorVariation
     
     // Combine lighting
