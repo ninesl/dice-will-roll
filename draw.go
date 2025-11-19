@@ -21,26 +21,26 @@ func (g *Game) Draw(s *ebiten.Image) {
 	// DrawROLLZONE(screen, opts)
 	g.DrawRocks(screen)
 
-	// if g.cursorWithin(render.SCOREZONE) {
-	// 	//TODO:FIXME: have to make this work for standard input, etc. will probably change with shaders anyways later
-	// 	if ebiten.IsMouseButtonPressed(ebiten.MouseButton0) {
-	// 		DrawSCOREZONE(screen, opts)
-	// 	}
-	// }
+	if g.cursorWithin(render.SCOREZONE) {
+		//TODO:FIXME: have to make this work for standard input, etc. will probably change with shaders anyways later
+		if ebiten.IsMouseButtonPressed(ebiten.MouseButton0) {
+			DrawSCOREZONE(screen, opts)
+		}
+	}
 
-	// g.DrawDice(screen)
+	g.DrawDice(screen)
 
-	// // s.DrawRectShader(
-	// // 	screen.Bounds().Dx(), screen.Bounds().Dy(),
-	// // 	g.Shaders[shaders.FXAAShaderKey],
-	// // 	&ebiten.DrawRectShaderOptions{
-	// // 		Images: [4]*ebiten.Image{screen},
-	// // 	},
-	// // )
+	// s.DrawRectShader(
+	// 	screen.Bounds().Dx(), screen.Bounds().Dy(),
+	// 	g.Shaders[shaders.FXAAShaderKey],
+	// 	&ebiten.DrawRectShaderOptions{
+	// 		Images: [4]*ebiten.Image{screen},
+	// 	},
+	// )
 
-	// DEBUGDrawMessage(screen, g.ActiveLevel.String(), 0.0)
+	DEBUGDrawMessage(screen, g.ActiveLevel.String(), 0.0)
 	DEBUGDrawMessage(screen, fmt.Sprintf("%.2f fps / %.2f tps\n", ebiten.ActualFPS(), ebiten.ActualTPS()), FONT_SIZE)
-	// DEBUGDiceValues(screen, g.Dice)
+	DEBUGDiceValues(screen, g.Dice)
 
 	s.DrawImage(screen, opts)
 	opts.GeoM.Reset()
@@ -66,7 +66,7 @@ func (g *Game) DrawRocks(screen *ebiten.Image) {
 	// screen.DrawImage(die.image, ops)
 
 	// Use the new efficient rocks renderer
-	// g.RocksRenderer.Draw(screen)
+	g.RocksRenderer.Draw(screen)
 
 	// // Display stats
 	// visible, total := g.RocksRenderer.GetStats()
