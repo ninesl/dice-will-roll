@@ -109,6 +109,7 @@ func (g *Game) ControlAction(action Action) {
 			for _, die := range g.Dice {
 				die.Roll()
 			}
+
 		} else {
 			for _, die := range g.Dice {
 				if die.Mode == ROLLING {
@@ -116,6 +117,14 @@ func (g *Game) ControlAction(action Action) {
 					die.ZRotation = rand.Float32() + -rand.Float32() // rotate changes
 				} else {
 					die.Roll()
+				}
+			}
+
+			for rockType := range render.NUM_ROCK_TYPES {
+				bounceDir := rand.Intn(360)
+				for _, rock := range g.RocksRenderer.Rocks[rockType] {
+					// rock.BounceBasedOnAngle()
+					rock.BounceTowardsAngle(bounceDir)
 				}
 			}
 		}

@@ -20,8 +20,30 @@ var (
 // see
 type Direction uint8
 
+// RockSpeedIndex is an index into the SpeedMap array
+type RockSpeedIndex uint8
+
+// DirectionSign represents movement direction as a bool (false = negative, true = positive)
+// For X-axis: false = left (-1.0), true = right (+1.0)
+// For Y-axis: false = up (-1.0), true = down (+1.0)
+// Use !sign to flip direction on bounce
+type DirectionSign bool
+
 const (
-	UP = iota
+	Negative DirectionSign = false // -1.0 multiplier
+	Positive DirectionSign = true  // +1.0 multiplier
+)
+
+// Multiplier converts the DirectionSign to a float64 multiplier for velocity calculations
+func (d DirectionSign) Multiplier() float64 {
+	if d {
+		return 1.0 // Positive direction
+	}
+	return -1.0 // Negative direction
+}
+
+const (
+	UP Direction = iota
 	DOWN
 	LEFT
 	RIGHT
@@ -40,7 +62,8 @@ var (
 	// used to force a direction
 	//
 	// Usage: DirectionMap[Direction].X * math.Abs(renderable.Velocity.X)
-	DirectionMap = map[Direction]Vec2{
+	// DirectionMap = map[Direction]Vec2{
+	DirectionArr = []Vec2{ // Direction indexes are aligned
 		UP:        Vec2{X: 0, Y: -1},
 		DOWN:      Vec2{X: 0, Y: 1},
 		LEFT:      Vec2{X: -1, Y: 0},
@@ -49,6 +72,16 @@ var (
 		UPRIGHT:   Vec2{X: 1, Y: -1},
 		DOWNRIGHT: Vec2{X: 1, Y: 1},
 		DOWNLEFT:  Vec2{X: -1, Y: 1},
+	}
+
+	// SpeedMap provides velocity multipliers for memory-efficient rock speed variation
+	// Rocks use uint8 indices into this array instead of storing float64 speeds
+	SpeedMap = []float64{
+		2.0, // index 0: slowest
+		3.0, // index 1: slow
+		4.0, // index 2: moderate
+		5.0, // index 3: fast
+		6.0, // index 4: fastest
 	}
 )
 
@@ -67,7 +100,7 @@ func normalize(v int) float32 {
 }
 
 // give 0-255 for r g b values return normalized to kages 0.0 - 1.0
-func Color(r, g, b int) Vec3 {
+func KageColor(r, g, b int) Vec3 {
 	return Vec3{
 		R: normalize(r),
 		G: normalize(g),

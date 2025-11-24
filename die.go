@@ -103,10 +103,10 @@ func SetupPlayerDice() []*Die {
 
 	for range NUM_PLAYER_DICE { // range NUM_PLAYER_DICE {
 		// dice = append(dice, SetupNewDie(colors[i]))
-		dice = append(dice, SetupNewDie(render.Color(
-			rand.IntN(255),
-			rand.IntN(255),
-			rand.IntN(255),
+		dice = append(dice, SetupNewDie(render.KageColor(
+			max(rand.IntN(255), 150),
+			max(rand.IntN(255), 150),
+			max(rand.IntN(255), 150),
 		)))
 	}
 
@@ -126,8 +126,8 @@ func (d *Die) Roll() {
 		d.Height = 0 // reset to normal height no matter where it is
 
 		d.Die.Roll()
-		dir := render.Direction(rand.IntN(2) + render.UPLEFT) // random direction
-		direction := render.DirectionMap[dir]
+		// random direction
+		direction := render.DirectionArr[render.Direction(rand.IntN(len(render.DirectionArr)))]
 
 		d.Velocity.X = TileSize * rand.Float64() * direction.X
 		d.Velocity.Y = TileSize * rand.Float64() * direction.Y

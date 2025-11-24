@@ -13,13 +13,18 @@ import (
 var screen = ebiten.NewImage(GAME_BOUNDS_X, GAME_BOUNDS_Y)
 
 func (g *Game) Draw(s *ebiten.Image) {
-	// screen.Clear()
+	// Draw transparent black background shader
 	screen.Clear()
+	screen.DrawRectShader(GAME_BOUNDS_X, GAME_BOUNDS_Y,
+		g.Shaders[shaders.BackgroundShaderKey],
+		&ebiten.DrawRectShaderOptions{})
 
 	opts := &ebiten.DrawImageOptions{}
 
 	// DrawROLLZONE(screen, opts)
-	g.DrawRocks(screen)
+	g.RocksRenderer.DrawRocks(screen)
+
+	// g.DrawRocks(screen)
 
 	if g.cursorWithin(render.SCOREZONE) {
 		//TODO:FIXME: have to make this work for standard input, etc. will probably change with shaders anyways later
@@ -46,41 +51,42 @@ func (g *Game) Draw(s *ebiten.Image) {
 	opts.GeoM.Reset()
 }
 
-func (g *Game) DrawRocks(screen *ebiten.Image) {
-	shader := g.Shaders[shaders.RocksShaderKey]
-	u := map[string]any{
-		"Time":       g.time,
-		"Mouse":      []float32{float32(g.cx), float32(g.cy)},
-		"Resolution": []float32{float32(GAME_BOUNDS_X), float32(GAME_BOUNDS_Y)},
-	}
+// func (g *Game) DrawRocks(screen *ebiten.Image) {
+// 	// shader := g.Shaders[shaders.RocksShaderKey]
+// 	// u := map[string]any{
+// 	// 	"Time":       g.time,
+// 	// 	"Mouse":      []float32{float32(g.cx), float32(g.cy)},
+// 	// 	"Resolution": []float32{float32(GAME_BOUNDS_X), float32(GAME_BOUNDS_Y)},
+// 	// }
 
-	// TODO: die specific shader uniforms, gems, power ups, etc. this is the fun part
-	opts := &ebiten.DrawRectShaderOptions{
-		Uniforms: u,
-	}
+// 	// // TODO: die specific shader uniforms, gems, power ups, etc. this is the fun part
+// 	// opts := &ebiten.DrawRectShaderOptions{
+// 	// 	Uniforms: u,
+// 	// }
 
-	screen.DrawRectShader(GAME_BOUNDS_X, GAME_BOUNDS_Y, shader, opts)
+// 	// screen.DrawRectShader(GAME_BOUNDS_X, GAME_BOUNDS_Y, shader, opts)
 
-	// ops := &ebiten.DrawImageOptions{}
-	// ops.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
-	// screen.DrawImage(die.image, ops)
+// 	// ops := &ebiten.DrawImageOptions{}
+// 	// ops.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
+// 	// screen.DrawImage(die.image, ops)
 
-	// Use the new efficient rocks renderer
-	g.RocksRenderer.Draw(screen)
+// 	// Use the new efficient rocks renderer
+// 	// g.RocksRenderer.DEBUGDrawSheets(screen)
+// 	g.RocksRenderer.DrawRocks(screen)
 
-	// // Display stats
-	// visible, total := g.RocksRenderer.GetStats()
-	// statsText := fmt.Sprintf("Rocks: %d/%d visible", visible, total)
+// 	// // Display stats
+// 	// visible, total := g.RocksRenderer.GetStats()
+// 	// statsText := fmt.Sprintf("Rocks: %d/%d visible", visible, total)
 
-	// textOpts := &text.DrawOptions{}
-	// textOpts.GeoM.Translate(0, FONT_SIZE*2)
-	// textOpts.ColorScale.ScaleWithColor(color.White)
+// 	// textOpts := &text.DrawOptions{}
+// 	// textOpts.GeoM.Translate(0, FONT_SIZE*2)
+// 	// textOpts.ColorScale.ScaleWithColor(color.White)
 
-	// text.Draw(screen, statsText, &text.GoTextFace{
-	// 	Source: DEBUG_FONT,
-	// 	Size:   FONT_SIZE,
-	// }, textOpts)
-}
+// 	// text.Draw(screen, statsText, &text.GoTextFace{
+// 	// 	Source: DEBUG_FONT,
+// 	// 	Size:   FONT_SIZE,
+// 	// }, textOpts)
+// }
 
 func (g *Game) DrawDice(screen *ebiten.Image) {
 	s := int(g.Dice[0].image.Bounds().Dx())

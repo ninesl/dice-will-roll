@@ -45,7 +45,7 @@ func init() {
 type Game struct {
 	Shaders       map[shaders.ShaderKey]*ebiten.Shader
 	RocksImage    *ebiten.Image
-	RocksRenderer *render.RocksRenderer // New rocks rendering system
+	RocksRenderer *render.RocksRenderer // New rocks rendering system, //TODO:FIXME: make a new one per level?, game renders the same but active level reassigns
 	Dice          []*Die                // Player's dice
 	Time          time.Time
 	startTime     time.Time
@@ -98,11 +98,10 @@ func LoadGame() *Game {
 
 	// Initialize rocks renderer with hybrid real-time 3D SDF system
 	rocksConfig := render.RocksConfig{
-		TotalRocks:    10000,                  // 10k total rocks (reasonable for testing)
+		TotalRocks:    100,                    // 10k total rocks (reasonable for testing)
 		SpriteSize:    TILE_SIZE / 2,          // User requirement: TILE_SIZE / 2
 		WorldBoundsX:  float32(GAME_BOUNDS_X), // No magic numbers: derived from GAME_BOUNDS_X
 		WorldBoundsY:  float32(GAME_BOUNDS_Y), // No magic numbers: derived from GAME_BOUNDS_Y
-		MaxVisible:    1000,                   // Max 1k visible rocks per frame for good performance
 		MinRockSize:   0.4,
 		MaxRockSize:   1.2,
 		MovementSpeed: 0.5, // Slower for smoother visuals

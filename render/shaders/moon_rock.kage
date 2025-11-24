@@ -13,7 +13,12 @@ var (
     // NEW: Explicit rotation control for sprite sheet generation
     RotationX float
     RotationY float
-
+    
+    // Color uniforms (0.0-1.0 range)
+    InnerColorDark vec3  // Dark brownish-gold for inner/crater areas
+    InnerColorLight vec3 // Light/white for inner/crater areas
+    OuterColorDark vec3  // Darker cream/tan for outer surface
+    OuterColorLight vec3 // Lighter cream/tan for outer surface
 )
 
 const (
@@ -139,9 +144,6 @@ func noiseSpace(ray, pos vec3, r float, mr mat3, zoom float, subnoise vec3) floa
 func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
     var p vec2 = (srcPos*2.0 - imageDstSize().xy) / imageDstSize().y
     
-    // NEW: Use explicit rotation uniforms for sprite sheet generation
-    var rotate vec2 = vec2(RotationX, RotationY)
-    
     // OLD: Mouse-based + time-based auto-rotation (commented out)
     // var mouseActive float = step(0.0, Mouse.x) * step(0.0, Mouse.y)
     // var rotate vec2 = vec2(
@@ -149,20 +151,26 @@ func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
     //     mix(0.0, Mouse.y / Resolution.y * 4.0 - 2.0, mouseActive),
     // )
     
+    //. eyeball pos
+    var pos vec3 = vec3(0.0,0.0,2.25)
+    
+    // NEW: Use explicit rotation uniforms for sprite sheet generation
+    var rotate vec2 = vec2(RotationX, RotationY)
+    
     var sins vec2 = sin(rotate)
     var coss vec2 = cos(rotate)
     var mr mat3 = mat3(vec3(coss.x,0.0,sins.x),vec3(0.0,1.0,0.0),vec3(-sins.x,0.0,coss.x));
     mr = mat3(vec3(1.0,0.0,0.0),vec3(0.0,coss.y,sins.y),vec3(0.0,-sins.y,coss.y))*mr;    
     var ray vec3 = normalize(vec3(p,2.0))
-    var ray1 vec3 = normalize(vec3(p+vec2(0.0,0.01),2.0))
-    var ray2 vec3 = normalize(vec3(p+vec2(0.01,0.0),2.0))
-    var pos vec3 = vec3(0.0,0.0,3.0)
+    
     var light vec3 = vec3(-30.0,0.0,-30.0)
     // Early test with primary ray to check if we hit the object
     var rt vec3 = distObj(pos*mr,ray*mr,pradius,mradius)
     
     // Early exit for background pixels - skip expensive calculations
     if length(rt) > 100.0 {
+            return vec4(0.0, 0.0, 0.0, 0.0)
+
         if Time > 0.0 {
             // s4 := 
     // if fragColor.a < 1.0 {
@@ -173,6 +181,8 @@ func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
             return vec4(0.0, 0.0, 0.0, 0.0)
         }
     }
+    var ray1 vec3 = normalize(vec3(p+vec2(0.0,0.01),2.0))
+    var ray2 vec3 = normalize(vec3(p+vec2(0.01,0.0),2.0))
     
     // Only compute normal rays and lighting if we hit the object
     var n1 vec3 = distObj(pos*mr,ray1*mr,pradius,mradius)
@@ -188,11 +198,12 @@ func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
     fd := (length(rt)-mradius)/(pradius-mradius)
     c := dot(n,lightn)*shadow
     if fd < line {
-        // Inner/crater area: dark brownish-gold to white based on noise
-        fragColor.xyz = mix(vec3(0.21,0.19,0.0),vec3(1.0,0.99,1.0),noise3(rt*128.0)*0.9+noise3(rt*8.0)*0.1)*c
+        // Inner/crater area: use InnerColorDark to InnerColorLight based on noise
+        fragColor.xyz = mix(InnerColorDark, InnerColorLight, noise3(rt*128.0)*0.9+noise3(rt*8.0)*0.1)*c
     } else {
-        // Outer surface: cream/tan colors with highlights based on noise
-        fragColor.xyz = mix(mix(vec3(1.0,1.0,0.9),vec3(0.8,0.79,0.7),noise3(rt*128.0)*0.9+noise3(rt*8.0)*0.1),vec3(1.0),pow(fd+0.5,10.0))*c
+        // Outer surface: use OuterColorDark to OuterColorLight based on noise (highlight removed)
+        fragColor.xyz = mix(OuterColorLight, OuterColorDark, noise3(rt*128.0)*0.9+noise3(rt*8.0)*0.1)*c
+        // Original with bright highlight: mix(mix(OuterColorLight, OuterColorDark, noise3(rt*128.0)*0.9+noise3(rt*8.0)*0.1),vec3(1.0),pow(fd+0.5,10.0))*c
     }
     
     return min(vec4(1.0), fragColor)

@@ -15,13 +15,54 @@ func DEBUGTitleFPS(x, y float64) {
 	ebiten.SetWindowTitle("Dice Will Roll " + msg)
 }
 
+const BaseVelocity = 2.0
+
+func (g *Game) UpdateRocks() {
+	g.RocksRenderer.ActiveRockType++
+	if g.RocksRenderer.ActiveRockType >= render.NUM_ROCK_TYPES {
+		g.RocksRenderer.ActiveRockType = 0
+	}
+	for _, rock := range g.RocksRenderer.Rocks[g.RocksRenderer.ActiveRockType] {
+		rock.SpriteIndex++
+		if rock.SpriteIndex > 360 {
+			rock.SpriteIndex = 0
+		}
+
+		// Calculate velocity using slope (SpeedX/SpeedY) and direction signs
+		speedX := BaseVelocity * render.SpeedMap[rock.SpeedX] * rock.SignX.Multiplier()
+		speedY := BaseVelocity * render.SpeedMap[rock.SpeedY] * rock.SignY.Multiplier()
+		rock.Position.X += speedX
+		rock.Position.Y += speedY
+
+		// Handle X-axis boundary collisions
+		if rock.Position.X+g.RocksRenderer.FSpriteSize >= render.GAME_BOUNDS_X {
+			rock.Position.X = render.GAME_BOUNDS_X - g.RocksRenderer.FSpriteSize
+			rock.BounceX() // Bounce off right wall
+		} else if rock.Position.X <= 0 {
+			rock.Position.X = 0
+			rock.BounceX() // Bounce off left wall
+		}
+
+		// Handle Y-axis boundary collisions
+		if rock.Position.Y+g.RocksRenderer.FSpriteSize >= render.GAME_BOUNDS_Y {
+			rock.Position.Y = render.GAME_BOUNDS_Y - g.RocksRenderer.FSpriteSize
+			rock.BounceY() // Bounce off bottom wall
+		} else if rock.Position.Y <= 0 {
+			rock.Position.Y = 0
+			rock.BounceY() // Bounce off top wall
+		}
+
+		// g.RocksRenderer.Rocks[g.RocksRenderer.ActiveRockType][i] = rock
+	}
+}
+
 // interface impl
 func (g *Game) Update() error {
 	g.UpdateCusor()
 	g.time = float32(time.Since(g.startTime).Milliseconds()) / float32(ebiten.TPS())
 
 	// Update rocks (frame-based, no deltaTime needed)
-	g.RocksRenderer.Update()
+	// g.RocksRenderer.Update()
 
 	// // Update camera (simple forward movement for now)
 	// cameraPos := render.Vector3{
@@ -53,10 +94,10 @@ func (g *Game) Update() error {
 		die.Height = .1
 	}
 
-	action := g.Controls()
-	g.ControlAction(action)
+	g.ControlAction(g.Controls())
 
 	g.UpdateDice()
+	g.UpdateRocks()
 
 	return nil
 }
