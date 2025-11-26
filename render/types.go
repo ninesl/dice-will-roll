@@ -20,19 +20,14 @@ var (
 // see
 type Direction uint8
 
-// RockSpeedIndex is an index into the SpeedMap array
-type RockSpeedIndex uint8
+// Rock Speed is the x/y slope
+// type RockSpeed uint8
 
 // DirectionSign represents movement direction as a bool (false = negative, true = positive)
 // For X-axis: false = left (-1.0), true = right (+1.0)
 // For Y-axis: false = up (-1.0), true = down (+1.0)
 // Use !sign to flip direction on bounce
 type DirectionSign bool
-
-const (
-	Negative DirectionSign = false // -1.0 multiplier
-	Positive DirectionSign = true  // +1.0 multiplier
-)
 
 // Multiplier converts the DirectionSign to a float64 multiplier for velocity calculations
 func (d DirectionSign) Multiplier() float64 {
@@ -76,13 +71,13 @@ var (
 
 	// SpeedMap provides velocity multipliers for memory-efficient rock speed variation
 	// Rocks use uint8 indices into this array instead of storing float64 speeds
-	SpeedMap = []float64{
-		2.0, // index 0: slowest
-		3.0, // index 1: slow
-		4.0, // index 2: moderate
-		5.0, // index 3: fast
-		6.0, // index 4: fastest
-	}
+	// SpeedMap = []float64{
+	// 	0.0, // index 0: slowest
+	// 	1.0, // index 1: slow
+	// 	2.0, // index 2: moderate
+	// 	3.0, // index 3: fast
+	// 	4.0, // index 4: fastest
+	// }
 )
 
 type Vec2 struct {

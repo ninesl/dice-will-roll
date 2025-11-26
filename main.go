@@ -96,15 +96,14 @@ func LoadGame() *Game {
 
 	dice := SetupPlayerDice()
 
+	rockAmount := 10
+
 	// Initialize rocks renderer with hybrid real-time 3D SDF system
 	rocksConfig := render.RocksConfig{
-		TotalRocks:    100,                    // 10k total rocks (reasonable for testing)
-		SpriteSize:    TILE_SIZE / 2,          // User requirement: TILE_SIZE / 2
-		WorldBoundsX:  float32(GAME_BOUNDS_X), // No magic numbers: derived from GAME_BOUNDS_X
-		WorldBoundsY:  float32(GAME_BOUNDS_Y), // No magic numbers: derived from GAME_BOUNDS_Y
-		MinRockSize:   0.4,
-		MaxRockSize:   1.2,
-		MovementSpeed: 0.5, // Slower for smoother visuals
+		TotalRocks:   rockAmount,
+		SpriteSize:   TILE_SIZE / 2,
+		WorldBoundsX: float32(render.GAME_BOUNDS_X),
+		WorldBoundsY: float32(render.GAME_BOUNDS_Y),
 	}
 
 	g := &Game{
@@ -113,7 +112,7 @@ func LoadGame() *Game {
 		RocksRenderer: render.NewRocksRenderer(rocksConfig),
 		startTime:     time.Now(),
 		ActiveLevel: NewLevel(LevelOptions{
-			Rocks: 100,
+			Rocks: rockAmount,
 			Hands: 3,
 			Rolls: 2,
 		}),

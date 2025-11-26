@@ -23,16 +23,52 @@ func (g *Game) UpdateRocks() {
 		g.RocksRenderer.ActiveRockType = 0
 	}
 	for _, rock := range g.RocksRenderer.Rocks[g.RocksRenderer.ActiveRockType] {
-		rock.SpriteIndex++
-		if rock.SpriteIndex > 360 {
-			rock.SpriteIndex = 0
-		}
+		// Update transition system for smooth sprite rotation during direction changes
+		// rock.UpdateTransition()
 
-		// Calculate velocity using slope (SpeedX/SpeedY) and direction signs
-		speedX := BaseVelocity * render.SpeedMap[rock.SpeedX] * rock.SignX.Multiplier()
-		speedY := BaseVelocity * render.SpeedMap[rock.SpeedY] * rock.SignY.Multiplier()
-		rock.Position.X += speedX
-		rock.Position.Y += speedY
+		// if rock.TransitionSpeedY >= render.MAX_SPEED {
+		// 	rock.TransitionSpeedY = render.MIN_SPEED + 1
+		// } else {
+		// 	rock.TransitionSpeedY++
+		// }
+
+		rock.Update()
+
+		// if rock.SpriteSlopeX >= render.DIRECTIONS_TO_SNAP {
+		// 	rock.SpriteSlopeX =
+		// } else if rock.SpriteSlopeX < 0 {
+		// 	rock.SpriteSlopeY = 0
+		// }
+
+		// if rock.TransitionSpeedY > render.MAX_SPEED {
+		// 	rock.TransitionSpeedY = render.MIN_SPEED + 1
+		// } else {
+		// 	rock.TransitionSpeedY++
+		// }
+
+		// rock.TransitionSpeedX = int8(i)
+		// rock.TransitionSpeedY = int8(i)
+
+		// if rock.TransitionSpeedX >= render.MAX_SPEED {
+		// 	rock.TransitionSpeedX -= render.MAX_SPEED * 2
+		// }
+		// if rock.TransitionSpeedY >= render.MAX_SPEED {
+		// 	rock.TransitionSpeedY -= render.MAX_SPEED * 2
+		// }
+
+		// fmt.Printf("%d : X,Y{%d/%d}\n", i, rock.SlopeX, rock.SlopeX)
+
+		// Update sprite rotation frame (creates rolling animation)
+		// rock.SpriteIndex++
+		// if rock.SpriteIndex >= render.ROTATION_FRAMES {
+		// 	rock.SpriteIndex = 0
+		// }
+
+		// Calculate velocity directly from signed speed values
+		// speedX := BaseVelocity * float64(rock.SpeedX)
+		// speedY := BaseVelocity * float64(rock.SpeedY)
+		// // rock.Position.X += speedX
+		// // rock.Position.Y += speedY
 
 		// Handle X-axis boundary collisions
 		if rock.Position.X+g.RocksRenderer.FSpriteSize >= render.GAME_BOUNDS_X {

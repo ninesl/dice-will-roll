@@ -7,194 +7,164 @@ import (
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
 
-// Constants for sprite sheet system
+// Constants for sprite system
 const (
-	SHEET_COLUMNS  = 30                         // Columns in sprite sheet (width)
-	SHEET_ROWS     = 12                         // Rows in sprite sheet (height)
-	TOTAL_SPRITES  = SHEET_COLUMNS * SHEET_ROWS // Total frames in sprite sheet (360)
-	NUM_ROCK_TYPES = 2                          // 3 rock types: X-axis, Y-axis, Z-axis rotation
+	NUM_ROCK_TYPES    = 1                       // 2 rock types: different shapes
+	DEGREES_PER_FRAME = 5                       // Degrees of rotation per transition frame
+	ROTATION_FRAMES   = 360 / DEGREES_PER_FRAME // 360/5 = 72 frames (every 5 degrees) static spin
+
+	DIRECTIONS_TO_SNAP = MAX_SLOPE * 2 // # of possible angles for SpriteSlopeX and SpriteSlopeY
+
+	MAX_SLOPE int8 = 4
+	MIN_SLOPE int8 = -MAX_SLOPE
+	// SPEED_RANGE      = MAX_SLOPE*2 + 1 // 9 (from -4 to +4 inclusive)
 )
 
-// type DriftDirction uint8
-
-// const (
-
-// )
-
-// SimpleRock represents a rock using sprite sheet animation
+// SimpleRock represents a rock using pre-extracted sprite frames
 type SimpleRock struct {
-	Position    Vec2           // 2D screen position
-	SpriteIndex uint16         // Index into sprite sheet (0-359, max 65535). uint16 reduces struct size from 32→24 bytes (25% savings)
-	SpeedX      RockSpeedIndex // Index into SpeedMap defining X-axis velocity magnitude. Combined with SpeedY, creates movement "slope" or angle. High SpeedX with low SpeedY = shallow angle (mostly horizontal). Equal SpeedX and SpeedY = 45° diagonal. Remains constant throughout lifetime.
-	SpeedY      RockSpeedIndex // Index into SpeedMap defining Y-axis velocity magnitude. Combined with SpeedX, creates movement "slope" or angle. High SpeedY with low SpeedX = steep angle (mostly vertical). SpeedMap values: [2.0, 3.0, 4.0, 5.0, 6.0]. Remains constant throughout lifetime.
-	SignX       DirectionSign  // X-axis direction: false=left(-1.0), true=right(+1.0). Flips on X-axis wall collision.
-	SignY       DirectionSign  // Y-axis direction: false=up(-1.0), true=down(+1.0). Flips on Y-axis wall collision.
+	Position    Vec2   // 2D screen position
+	SpriteIndex uint16 // Current rotation frame index (0-71)
+	SlopeX      int8   // Current X speed component (-4 to +4)
+	SlopeY      int8   // Current Y speed component (-4 to +4)
+
+	// Transition system for smooth sprite rotation during direction changes
+	SpriteSlopeX int8 // Visual speed X used during transition (gradually moves toward SpeedX)
+	SpriteSlopeY int8 // Visual speed Y used during transition (gradually moves toward SpeedY)
 }
 
-// BounceUpLeft sets rock direction to upper-left quadrant (↖)
-// SignX=false (left), SignY=false (up)
-func (r *SimpleRock) BounceUpLeft() {
-	r.SignX = false
-	r.SignY = false
+// Updates the rock based on the current target transitions.
+//
+// will update it's state based on other params every Tick/time this is called
+func (r *SimpleRock) Update() {
+	r.UpdateTransition()
+	// r.SpriteSlopeX = r.SlopeX
+	// r.SpriteSlopeY = r.SlopeY
 }
 
-// BounceUpRight sets rock direction to upper-right quadrant (↗)
-// SignX=true (right), SignY=false (up)
-func (r *SimpleRock) BounceUpRight() {
-	r.SignX = true
-	r.SignY = false
-}
-
-// BounceDownLeft sets rock direction to lower-left quadrant (↙)
-// SignX=false (left), SignY=true (down)
-func (r *SimpleRock) BounceDownLeft() {
-	r.SignX = false
-	r.SignY = true
-}
-
-// BounceDownRight sets rock direction to lower-right quadrant (↘)
-// SignX=true (right), SignY=true (down)
-func (r *SimpleRock) BounceDownRight() {
-	r.SignX = true
-	r.SignY = true
+// if newY or newX is IDENTICAL to the the current value in the struct
+//
+// does the go compiler ignore this if hte func is called? I want to reuse this in BounceX and BounceY but it seems to be
+// a wasted allocation if we were to assign newX newY each time?
+func (r *SimpleRock) Bounce(newX int8, newY int8) {
+	r.SlopeX = newX
+	r.SlopeY = newY
 }
 
 // BounceX flips horizontal direction (bounce off vertical wall)
 func (r *SimpleRock) BounceX() {
-	r.SignX = !r.SignX
+	// Instantly change actual direction
+	r.SlopeX = -r.SlopeX
 }
 
 // BounceY flips vertical direction (bounce off horizontal wall)
 func (r *SimpleRock) BounceY() {
-	r.SignY = !r.SignY
+	// Instantly change actual direction
+	r.SlopeY = -r.SlopeY
 }
 
-func (r *SimpleRock) Bounce() {
-	// XOR multiple state values for pseudo-random but deterministic result
-	seed := int(r.SpriteIndex) ^ int(r.Position.X) ^ int(r.Position.Y) ^ int(r.SpeedX) ^ int(r.SpeedY)
+// UpdateTransition handles the smooth sprite rotation during direction changes
+func (r *SimpleRock) UpdateTransition() {
+	// Gradually move transition speeds toward target speeds (one step per frame)
 
-	if seed%2 == 0 {
-		r.SignX = !r.SignX // Flip horizontal (left↔right)
-	} else {
-		r.SignY = !r.SignY // Flip vertical (up↔down)
+	// Update X component
+	if r.SpriteSlopeX <= r.SlopeX+MAX_SLOPE {
+		r.SpriteSlopeX++
+	} else if r.SpriteSlopeX >= r.SlopeX+MAX_SLOPE {
+		r.SpriteSlopeX--
 	}
-}
 
-func (r *SimpleRock) BounceBasedOnAngle() {
-	// XOR speed indices to create deterministic per-angle behavior
-	angleHash := uint8(r.SpeedX) ^ uint8(r.SpeedY)
-
-	if r.SpeedX >= r.SpeedY {
-		// Horizontal-dominant or equal: flip horizontal
-		r.SignX = !r.SignX
-		// 50% chance to also flip vertical (corner bounces)
-		if angleHash%2 == 1 {
-			r.SignY = !r.SignY
-		}
-	} else {
-		// Vertical-dominant: flip vertical
-		r.SignY = !r.SignY
-		// 50% chance to also flip horizontal (corner bounces)
-		if angleHash%2 == 1 {
-			r.SignX = !r.SignX
-		}
+	// Update Y component
+	if r.SpriteSlopeY <= r.SlopeY+MAX_SLOPE {
+		r.SpriteSlopeY++
+	} else if r.SpriteSlopeY >= r.SlopeY+MAX_SLOPE {
+		r.SpriteSlopeY--
 	}
 }
 
 // BounceTowardsAngle sets rock direction and speed based on target angle (0-360 degrees)
-// Angle system: 0°=up, 90°=right, 180°=down, 270°=left (standard unit circle)
-// Determines quadrant, sets direction signs, and assigns SpeedX/SpeedY for the slope
-//
-// Quadrants:
-//
-//	0-90°:    UpRight (↗)   - SignX=true,  SignY=false
-//	90-180°:  DownRight (↘) - SignX=true,  SignY=true
-//	180-270°: DownLeft (↙)  - SignX=false, SignY=true
-//	270-360°: UpLeft (↖)    - SignX=false, SignY=false
-func (r *SimpleRock) BounceTowardsAngle(angle int) {
-	// Normalize angle to 0-360 range
-	angle = angle % 360
-	if angle < 0 {
-		angle += 360
-	}
+// Angle system: 0°=right, 90°=down, 180°=left, 270°=up (standard screen coordinates)
+// Uses trigonometry to accurately map angles to SpeedX/SpeedY components
+// func (r *SimpleRock) BounceTowardsAngle(angle int) {
+// 	// Normalize angle to 0-360 range
+// 	// angle = angle % 360
+// 	if angle >= 360 || angle < 0 { // technically this is an assert
+// 		panic("angle out of range")
+// 	}
 
-	// Determine quadrant and set direction signs
-	switch {
-	case angle >= 0 && angle < 90:
-		// Quadrant 1: UpRight (0-89°)
-		r.SignX = true  // Moving right
-		r.SignY = false // Moving up
-	case angle >= 90 && angle < 180:
-		// Quadrant 2: DownRight (90-179°)
-		r.SignX = true // Moving right
-		r.SignY = true // Moving down
-	case angle >= 180 && angle < 270:
-		// Quadrant 3: DownLeft (180-269°)
-		r.SignX = false // Moving left
-		r.SignY = true  // Moving down
-	case angle >= 270 && angle < 360:
-		// Quadrant 4: UpLeft (270-359°)
-		r.SignX = false // Moving left
-		r.SignY = false // Moving up
-	}
+// 	// Calculate current angle for transition frame calculation
+// 	currentAngle := int(math.Atan2(float64(r.SlopeY), float64(r.SlopeY)) * 180 / math.Pi)
 
-	// Calculate angle within quadrant (0-90°)
-	quadrantAngle := angle % 90
+// 	// Convert angle to radians for trigonometric functions
+// 	angleRad := float64(angle) * math.Pi / 180.0
 
-	// Bucket angles into speed zones (0-18°, 18-36°, 36-54°, 54-72°, 72-90°)
-	speedZone := quadrantAngle / 18
+// 	// Calculate velocity components using trigonometry
+// 	// cos gives X-component, sin gives Y-component
+// 	speedX := math.Cos(angleRad)
+// 	speedY := math.Sin(angleRad)
 
-	if quadrantAngle < 45 {
-		// 0-44°: First axis dominant (vertical for Q1/Q4, horizontal for Q2/Q3)
-		// For Q1 (0-89°): Y dominant at start, X increases
-		// For Q2 (90-179°): X dominant at start, Y increases
-		if angle < 90 || angle >= 270 {
-			// Q1 or Q4: Y-axis dominant transitioning to equal
-			r.SpeedY = RockSpeedIndex(4 - speedZone/2) // 4, 4, 3, 3, 2
-			r.SpeedX = RockSpeedIndex(speedZone)       // 0, 1, 2, 3, 4
-		} else {
-			// Q2 or Q3: X-axis dominant transitioning to equal
-			r.SpeedX = RockSpeedIndex(4 - speedZone/2) // 4, 4, 3, 3, 2
-			r.SpeedY = RockSpeedIndex(speedZone)       // 0, 1, 2, 3, 4
-		}
-	} else {
-		// 45-90°: Second axis dominant
-		if angle < 90 || angle >= 270 {
-			// Q1 or Q4: X-axis becomes dominant
-			r.SpeedX = RockSpeedIndex(4 - (4-speedZone)/2) // 2, 3, 3, 4, 4
-			r.SpeedY = RockSpeedIndex(4 - speedZone)       // 4, 3, 2, 1, 0
-		} else {
-			// Q2 or Q3: Y-axis becomes dominant
-			r.SpeedY = RockSpeedIndex(4 - (4-speedZone)/2) // 2, 3, 3, 4, 4
-			r.SpeedX = RockSpeedIndex(4 - speedZone)       // 4, 3, 2, 1, 0
-		}
-	}
-}
+// 	// Scale to int8 range (-4 to +4) while maintaining ratio
+// 	// const maxVal = float64(MAX_SLOPE) // 4
 
-// RocksRenderer manages sprite-sheet-based 3D SDF rock rendering
+// 	// Scale both components so the larger one reaches maxVal
+// 	maxComponent := math.Max(math.Abs(speedX), math.Abs(speedY))
+// 	var targetSlopeX, targetSlopeY int8
+// 	if maxComponent > 0 {
+// 		scale := maxVal / maxComponent
+// 		targetSlopeX = int8(math.Round(speedX * scale))
+// 		targetSlopeY = int8(math.Round(speedY * scale))
+// 	} else {
+// 		// Edge case: shouldn't happen, but default to stationary
+// 		targetSlopeX = 0
+// 		targetSlopeY = 0
+// 	}
+
+// 	// Ensure at least one speed is non-zero to prevent truly stationary rocks
+// 	if targetSlopeX == 0 && targetSlopeY == 0 {
+// 		targetSlopeX = 1
+// 		targetSlopeY = 0
+// 	}
+
+// 	// Calculate angle difference for transition frames
+// 	angleDiff := angle - currentAngle
+// 	if angleDiff < 0 {
+// 		angleDiff = -angleDiff
+// 	}
+// 	if angleDiff > 180 {
+// 		angleDiff = 360 - angleDiff
+// 	}
+
+// 	// Set new speeds immediately
+// 	r.SlopeX = targetSlopeX
+// 	r.SlopeY = targetSlopeY
+
+// }
+
+// RocksRenderer manages pre-extracted sprite rendering with ultra-fast array indexing
 type RocksRenderer struct {
-	shader         *ebiten.Shader
-	spriteSheets   [NUM_ROCK_TYPES]*ebiten.Image // 3 sprite sheets for X, Y, Z axis rotations
-	sheetConfig    SpriteSheet                   // Sprite sheet configuration (same for all)
-	Rocks          [NUM_ROCK_TYPES][]*SimpleRock // Rocks organized by type (no flag needed!)
+	shader *ebiten.Shader
+
+	// 4D array of pre-extracted individual sprite images
+	// [rockType][speedX_index][speedY_index][rotationFrame] -> sprite image
+	// Direct O(1) lookup, no SubImage() calls during rendering
+	// Size: [2][9][9][72] = 11,664 sprite pointers (many shared via deduplication)
+	sprites [NUM_ROCK_TYPES][DIRECTIONS_TO_SNAP][DIRECTIONS_TO_SNAP]*ebiten.Image
+
+	Rocks          [NUM_ROCK_TYPES][]*SimpleRock // Rocks organized by type
 	SpriteSize     int
 	FSpriteSize    float64
 	totalRocks     int
 	ActiveRockType int
 }
 
-// RocksConfig holds configuration for sprite-sheet-based rock system
+// RocksConfig holds configuration for rock system
 type RocksConfig struct {
-	TotalRocks    int
-	SpriteSize    int     // TILE_SIZE / 2
-	WorldBoundsX  float32 // GAME_BOUNDS_X
-	WorldBoundsY  float32 // GAME_BOUNDS_Y
-	MinRockSize   float32
-	MaxRockSize   float32
-	MovementSpeed float32
+	TotalRocks   int
+	SpriteSize   int
+	WorldBoundsX float32
+	WorldBoundsY float32
 }
 
-// NewRocksRenderer creates a new sprite-cached rocks rendering system
+// NewRocksRenderer creates a new ultra-fast sprite rendering system
 func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 	shaderMap := shaders.LoadShaders()
 	r := &RocksRenderer{
@@ -204,7 +174,7 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 		totalRocks:  config.TotalRocks,
 	}
 
-	// Generate sprite sheet
+	// Generate and pre-extract all sprite frames
 	r.generateSprites()
 
 	// Generate rock instances
@@ -213,24 +183,18 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 	return r
 }
 
-// generateSprites creates 3 sprite sheets for X, Y, Z axis rotations
+// generateSprites creates individual sprite images for each unique angle
+// Multiple array slots may point to the same sprite if they have the same angle (deduplication)
 func (r *RocksRenderer) generateSprites() {
-	// Calculate sprite sheet dimensions
-	// Layout: SHEET_COLUMNS columns × SHEET_ROWS rows
-	sheetWidth := r.SpriteSize * SHEET_COLUMNS
-	sheetHeight := r.SpriteSize * SHEET_ROWS
+	// Track generated sprites by angle for deduplication
+	// Key: angle in degrees, Value: [rockType][frameIdx] -> sprite
 
-	// Initialize sprite sheet configuration (same for all 3 sheets)
-	r.sheetConfig = NewSpriteSheet(SHEET_COLUMNS, SHEET_ROWS, r.SpriteSize)
+	// genSprites := make([][DIRECTIONS_TO_SNAP][DIRECTIONS_TO_SNAP]map[int]*ebiten.Image, 0, NUM_ROCK_TYPES)
+	genSprites := [NUM_ROCK_TYPES][DIRECTIONS_TO_SNAP][DIRECTIONS_TO_SNAP]*ebiten.Image{}
 
-	// Generate 3 sprite sheets: one for each rock type with different colors
-	for rockIndex := 0; rockIndex < NUM_ROCK_TYPES; rockIndex++ {
-		// Create sprite sheet for this rock type
-		r.spriteSheets[rockIndex] = ebiten.NewImage(sheetWidth, sheetHeight)
-
-		// Define rock colors based on rock type
+	for rockType := range NUM_ROCK_TYPES {
 		var innerDark, innerLight, outerDark, outerLight Vec3
-		switch rockIndex {
+		switch rockType {
 		case 0: // Dark gray
 			innerDark = KageColor(40, 40, 42)
 			innerLight = KageColor(80, 82, 85)
@@ -241,88 +205,79 @@ func (r *RocksRenderer) generateSprites() {
 			innerLight = KageColor(100, 70, 50)
 			outerDark = KageColor(80, 60, 45)
 			outerLight = KageColor(120, 90, 70)
-		case 2: // Blue-gray
-			innerDark = KageColor(30, 40, 50)
-			innerLight = KageColor(60, 75, 90)
-			outerDark = KageColor(50, 65, 80)
-			outerLight = KageColor(80, 95, 110)
 		}
 
-		// Generate each rotation frame and draw into the sprite sheet
-		for row := 0; row < SHEET_ROWS; row++ {
-			for col := 0; col < SHEET_COLUMNS; col++ {
-				// Calculate sprite index (0-359)
-				spriteIndex := row*SHEET_COLUMNS + col
+		XSnap := [DIRECTIONS_TO_SNAP][DIRECTIONS_TO_SNAP]*ebiten.Image{}
+		genSprites[rockType] = XSnap
+		for XSnapIdx := range DIRECTIONS_TO_SNAP {
+			YSnap := [DIRECTIONS_TO_SNAP]*ebiten.Image{}
+			genSprites[rockType][XSnapIdx] = YSnap
 
-				// Calculate position in sprite sheet
-				x := col * r.SpriteSize
-				y := row * r.SpriteSize
+			angleX := (int(XSnapIdx) + 1) * (360 / int(DIRECTIONS_TO_SNAP))
 
-				// Create temporary sprite for this variant
-				tempSprite := ebiten.NewImage(r.SpriteSize, r.SpriteSize)
+			// angleX := math.Atan2(float64(y), float64(x))
+			// angleDeg := angleRad * 180.0 / math.Pi
+			// if angleDeg < 0 {
+			// 	angleDeg += 360
+			// }
 
-				// Calculate rotation angle for seamless looping
-				// We want 360 sprites covering 0 to 359 degrees (not including 360, which equals 0)
-				// This ensures sprite[0] and sprite[359+1] are the same (perfect loop)
-				rotationAngle := float32(spriteIndex) * (2.0 * 3.14159265 / float32(TOTAL_SPRITES))
+			for YSnapIdx := range DIRECTIONS_TO_SNAP {
 
-				// Each rock type rotates around a different axis
-				var rotX, rotY float32 //, rotZ float32
-				switch rockIndex {
-				case 0: // X-axis rotation
-					rotX = rotationAngle
-					rotY = 0
-					// rotZ = 0
-				case 1: // Y-axis rotation
-					rotX = 0
-					rotY = rotationAngle
-					// rotZ = 0
-				case 2: // Z-axis rotation
-					rotX = rotationAngle
-					rotY = rotationAngle
-					// rotZ = rotationAngle
-				}
+				angleY := (int(YSnapIdx) + 1) * (360 / int(DIRECTIONS_TO_SNAP))
+
+				// imageMap := map[int]*ebiten.Image{}
+
+				//TODO: make this a spritesheet and get the subrects
+				// for frameDegrees := 0; frameDegrees <= 360; frameDegrees += DEGREES_PER_FRAME {
+
+				sprite := ebiten.NewImage(r.SpriteSize, r.SpriteSize)
+
+				// Calculate rotation angle (0 to 2π over ROTATION_FRAMES)
+				// rotationAngle := float32(frameDegrees) * (2.0 * 3.14159265 / float32(ROTATION_FRAMES))
 
 				u := map[string]interface{}{
-					"Time":            0.0, // No time-based animation for sprite generation
-					"Resolution":      []float32{float32(r.SpriteSize), float32(r.SpriteSize)},
-					"Mouse":           Vec2{X: 0.0, Y: 0.0}.KageVec2(),
-					"RotationX":       rotX,
-					"RotationY":       rotY,
+					"Time":       0.0,
+					"Resolution": []float32{float32(r.SpriteSize), float32(r.SpriteSize)},
+					"Mouse":      Vec2{X: 0.0, Y: 0.0}.KageVec2(),
+					"RotationX":  angleX,
+					"RotationY":  angleY,
+					// "RotationZ":       rotationAngle,
 					"InnerColorDark":  innerDark.KageVec3(),
 					"InnerColorLight": innerLight.KageVec3(),
 					"OuterColorDark":  outerDark.KageVec3(),
 					"OuterColorLight": outerLight.KageVec3(),
 				}
 
-				// Render rock variant with shader into temp sprite
 				opts := &ebiten.DrawRectShaderOptions{Uniforms: u}
-				tempSprite.DrawRectShader(r.SpriteSize, r.SpriteSize, r.shader, opts)
+				sprite.DrawRectShader(r.SpriteSize, r.SpriteSize, r.shader, opts)
 
-				// Draw temp sprite into sprite sheet at calculated position
-				drawOpts := &ebiten.DrawImageOptions{}
-				drawOpts.GeoM.Translate(float64(x), float64(y))
-				r.spriteSheets[rockIndex].DrawImage(tempSprite, drawOpts)
+				if XSnapIdx >= DIRECTIONS_TO_SNAP {
+					continue
+				} else if YSnapIdx >= DIRECTIONS_TO_SNAP {
+					continue
+				}
+
+				genSprites[rockType][XSnapIdx][YSnapIdx] = sprite
 			}
 		}
+		//TODO: should make a single spritesheet and then assign each degree key in map
+		// to the subrect of each to save memory allocations?
+
 	}
 }
 
-// generateRocks creates the initial rock instances, distributed across rock types
+// generateRocks creates the initial rock instances
 func (r *RocksRenderer) generateRocks(config RocksConfig) {
-	// Distribute rocks evenly across the 3 types
 	rocksPerType := config.TotalRocks / NUM_ROCK_TYPES
 	remainder := config.TotalRocks % NUM_ROCK_TYPES
 
-	for rockIndex := 0; rockIndex < NUM_ROCK_TYPES; rockIndex++ {
-		// Add remainder to first slices
+	for rockType := 0; rockType < NUM_ROCK_TYPES; rockType++ {
 		numRocks := rocksPerType
-		if rockIndex < remainder {
+		if rockType < remainder {
 			numRocks++
 		}
 
-		// Allocate slice for this rock type
-		r.Rocks[rockIndex] = make([]*SimpleRock, numRocks)
+		r.Rocks[rockType] = make([]*SimpleRock, numRocks)
 
 		for i := 0; i < numRocks; i++ {
 			// Random position
@@ -331,106 +286,50 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 				Y: float64(rand.Float32() * config.WorldBoundsY),
 			}
 
-			// Pick random sprite index (0-359)
-			spriteIndex := uint16(rand.Intn(TOTAL_SPRITES))
+			// Pick random rotation frame
+			spriteIndex := uint16(rand.Intn(ROTATION_FRAMES))
 
-			r.Rocks[rockIndex][i] = &SimpleRock{
-				Position:    pos,
-				SpriteIndex: spriteIndex,
-				SpeedX:      RockSpeedIndex(rand.Intn(len(SpeedMap))),
-				SpeedY:      RockSpeedIndex(rand.Intn(len(SpeedMap))),
-				SignX:       DirectionSign(rand.Intn(2) == 1), // Random bool: false=left, true=right
-				SignY:       DirectionSign(rand.Intn(2) == 1), // Random bool: false=up, true=down
+			// Pick random speed (avoid 0,0)
+			var speedX, speedY int8
+			for speedX == 0 && speedY == 0 {
+				speedX = int8(rand.Intn(int(DIRECTIONS_TO_SNAP)))
+				speedY = int8(rand.Intn(int(DIRECTIONS_TO_SNAP)))
+			}
+
+			r.Rocks[rockType][i] = &SimpleRock{
+				Position:     pos,
+				SpriteIndex:  spriteIndex,
+				SlopeX:       speedX,
+				SlopeY:       speedY,
+				SpriteSlopeX: speedX, // Initialize transition to match current
+				SpriteSlopeY: speedY, // Initialize transition to match current
 			}
 		}
 	}
 }
 
-// Update updates rock positions with constant drift and animation
-// func (r *RocksRenderer) Update() {
-// const driftSpeed = 0.1 // Static drift speed for all rocks
-
-// Update all rock types
-
-// for rockIndex := range NUM_ROCK_TYPES {
-// 	for i := range r.rocks[rockIndex] {
-// 		rock := &r.rocks[rockIndex][i]
-
-// 		rock.SpriteIndex = rock.SpriteIndex + 1
-// 		if rock.SpriteIndex >= TOTAL_SPRITES {
-// 			rock.SpriteIndex = 0
-// 		}
-
-// 		// // Apply constant drift to position
-// 		// rock.Position.X += driftSpeed
-// 		// rock.Position.Y += driftSpeed * 0.5
-
-// 		// Wrap around screen boundaries
-// 		if rock.Position.X < 0 {
-// 			rock.Position.X += GAME_BOUNDS_X
-// 		} else if rock.Position.X > GAME_BOUNDS_X {
-// 			rock.Position.X -= GAME_BOUNDS_X
-// 		}
-
-// 		if rock.Position.Y < 0 {
-// 			rock.Position.Y += GAME_BOUNDS_Y
-// 		} else if rock.Position.Y > GAME_BOUNDS_Y {
-// 			rock.Position.Y -= GAME_BOUNDS_Y
-// 		}
-// 	}
-// }
-// }
-
-// Draw renders all rocks using sprite sheet subrects
-func (r *RocksRenderer) DEBUGDrawSheets(screen *ebiten.Image) {
-	// DEBUG: Draw sprite sheets on the right side of screen to visualize them
-	sheetWidth := float64(SHEET_COLUMNS * r.SpriteSize)
-	xPos := GAME_BOUNDS_X - sheetWidth
-
-	for rockIndex := 0; rockIndex < NUM_ROCK_TYPES; rockIndex++ {
-		spriteSheet := r.spriteSheets[rockIndex]
-		yPos := float64(rockIndex) * float64(r.SpriteSize*SHEET_ROWS)
-
-		opts := &ebiten.DrawImageOptions{}
-		opts.GeoM.Translate(xPos, yPos)
-		screen.DrawImage(spriteSheet, opts)
-	}
-}
-
+// DrawRocks renders all rocks with ultra-fast direct array access
 func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
-	// Draw each rock type using its corresponding sprite sheet
-	for rockIndex := range NUM_ROCK_TYPES {
-		spriteSheet := r.spriteSheets[rockIndex]
+	for rockType := range NUM_ROCK_TYPES {
+		for _, rock := range r.Rocks[rockType] {
+			// Always use transition speeds for sprite selection (they match target speeds when not transitioning)
+			// speedX := rock.TransitionSpeedX
+			// speedY := rock.TransitionSpeedY
 
-		// draws it in order
-		for i := range r.Rocks[rockIndex] {
-			rock := r.Rocks[rockIndex][i]
+			// fmt.Printf("[%d + %d] [%d + %d]\n", speedX, MAX_SLOPE, speedY, MAX_SLOPE)
 
-			// Get the subrect from sprite sheet using sprite index (cast uint16→int)
-			subRect := r.sheetConfig.Rect(int(rock.SpriteIndex))
+			// Single direct array lookup - no function calls, no SubImage!
+			// Inline index calculation: speed + 4 converts (-4..+4) to (0..8)
+			sprite := r.sprites[rockType][rock.SpriteSlopeX][rock.SpriteSlopeY]
 
-			// Extract the subimage from the sprite sheet
-			sprite := spriteSheet.SubImage(subRect).(*ebiten.Image)
-
-			// Draw at position
+			// Draw directly
 			opts := &ebiten.DrawImageOptions{}
 			opts.GeoM.Translate(rock.Position.X, rock.Position.Y)
 			opts.Filter = ebiten.FilterLinear
-
 			screen.DrawImage(sprite, opts)
 		}
 	}
 }
-
-// var rocksSizes = [NUM_ROCK_TYPES]float64{
-// 	float64(TILE_SIZE / 2),
-// 	float64(TILE_SIZE / 2),
-// 	float64(TILE_SIZE / 2),
-// }
-
-// func (r *RocksRenderer) DetermineSpriteSizes() [NUM_ROCK_TYPES]float64 {
-// 	types := make()
-// }
 
 // GetStats returns rendering statistics
 func (r *RocksRenderer) GetStats() (visible, total int) {

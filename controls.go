@@ -121,10 +121,13 @@ func (g *Game) ControlAction(action Action) {
 			}
 
 			for rockType := range render.NUM_ROCK_TYPES {
-				bounceDir := rand.Intn(360)
 				for _, rock := range g.RocksRenderer.Rocks[rockType] {
-					// rock.BounceBasedOnAngle()
-					rock.BounceTowardsAngle(bounceDir)
+					// Toggle bounce direction for rocks
+					if rock.SpriteIndex%2 == 1 {
+						rock.BounceX()
+					} else {
+						rock.BounceY()
+					}
 				}
 			}
 		}

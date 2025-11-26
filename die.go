@@ -8,6 +8,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ninesl/dice-will-roll/dice"
 	"github.com/ninesl/dice-will-roll/render"
+	"github.com/ninesl/dice-will-roll/render/shaders"
 )
 
 // func init() {
@@ -342,4 +343,49 @@ func bestValues(dice []*Die, x int) []*Die {
 	}
 
 	return bestValues
+}
+
+func (g *Game) DrawDice(screen *ebiten.Image) {
+	s := int(g.Dice[0].image.Bounds().Dx())
+
+	shader := g.Shaders[shaders.DieShaderKey]
+
+	u := map[string]any{
+		"Time":            g.time,
+		"DieScale":        1.15,
+		"HoveringSpeedUp": 0,
+		// "Cursor": []float32{float32(cx), float32(cy)},
+	}
+
+	// TODO: die specific shader uniforms, gems, power ups, etc. this is the fun part
+	opts := &ebiten.DrawRectShaderOptions{
+		Uniforms: u,
+	}
+
+	for i := 0; i < len(g.Dice); i++ {
+		die := g.Dice[i]
+		die.image.Clear()
+
+		if die.Mode == DRAG && g.cursorWithin(render.SCOREZONE) {
+			opts.Uniforms["HoveringSpeedUp"] = 1
+
+		} else {
+			opts.Uniforms["HoveringSpeedUp"] = 0
+		}
+
+		opts.Uniforms["FaceLayouts"] = die.LocationsPips()
+		opts.Uniforms["ActiveFace"] = die.ActiveFaceIndex()
+		opts.Uniforms["Height"] = die.Height
+		opts.Uniforms["Direction"] = die.Direction.KageVec2()
+		opts.Uniforms["Velocity"] = die.Velocity.KageVec2()
+		opts.Uniforms["DieColor"] = die.Color.KageVec3()
+		opts.Uniforms["ZRotation"] = die.ZRotation
+		opts.Uniforms["Mode"] = int(die.Mode)
+
+		die.image.DrawRectShader(s, s, shader, opts)
+
+		ops := &ebiten.DrawImageOptions{}
+		ops.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
+		screen.DrawImage(die.image, ops)
+	}
 }
