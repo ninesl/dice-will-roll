@@ -15,18 +15,19 @@ func DEBUGTitleFPS(x, y float32) {
 }
 
 func (g *Game) UpdateRocks() {
-	g.RocksRenderer.FrameCounter++
 	g.RocksRenderer.ActiveRockType++
 	if g.RocksRenderer.ActiveRockType >= render.NUM_ROCK_TYPES {
 		g.RocksRenderer.ActiveRockType = 0
 	}
+	g.RocksRenderer.FrameCounter[g.RocksRenderer.ActiveRockType]++
 
 	//TODO: bounce off eachother, bounce off rocks etc.
 	//  best idea i have is to find rocks that match the collisions we need
 	// and then calculate them. so collect during normal update, then do special update after,
 	// similar to how the dice have different modes but the modes are based on X/Y and game state (mouse, dice etc)
 	for _, rock := range g.RocksRenderer.Rocks[g.RocksRenderer.ActiveRockType] {
-		rock.Update(g.RocksRenderer.FrameCounter)
+
+		rock.Update(g.RocksRenderer.FrameCounter[g.RocksRenderer.ActiveRockType])
 
 		if rock.Position.X+g.RocksRenderer.FSpriteSize >= render.GAME_BOUNDS_X {
 			rock.Position.X = render.GAME_BOUNDS_X - g.RocksRenderer.FSpriteSize

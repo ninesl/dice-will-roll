@@ -10,8 +10,8 @@ import (
 
 // Constants for sprite system
 const (
-	NUM_ROCK_TYPES    = 1                       // 2 rock types: different shapes
-	DEGREES_PER_FRAME = 30                      // Degrees of rotation per transition frame
+	NUM_ROCK_TYPES    = 2                       // 2 rock types: different shapes
+	DEGREES_PER_FRAME = 45                      // Degrees of rotation per transition frame
 	ROTATION_FRAMES   = 360 / DEGREES_PER_FRAME // 360/DEGREES_PER_FRAME = X frames static spin
 
 	DIRECTIONS_TO_SNAP = MAX_SLOPE * 2 // # of possible angles for SpriteSlopeX and SpriteSlopeY. wraps
@@ -21,12 +21,17 @@ const (
 	// SPEED_RANGE      = MAX_SLOPE*2 + 1 // 9 (from -4 to +4 inclusive)
 )
 
+// Constants for animation rate calculation
+const baseN = 22.0
+const speedFactor = 3.5
+
 // SimpleRock represents a rock using pre-extracted sprite frames
 type SimpleRock struct {
-	Position    Vec2   // 2D screen position
-	SpriteIndex uint16 // Current rotation frame index (0-71)
-	SlopeX      int8   // Current X speed component (-4 to +4)
-	SlopeY      int8   // Current Y speed component (-4 to +4)
+	Position      Vec2   // 2D screen position
+	SpriteIndex   uint16 // Current rotation frame index (0-71)
+	animationRate uint8  // Cached update frequency, FrameCounter%animationRate is when rock updates
+	SlopeX        int8   // Current X speed component (-4 to +4)
+	SlopeY        int8   // Current Y speed component (-4 to +4)
 
 	// Transition system for smooth sprite rotation during direction changes
 	SpriteSlopeX int8 // Visual speed X used during transition (gradually moves toward SpeedX)
@@ -34,6 +39,13 @@ type SimpleRock struct {
 }
 
 const BaseVelocity = 1.0
+
+// calculateAnimationRate computes the update frequency based on current slopes
+func (r *SimpleRock) calculateAnimationRate() {
+	speed := math.Sqrt(float64(r.SlopeX*r.SlopeX + r.SlopeY*r.SlopeY))
+	n := int(math.Max(2, baseN-(speed*speedFactor)))
+	r.animationRate = uint8(n) // n is guaranteed to be <= 22, fits in uint8
+}
 
 // Updates the rock based on the current target transitions.
 //
@@ -52,32 +64,43 @@ func (r *SimpleRock) Update(frameCounter int) {
 func (r *SimpleRock) Bounce(newX int8, newY int8) {
 	r.SlopeX = newX
 	r.SlopeY = newY
+	r.calculateAnimationRate() // Recalculate cached animation rate
 }
 
 // BounceX flips horizontal direction (bounce off vertical wall)
 func (r *SimpleRock) BounceX() {
 	r.SlopeX = -r.SlopeX
+	r.calculateAnimationRate() // Recalculate cached animation rate
 }
 
 // BounceY flips vertical direction (bounce off horizontal wall)
 func (r *SimpleRock) BounceY() {
 	r.SlopeY = -r.SlopeY
+	r.calculateAnimationRate() // Recalculate cached animation rate
 }
-
-const n = 10
 
 // UpdateTransition handles the smooth sprite rotation during direction changes
 // Each frame, SpeedX/Y gradually move toward TransitionSpeedX/Y
 func (r *SimpleRock) UpdateTransition(frameCounter int) {
-
-	// TODO:frameCounter based on slope?
-	if frameCounter%n != 0 {
+	if frameCounter%int(r.animationRate) != 0 {
 		// Only update every N frame for visible transitions (performance & visual)
 		return
 	}
-	r.SpriteIndex++
-	if r.SpriteIndex >= ROTATION_FRAMES {
-		r.SpriteIndex = 0
+
+	// Increment or decrement sprite index based on horizontal direction
+	// Moving right (positive SlopeX): increment (rotate clockwise)
+	// Moving left (negative SlopeX): decrement (rotate counter-clockwise)
+	if r.SlopeX >= 0 {
+		if r.SpriteIndex == 0 {
+			r.SpriteIndex = ROTATION_FRAMES - 1
+		} else {
+			r.SpriteIndex--
+		}
+	} else {
+		r.SpriteIndex++
+		if r.SpriteIndex >= ROTATION_FRAMES {
+			r.SpriteIndex = 0
+		}
 	}
 
 	// Gradually move transition speeds toward target speeds (one step per frame)
@@ -227,7 +250,7 @@ type RocksRenderer struct {
 	FSpriteSize    float32
 	totalRocks     int
 	ActiveRockType int
-	FrameCounter   int // Global frame counter for transition timing
+	FrameCounter   [NUM_ROCK_TYPES]int // Global frame counter for transition timing
 }
 
 // RocksConfig holds configuration for rock system
@@ -405,7 +428,7 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 				spriteSlopeY = 0 // Wrap 8 -> 0 (so +4 uses same sprite as -4)
 			}
 
-			r.Rocks[rockType][i] = &SimpleRock{
+			rock := &SimpleRock{
 				Position:     pos,
 				SpriteIndex:  spriteIndex,
 				SlopeX:       slopeX,
@@ -413,6 +436,8 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 				SpriteSlopeX: spriteSlopeX,
 				SpriteSlopeY: spriteSlopeY,
 			}
+			rock.calculateAnimationRate() // Initialize cached value
+			r.Rocks[rockType][i] = rock
 		}
 	}
 }
