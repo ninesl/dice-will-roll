@@ -41,8 +41,8 @@ const BaseVelocity = 1.0
 func (r *SimpleRock) Update(frameCounter int) {
 	r.UpdateTransition(frameCounter)
 
-	r.Position.Y += BaseVelocity * float64(r.SlopeY)
-	r.Position.X += BaseVelocity * float64(r.SlopeX)
+	r.Position.Y += BaseVelocity * float32(r.SlopeY)
+	r.Position.X += BaseVelocity * float32(r.SlopeX)
 }
 
 // if newY or newX is IDENTICAL to the the current value in the struct
@@ -224,7 +224,7 @@ type RocksRenderer struct {
 
 	Rocks          [NUM_ROCK_TYPES][]*SimpleRock // Rocks organized by type
 	SpriteSize     int
-	FSpriteSize    float64
+	FSpriteSize    float32
 	totalRocks     int
 	ActiveRockType int
 	FrameCounter   int // Global frame counter for transition timing
@@ -244,7 +244,7 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 	r := &RocksRenderer{
 		shader:      shaderMap[shaders.RocksShaderKey],
 		SpriteSize:  config.SpriteSize,
-		FSpriteSize: float64(config.SpriteSize),
+		FSpriteSize: float32(config.SpriteSize),
 		totalRocks:  config.TotalRocks,
 	}
 
@@ -383,8 +383,8 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 		for i := 0; i < numRocks; i++ {
 			// Random position
 			pos := Vec2{
-				X: float64(rand.Float32() * config.WorldBoundsX),
-				Y: float64(rand.Float32() * config.WorldBoundsY),
+				X: rand.Float32() * config.WorldBoundsX,
+				Y: rand.Float32() * config.WorldBoundsY,
 			}
 
 			// Pick random rotation frame
@@ -419,6 +419,10 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 
 // DrawRocks renders all rocks with ultra-fast direct array access
 func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
+	// Reuse DrawImageOptions to avoid allocations (important for 10k+ rocks)
+	opts := &ebiten.DrawImageOptions{}
+	opts.Filter = ebiten.FilterLinear
+
 	for rockType := range NUM_ROCK_TYPES {
 		for _, rock := range r.Rocks[rockType] {
 			// Get the sprite for this slope combination
@@ -428,10 +432,9 @@ func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
 			frameRect := sprite.SpriteSheet.Rect(int(rock.SpriteIndex))
 			frameImage := sprite.Image.SubImage(frameRect).(*ebiten.Image)
 
-			// Draw the frame
-			opts := &ebiten.DrawImageOptions{}
-			opts.GeoM.Translate(rock.Position.X, rock.Position.Y)
-			opts.Filter = ebiten.FilterLinear
+			// Reset and set transform
+			opts.GeoM.Reset()
+			opts.GeoM.Translate(float64(rock.Position.X), float64(rock.Position.Y))
 			screen.DrawImage(frameImage, opts)
 		}
 	}

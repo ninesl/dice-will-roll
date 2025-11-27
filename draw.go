@@ -42,7 +42,7 @@ func (g *Game) Draw(s *ebiten.Image) {
 }
 
 func DrawSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
-	opts.GeoM.Translate(render.SCOREZONE.MinWidth, render.SCOREZONE.MinHeight)
+	opts.GeoM.Translate(float64(render.SCOREZONE.MinWidth), float64(render.SCOREZONE.MinHeight))
 	screen.DrawImage(
 		render.SCOREZONE.Image,
 		opts,
@@ -51,7 +51,7 @@ func DrawSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
 }
 
 func DrawROLLZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
-	opts.GeoM.Translate(render.ROLLZONE.MinWidth, render.ROLLZONE.MinHeight)
+	opts.GeoM.Translate(float64(render.ROLLZONE.MinWidth), float64(render.ROLLZONE.MinHeight))
 	screen.DrawImage(
 		render.ROLLZONE.Image,
 		opts,
@@ -62,8 +62,11 @@ func DrawROLLZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
 
 // printf debugging for the window lmao
 
-func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions, tileSize float64, dieImgTransparent *ebiten.Image) {
-	opts.GeoM.Translate(render.GAME_BOUNDS_X/2.0-tileSize/2.0, render.SCOREZONE.MaxHeight/2.0-tileSize/2.0)
+func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions, tileSize float32, dieImgTransparent *ebiten.Image) {
+	opts.GeoM.Translate(
+		float64(render.GAME_BOUNDS_X/2.0-tileSize/2.0),
+		float64(render.SCOREZONE.MaxHeight/2.0-tileSize/2.0),
+	)
 	screen.DrawImage(
 		dieImgTransparent,
 		opts,
@@ -72,7 +75,7 @@ func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOption
 
 func DEBUGDrawMessage(screen *ebiten.Image, msg string, y float64) {
 	op := &text.DrawOptions{}
-	op.GeoM.Translate(0, y)
+	op.GeoM.Translate(0, float64(y))
 	op.ColorScale.ScaleWithColor(color.White)
 	text.Draw(screen, msg, &text.GoTextFace{
 		Source: DEBUG_FONT,
@@ -105,7 +108,8 @@ func DEBUGDiceValues(screen *ebiten.Image, dice []*Die) {
 			Scoring = append(Scoring, d)
 		}
 	}
-	DEBUGDrawMessage(screen, fmt.Sprintf("%5s%v", "roll", DEBUGValuesFromDice(Rolling)), render.GAME_BOUNDS_Y-FONT_SIZE)
-	DEBUGDrawMessage(screen, fmt.Sprintf("%5s%v", "held", DEBUGValuesFromDice(Held)), render.GAME_BOUNDS_Y-FONT_SIZE*2)
-	DEBUGDrawMessage(screen, fmt.Sprintf("%5s%v", "score", DEBUGValuesFromDice(Scoring)), render.GAME_BOUNDS_Y-FONT_SIZE*3)
+	y := (float64(render.GAME_BOUNDS_Y) - FONT_SIZE)
+	DEBUGDrawMessage(screen, fmt.Sprintf("%5s%v", "roll", DEBUGValuesFromDice(Rolling)), y)
+	DEBUGDrawMessage(screen, fmt.Sprintf("%5s%v", "held", DEBUGValuesFromDice(Held)), y*2)
+	DEBUGDrawMessage(screen, fmt.Sprintf("%5s%v", "score", DEBUGValuesFromDice(Scoring)), y*3)
 }

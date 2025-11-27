@@ -30,7 +30,7 @@ func SetupNewDie(color render.Vec3) *Die {
 
 	// random position
 	pos := render.Vec2{
-		X: render.ROLLZONE.MinWidth + TileSize*float64(rand.IntN(6))*2.0,
+		X: render.ROLLZONE.MinWidth + TileSize*float32(rand.IntN(6))*2.0,
 		Y: render.ROLLZONE.MaxHeight/2 - render.HalfTileSize,
 	}
 
@@ -38,8 +38,8 @@ func SetupNewDie(color render.Vec3) *Die {
 		Fixed: pos,
 		Vec2:  pos,
 		Velocity: render.Vec2{
-			X: (rand.Float64()*40 + 20),
-			Y: (rand.Float64()*40 + 20),
+			X: float32(rand.Float64()*40 + 20),
+			Y: float32(rand.Float64()*40 + 20),
 		},
 		ZRotation: rand.Float32(),
 		Color:     color,
@@ -111,8 +111,8 @@ func (d *Die) Roll() {
 		// random direction
 		direction := render.DirectionArr[render.Direction(rand.IntN(len(render.DirectionArr)))]
 
-		d.Velocity.X = TileSize * rand.Float64() * direction.X
-		d.Velocity.Y = TileSize * rand.Float64() * direction.Y
+		d.Velocity.X = TileSize * rand.Float32() * direction.X
+		d.Velocity.Y = TileSize * rand.Float32() * direction.Y
 		d.Direction = direction
 
 		d.ZRotation = rand.Float32()
@@ -364,7 +364,7 @@ func (g *Game) DrawDice(screen *ebiten.Image) {
 		die.image.DrawRectShader(s, s, shader, opts)
 
 		ops := &ebiten.DrawImageOptions{}
-		ops.GeoM.Translate(die.Vec2.X, die.Vec2.Y)
+		ops.GeoM.Translate(float64(die.Vec2.X), float64(die.Vec2.Y))
 		screen.DrawImage(die.image, ops)
 	}
 }

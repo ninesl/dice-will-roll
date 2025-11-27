@@ -115,10 +115,10 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 
 	if l.scoringState == SCORING_MOVING {
 		// positioning
-		x := float64(GAME_BOUNDS_X)/2 - render.HalfTileSize
+		x := float32(GAME_BOUNDS_X)/2 - render.HalfTileSize
 		y := render.SCOREZONE.MinHeight/2 + TileSize/5
 		if len(heldDice) > 1 {
-			x += TileSize * (float64(len(heldDice) - l.scoringIndex))
+			x += TileSize * (float32(len(heldDice) - l.scoringIndex))
 		}
 
 		die.Fixed.X = x
@@ -133,7 +133,7 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 
 		// --- Arrival Check ---
 		// Instead of rushing to the next die, it now transitions to a pause.
-		if math.Abs(die.Vec2.Y-die.Fixed.Y) < 0.05 && math.Abs(die.Vec2.X-die.Fixed.X) < 0.05 {
+		if math.Abs(float64(die.Vec2.Y-die.Fixed.Y)) < 0.05 && math.Abs(float64(die.Vec2.X-die.Fixed.X)) < 0.05 {
 			// Die has arrived. Stop it and start the pause.
 			die.Velocity.X = 0
 			die.Velocity.Y = 0

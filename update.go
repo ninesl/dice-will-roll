@@ -9,7 +9,7 @@ import (
 	"github.com/ninesl/dice-will-roll/render"
 )
 
-func DEBUGTitleFPS(x, y float64) {
+func DEBUGTitleFPS(x, y float32) {
 	msg := fmt.Sprintf("T%0.2f F%0.2f x%4.0f y%4.0f ", ebiten.ActualTPS(), ebiten.ActualFPS(), x, y)
 	ebiten.SetWindowTitle("Dice Will Roll " + msg)
 }
@@ -122,8 +122,8 @@ func (g *Game) UpdateDice() {
 // always is called at the beginning of the update loop
 func (g *Game) UpdateCusor() {
 	x, y := ebiten.CursorPosition()
-	g.cx = float64(x)
-	g.cy = float64(y)
+	g.cx = float32(x)
+	g.cy = float32(y)
 }
 
 func (g *Game) cursorWithin(zone render.ZoneRenderable) bool {

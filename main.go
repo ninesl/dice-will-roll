@@ -24,17 +24,17 @@ var (
 	TILE_SIZE                    int     = GAME_BOUNDS_Y / 9
 	FONT_SIZE                    float64 = float64(ResolutionY / 64)
 	// tile size is always the width and height of the die image
-	TileSize float64 = float64(TILE_SIZE)
+	TileSize float32 = float32(TILE_SIZE)
 
 	NUM_PLAYER_DICE int = 7
 )
 
 func init() {
-	render.GAME_BOUNDS_X = float64(GAME_BOUNDS_X)
-	render.GAME_BOUNDS_Y = float64(GAME_BOUNDS_Y)
+	render.GAME_BOUNDS_X = float32(GAME_BOUNDS_X)
+	render.GAME_BOUNDS_Y = float32(GAME_BOUNDS_Y)
 
 	render.TileSize = TileSize
-	render.HalfTileSize = float64(TILE_SIZE / 2)
+	render.HalfTileSize = float32(TILE_SIZE / 2)
 
 	FONT_SIZE = float64(GAME_BOUNDS_Y / 64)
 
@@ -51,7 +51,7 @@ type Game struct {
 	startTime     time.Time
 	ActiveLevel   *Level // keeping track of rocks
 	// is updated with UpdateCursor() in update loop
-	cx, cy float64 // the x/y coordinates of the cursor
+	cx, cy float32 // the x/y coordinates of the cursor
 	time   float32 // tracks time for shaders. updated in g.Update()
 }
 

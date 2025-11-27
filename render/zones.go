@@ -19,10 +19,10 @@ import (
 
 // TODO:FIXME: refactor zone and zonerender into 1 struct. minwidth/max etc determined by image rect/Bounds?
 type Zone struct {
-	MinWidth  float64
-	MaxWidth  float64
-	MinHeight float64
-	MaxHeight float64
+	MinWidth  float32
+	MaxWidth  float32
+	MinHeight float32
+	MaxHeight float32
 	// Image     *ebiten.Image
 }
 

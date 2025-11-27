@@ -8,11 +8,11 @@ import (
 
 // assigned during main init()
 var (
-	GAME_BOUNDS_X float64
-	GAME_BOUNDS_Y float64
+	GAME_BOUNDS_X float32
+	GAME_BOUNDS_Y float32
 
-	TileSize     float64
-	HalfTileSize float64
+	TileSize     float32
+	HalfTileSize float32
 )
 
 // generally used to make a die move into a direction.
@@ -33,9 +33,9 @@ const (
 
 var (
 	// Usage: x to subtract when something is following cusor
-	XOffset float64
+	XOffset float32
 	// Usage: y to subtract when something is following cusor
-	YOffset float64
+	YOffset float32
 
 	// used to force a direction
 	//
@@ -54,7 +54,7 @@ var (
 )
 
 type Vec2 struct {
-	X, Y float64
+	X, Y float32
 }
 
 // used for determining color values

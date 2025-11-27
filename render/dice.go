@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	DampingFactor float64 = 0.7
-	BounceFactor  float64 = .95
-	MoveFactor    float64 = .2
+	DampingFactor float32 = 0.7
+	BounceFactor  float32 = .95
+	MoveFactor    float32 = .2
 )
 
 // TODO: determine if a 'uniforms' map is better than hardcoded consts
@@ -41,7 +41,7 @@ type DieRenderable struct {
 func (d *DieRenderable) Rect() image.Rectangle {
 	// Inset each side by a small amount, e.g., 5% of TileSize
 	// This makes the total width and height smaller by 10% of TileSize
-	insetAmount := TileSize * 0.15
+	insetAmount := float32(TileSize * 0.15)
 
 	minX := int(d.Vec2.X + insetAmount)
 	minY := int(d.Vec2.Y + insetAmount)
@@ -50,11 +50,11 @@ func (d *DieRenderable) Rect() image.Rectangle {
 
 	// Ensure min is not greater than max, which can happen if TileSize is very small or insetAmount is too large
 	if minX > maxX {
-		minX = int(math.Round(d.Vec2.X + HalfTileSize))
+		minX = int(math.Round(float64(d.Vec2.X + HalfTileSize)))
 		maxX = minX
 	}
 	if minY > maxY {
-		minY = int(math.Round(d.Vec2.Y + HalfTileSize))
+		minY = int(math.Round(float64(d.Vec2.Y + HalfTileSize)))
 		maxY = minY
 	}
 
@@ -67,7 +67,7 @@ func (d *DieRenderable) Rect() image.Rectangle {
 func (d *DieRenderable) SetDirection() {
 	dir := Vec2{}
 
-	if math.Abs(d.Velocity.X) < .01 {
+	if math.Abs(float64(d.Velocity.X)) < .01 {
 		dir.X = 0
 		d.Velocity.X = 0
 	} else if d.Velocity.X > 0 {
@@ -76,7 +76,7 @@ func (d *DieRenderable) SetDirection() {
 		dir.X = -1.0
 	}
 
-	if math.Abs(d.Velocity.Y) < .01 {
+	if math.Abs(float64(d.Velocity.Y)) < .01 {
 		dir.Y = 0
 		d.Velocity.Y = 0
 	} else if d.Velocity.Y > 0 {
@@ -102,11 +102,11 @@ func HandleMovingHeldDice(dice []*DieRenderable) {
 	})
 
 	// positioning
-	var x, y float64
+	var x, y float32
 	x = GAME_BOUNDS_X/2 - HalfTileSize
 	y = SCOREZONE.MinHeight/2 + TileSize/5
 	if num > 1 {
-		x -= TileSize * (float64(num) - 1.0)
+		x -= TileSize * (float32(num) - 1.0)
 	}
 
 	// find where the moving dice should be going towards
@@ -167,7 +167,7 @@ func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
 
 	// Check if they are actually overlapping
 	if distSq < TileSize*TileSize {
-		dist := math.Sqrt(distSq)
+		dist := float32(math.Sqrt(float64(distSq)))
 
 		// Avoid division by zero if dice are perfectly on top of each other
 		if dist == 0 {
