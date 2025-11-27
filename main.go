@@ -96,7 +96,7 @@ func LoadGame() *Game {
 
 	dice := SetupPlayerDice()
 
-	rockAmount := 10
+	rockAmount := 500
 
 	// Initialize rocks renderer with hybrid real-time 3D SDF system
 	rocksConfig := render.RocksConfig{

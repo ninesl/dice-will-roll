@@ -13,6 +13,7 @@ var (
     // NEW: Explicit rotation control for sprite sheet generation
     RotationX float
     RotationY float
+    RotationZ float  // Z-axis rotation for spinning animation
     
     // Color uniforms (0.0-1.0 range)
     InnerColorDark vec3  // Dark brownish-gold for inner/crater areas
@@ -155,12 +156,19 @@ func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
     var pos vec3 = vec3(0.0,0.0,2.25)
     
     // NEW: Use explicit rotation uniforms for sprite sheet generation
-    var rotate vec2 = vec2(RotationX, RotationY)
+    var rotate vec3 = vec3(RotationX, RotationY, RotationZ)
     
-    var sins vec2 = sin(rotate)
-    var coss vec2 = cos(rotate)
-    var mr mat3 = mat3(vec3(coss.x,0.0,sins.x),vec3(0.0,1.0,0.0),vec3(-sins.x,0.0,coss.x));
-    mr = mat3(vec3(1.0,0.0,0.0),vec3(0.0,coss.y,sins.y),vec3(0.0,-sins.y,coss.y))*mr;    
+    var sinX float = sin(rotate.x)
+    var cosX float = cos(rotate.x)
+    var sinY float = sin(rotate.y)
+    var cosY float = cos(rotate.y)
+    var sinZ float = sin(rotate.z)
+    var cosZ float = cos(rotate.z)
+    
+    // Build rotation matrix: X * Y * Z (applying rotations in order)
+    var mr mat3 = mat3(vec3(cosX,0.0,sinX),vec3(0.0,1.0,0.0),vec3(-sinX,0.0,cosX));           // X rotation
+    mr = mat3(vec3(1.0,0.0,0.0),vec3(0.0,cosY,sinY),vec3(0.0,-sinY,cosY))*mr;                 // Y rotation
+    mr = mat3(vec3(cosZ,-sinZ,0.0),vec3(sinZ,cosZ,0.0),vec3(0.0,0.0,1.0))*mr;                 // Z rotation
     var ray vec3 = normalize(vec3(p,2.0))
     
     var light vec3 = vec3(-30.0,0.0,-30.0)

@@ -61,6 +61,8 @@ func NewLevel(ops LevelOptions) *Level {
 }
 
 // handles scoring and render changes, used in g.ActiveLevel
+//
+// TODO: make this animation better/more fun
 func (l *Level) HandleScoring(heldDice []*Die) {
 	// If there are no dice to score, ensure we are idle.
 	if len(heldDice) == 0 {
@@ -76,9 +78,8 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 
 	// Decrement the timer if it's running.
 	if l.scoringTimer > 0 {
-		// fmt.Printf("%2d %d %d\n", l.scoringTimer, len(heldDice), l.scoringIndex)
 		l.scoringTimer--
-		return // Wait until the timer is done
+		return
 	}
 
 	// when a die that just became HELD it's x/y is determined on it's position from
@@ -131,7 +132,6 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 		die.Vec2.Y += die.Velocity.Y
 
 		// --- Arrival Check ---
-		// The "code smell" is still here, but its job has changed.
 		// Instead of rushing to the next die, it now transitions to a pause.
 		if math.Abs(die.Vec2.Y-die.Fixed.Y) < 0.05 && math.Abs(die.Vec2.X-die.Fixed.X) < 0.05 {
 			// Die has arrived. Stop it and start the pause.
@@ -155,7 +155,6 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 	}
 }
 
-// We need to adjust the String() method as well
 func (l Level) String() string {
 	if l.ScoreHand != dice.NO_HAND {
 		return fmt.Sprintf("%-2d/%2d hands | %-2d/%2d rolls | %-4d rocks | %s %.2fx | %d",

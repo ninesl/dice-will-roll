@@ -20,23 +20,6 @@ var (
 // see
 type Direction uint8
 
-// Rock Speed is the x/y slope
-// type RockSpeed uint8
-
-// DirectionSign represents movement direction as a bool (false = negative, true = positive)
-// For X-axis: false = left (-1.0), true = right (+1.0)
-// For Y-axis: false = up (-1.0), true = down (+1.0)
-// Use !sign to flip direction on bounce
-type DirectionSign bool
-
-// Multiplier converts the DirectionSign to a float64 multiplier for velocity calculations
-func (d DirectionSign) Multiplier() float64 {
-	if d {
-		return 1.0 // Positive direction
-	}
-	return -1.0 // Negative direction
-}
-
 const (
 	UP Direction = iota
 	DOWN
@@ -68,16 +51,6 @@ var (
 		DOWNRIGHT: Vec2{X: 1, Y: 1},
 		DOWNLEFT:  Vec2{X: -1, Y: 1},
 	}
-
-	// SpeedMap provides velocity multipliers for memory-efficient rock speed variation
-	// Rocks use uint8 indices into this array instead of storing float64 speeds
-	// SpeedMap = []float64{
-	// 	0.0, // index 0: slowest
-	// 	1.0, // index 1: slow
-	// 	2.0, // index 2: moderate
-	// 	3.0, // index 3: fast
-	// 	4.0, // index 4: fastest
-	// }
 )
 
 type Vec2 struct {
@@ -117,6 +90,8 @@ func (v Vec2) KageVec2() []float32 {
 type Sprite struct {
 	Image       *ebiten.Image
 	SpriteSheet SpriteSheet
+	ActiveFrame int
+
 	// Vec2        Vec2
 	// Updates the sprite in Game.Update() loop
 }
@@ -127,7 +102,6 @@ type SpriteSheet struct {
 	HeightTiles int
 	TileSize    int
 	TileAmount  int
-	ActiveFrame int
 }
 
 func NewSpriteSheet(w, h, t int) SpriteSheet {
@@ -136,7 +110,6 @@ func NewSpriteSheet(w, h, t int) SpriteSheet {
 		HeightTiles: h,
 		TileSize:    t,
 		TileAmount:  w * h,
-		ActiveFrame: 0,
 	}
 }
 

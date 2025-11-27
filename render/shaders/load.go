@@ -10,10 +10,9 @@ import (
 // types for Shader params can be
 //
 // Kage shader uniforms support int, float32, and []float32 types.
-type ShaderParams map[string]any
+type ShaderParams map[string]interface{}
 
 // stores shaders, loads shaders, access to shaders
-
 var (
 	ErrShader    error = fmt.Errorf("shader could not be set")
 	ErrNilShader error = fmt.Errorf("shader could not be found")

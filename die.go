@@ -11,25 +11,6 @@ import (
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
 
-// func init() {
-// 	// TODO: make this a commandline arguement to have fps listener
-
-// 	// fpsChannel := make(chan string)
-// 	// go func(c chan string) {
-// 	// go func() {
-// 	// 	// for range c {
-// 	// 	for {
-// 	// 		fmt.Printf("%.2f tps / %.2f fps\n", ebiten.ActualFPS(), ebiten.ActualTPS())
-// 	// 	}
-// 	// }() //(fpsChannel)
-// 	// old way
-// 	// for {
-// 	// 	select {
-// 	// 	case <-c:
-// 	// 	}
-// 	// }
-// }
-
 type Die struct {
 	image *ebiten.Image
 	render.DieRenderable
@@ -90,25 +71,25 @@ func SetupNewDie(color render.Vec3) *Die {
 func SetupPlayerDice() []*Die {
 	var dice []*Die
 
-	// var colors = []render.Vec3{
-	// 	render.Color(150, 0, 0),    // red
-	// 	render.Color(175, 127, 25), // orange
-	// 	render.Color(160, 160, 0),  // yellow
-	// 	render.Color(0, 150, 50),   // green
-	// 	render.Color(50, 50, 200),  // blue
-	// 	render.Color(75, 0, 130),   // indigo
-	// 	render.Color(125, 50, 183), // purple
-	// }
+	var colors = []render.Vec3{
+		render.KageColor(150, 0, 0),    // red
+		render.KageColor(175, 127, 25), // orange
+		render.KageColor(160, 160, 0),  // yellow
+		render.KageColor(0, 150, 50),   // green
+		render.KageColor(50, 50, 200),  // blue
+		render.KageColor(75, 0, 130),   // indigo
+		render.KageColor(125, 50, 183), // purple
+	}
 
 	// NUM_PLAYER_DICE = len(colors)
 
-	for range NUM_PLAYER_DICE { // range NUM_PLAYER_DICE {
-		// dice = append(dice, SetupNewDie(colors[i]))
-		dice = append(dice, SetupNewDie(render.KageColor(
-			max(rand.IntN(255), 150),
-			max(rand.IntN(255), 150),
-			max(rand.IntN(255), 150),
-		)))
+	for i := range len(colors) {
+		dice = append(dice, SetupNewDie(colors[i]))
+		// dice = append(dice, SetupNewDie(render.KageColor(
+		// 	max(rand.IntN(255), 150),
+		// 	max(rand.IntN(255), 150),
+		// 	max(rand.IntN(255), 150),
+		// )))
 	}
 
 	return dice
@@ -150,13 +131,11 @@ TOP LEVEL DIE HAND CHECKS
 
 */
 
-// HAS IMPLEMENTATION FOR dice.Die in dice/score.go
+// gets handRank for dice.Die in dice/score.go
 //
 // Find the hand that is associated with the given handrank.
 //
 // # The given handrank assumes that it is the BEST hand possible for the input dice
-//
-// Returns an error if not?? FIXME: not sure if this is worth doing
 //
 // # Returns the die that make up input handrank, assumes handrank is the best hand
 func FindHandRankDice(handDice []*Die, hand dice.HandRank) []*Die {

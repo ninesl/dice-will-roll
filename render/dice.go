@@ -15,8 +15,6 @@ var (
 )
 
 // TODO: determine if a 'uniforms' map is better than hardcoded consts
-//
-// DieRenderable is a container class for
 type DieRenderable struct {
 	Vec2      Vec2 // current position
 	Velocity  Vec2 // traveling speed xy +-
@@ -39,6 +37,7 @@ type DieRenderable struct {
 // this represents the collidable area as the die shader does not take up the entire image
 //
 // TODO: benchmarking
+// TODO: could use this same idea for rocks. would need a hardcoded constant for the inset vs recalcing each time
 func (d *DieRenderable) Rect() image.Rectangle {
 	// Inset each side by a small amount, e.g., 5% of TileSize
 	// This makes the total width and height smaller by 10% of TileSize
@@ -159,6 +158,7 @@ func HandleDiceCollisions(dice []*DieRenderable) {
 	}
 }
 
+// TODO: make this just better entirely lmao
 func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
 	// Calculate distance and collision normal vector
 	collNormalX := (die1.Vec2.X + HalfTileSize) - (die2.Vec2.X + HalfTileSize)
@@ -177,7 +177,6 @@ func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
 			return
 		}
 
-		// --- Positional Correction ---
 		// Move dice apart so they no longer overlap
 		overlap := (TileSize - dist) * 0.5
 		correctionX := (collNormalX / dist) * overlap
@@ -187,23 +186,22 @@ func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
 		die2.Vec2.X -= correctionX
 		die2.Vec2.Y -= correctionY
 
-		// --- Velocity Calculation ---
-		// 1. Find the unit normal and unit tangent vectors
+		// Find the unit normal and unit tangent vectors
 		unitNormalX := collNormalX / dist
 		unitNormalY := collNormalY / dist
 		unitTangentX := -unitNormalY
 		unitTangentY := unitNormalX
 
-		// 2. Project the velocity of each die onto the normal and tangent vectors
+		// Project the velocity of each die onto the normal and tangent vectors
 		v1t := unitTangentX*die1.Velocity.X + unitTangentY*die1.Velocity.Y
 		v2t := unitTangentX*die2.Velocity.X + unitTangentY*die2.Velocity.Y
 
-		// 3. The tangent velocities remain the same. Swap the normal velocities.
+		// The tangent velocities remain the same. Swap the normal velocities.
 		// This is the core of the elastic collision calculation.
 		newV1n := (unitNormalX*die2.Velocity.X + unitNormalY*die2.Velocity.Y)
 		newV2n := (unitNormalX*die1.Velocity.X + unitNormalY*die1.Velocity.Y)
 
-		// 4. Convert the scalar normal and tangent velocities back into vectors
+		// Convert the scalar normal and tangent velocities back into vectors
 		v1nVecX := newV1n * unitNormalX
 		v1nVecY := newV1n * unitNormalY
 		v1tVecX := v1t * unitTangentX
@@ -214,7 +212,7 @@ func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
 		v2tVecX := v2t * unitTangentX
 		v2tVecY := v2t * unitTangentY
 
-		// 5. Sum the normal and tangent vectors and apply bounce factor for energy loss
+		// Sum the normal and tangent vectors and apply bounce factor for energy loss
 		die1.Velocity.X = (v1nVecX + v1tVecX) * BounceFactor
 		die1.Velocity.Y = (v1nVecY + v1tVecY) * BounceFactor
 		die2.Velocity.X = (v2nVecX + v2tVecX) * BounceFactor

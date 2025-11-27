@@ -9,68 +9,25 @@ import (
 	"github.com/ninesl/dice-will-roll/render"
 )
 
-// TODO: better abstraction than this
 func DEBUGTitleFPS(x, y float64) {
 	msg := fmt.Sprintf("T%0.2f F%0.2f x%4.0f y%4.0f ", ebiten.ActualTPS(), ebiten.ActualFPS(), x, y)
 	ebiten.SetWindowTitle("Dice Will Roll " + msg)
 }
 
-const BaseVelocity = 2.0
-
 func (g *Game) UpdateRocks() {
+	g.RocksRenderer.FrameCounter++
 	g.RocksRenderer.ActiveRockType++
 	if g.RocksRenderer.ActiveRockType >= render.NUM_ROCK_TYPES {
 		g.RocksRenderer.ActiveRockType = 0
 	}
+
+	//TODO: bounce off eachother, bounce off rocks etc.
+	//  best idea i have is to find rocks that match the collisions we need
+	// and then calculate them. so collect during normal update, then do special update after,
+	// similar to how the dice have different modes but the modes are based on X/Y and game state (mouse, dice etc)
 	for _, rock := range g.RocksRenderer.Rocks[g.RocksRenderer.ActiveRockType] {
-		// Update transition system for smooth sprite rotation during direction changes
-		// rock.UpdateTransition()
+		rock.Update(g.RocksRenderer.FrameCounter)
 
-		// if rock.TransitionSpeedY >= render.MAX_SPEED {
-		// 	rock.TransitionSpeedY = render.MIN_SPEED + 1
-		// } else {
-		// 	rock.TransitionSpeedY++
-		// }
-
-		rock.Update()
-
-		// if rock.SpriteSlopeX >= render.DIRECTIONS_TO_SNAP {
-		// 	rock.SpriteSlopeX =
-		// } else if rock.SpriteSlopeX < 0 {
-		// 	rock.SpriteSlopeY = 0
-		// }
-
-		// if rock.TransitionSpeedY > render.MAX_SPEED {
-		// 	rock.TransitionSpeedY = render.MIN_SPEED + 1
-		// } else {
-		// 	rock.TransitionSpeedY++
-		// }
-
-		// rock.TransitionSpeedX = int8(i)
-		// rock.TransitionSpeedY = int8(i)
-
-		// if rock.TransitionSpeedX >= render.MAX_SPEED {
-		// 	rock.TransitionSpeedX -= render.MAX_SPEED * 2
-		// }
-		// if rock.TransitionSpeedY >= render.MAX_SPEED {
-		// 	rock.TransitionSpeedY -= render.MAX_SPEED * 2
-		// }
-
-		// fmt.Printf("%d : X,Y{%d/%d}\n", i, rock.SlopeX, rock.SlopeX)
-
-		// Update sprite rotation frame (creates rolling animation)
-		// rock.SpriteIndex++
-		// if rock.SpriteIndex >= render.ROTATION_FRAMES {
-		// 	rock.SpriteIndex = 0
-		// }
-
-		// Calculate velocity directly from signed speed values
-		// speedX := BaseVelocity * float64(rock.SpeedX)
-		// speedY := BaseVelocity * float64(rock.SpeedY)
-		// // rock.Position.X += speedX
-		// // rock.Position.Y += speedY
-
-		// Handle X-axis boundary collisions
 		if rock.Position.X+g.RocksRenderer.FSpriteSize >= render.GAME_BOUNDS_X {
 			rock.Position.X = render.GAME_BOUNDS_X - g.RocksRenderer.FSpriteSize
 			rock.BounceX() // Bounce off right wall
@@ -79,7 +36,6 @@ func (g *Game) UpdateRocks() {
 			rock.BounceX() // Bounce off left wall
 		}
 
-		// Handle Y-axis boundary collisions
 		if rock.Position.Y+g.RocksRenderer.FSpriteSize >= render.GAME_BOUNDS_Y {
 			rock.Position.Y = render.GAME_BOUNDS_Y - g.RocksRenderer.FSpriteSize
 			rock.BounceY() // Bounce off bottom wall
@@ -87,29 +43,12 @@ func (g *Game) UpdateRocks() {
 			rock.Position.Y = 0
 			rock.BounceY() // Bounce off top wall
 		}
-
-		// g.RocksRenderer.Rocks[g.RocksRenderer.ActiveRockType][i] = rock
 	}
 }
 
-// interface impl
 func (g *Game) Update() error {
 	g.UpdateCusor()
 	g.time = float32(time.Since(g.startTime).Milliseconds()) / float32(ebiten.TPS())
-
-	// Update rocks (frame-based, no deltaTime needed)
-	// g.RocksRenderer.Update()
-
-	// // Update camera (simple forward movement for now)
-	// cameraPos := render.Vector3{
-	// 	X: 0,
-	// 	Y: 0,
-	// 	Z: 0,
-	// 	// Z: g.time * 10.0,
-	// } // Move forward over time
-	// cameraForward := render.Vector3{X: 0, Y: 0, Z: 1}
-	// cameraUp := render.Vector3{X: 0, Y: 1, Z: 0}
-	// g.RocksRenderer.UpdateCamera(cameraPos, cameraForward, cameraUp)
 
 	DEBUGTitleFPS(g.cx, g.cy)
 

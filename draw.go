@@ -13,18 +13,16 @@ import (
 var screen = ebiten.NewImage(GAME_BOUNDS_X, GAME_BOUNDS_Y)
 
 func (g *Game) Draw(s *ebiten.Image) {
-	// Draw transparent black background shader
 	screen.Clear()
+
 	screen.DrawRectShader(GAME_BOUNDS_X, GAME_BOUNDS_Y,
 		g.Shaders[shaders.BackgroundShaderKey],
 		&ebiten.DrawRectShaderOptions{})
 
 	opts := &ebiten.DrawImageOptions{}
 
-	// DrawROLLZONE(screen, opts)
+	DrawROLLZONE(screen, opts)
 	g.RocksRenderer.DrawRocks(screen)
-
-	// g.DrawRocks(screen)
 
 	if g.cursorWithin(render.SCOREZONE) {
 		//TODO:FIXME: have to make this work for standard input, etc. will probably change with shaders anyways later
@@ -34,14 +32,6 @@ func (g *Game) Draw(s *ebiten.Image) {
 	}
 
 	g.DrawDice(screen)
-
-	// s.DrawRectShader(
-	// 	screen.Bounds().Dx(), screen.Bounds().Dy(),
-	// 	g.Shaders[shaders.FXAAShaderKey],
-	// 	&ebiten.DrawRectShaderOptions{
-	// 		Images: [4]*ebiten.Image{screen},
-	// 	},
-	// )
 
 	DEBUGDrawMessage(screen, g.ActiveLevel.String(), 0.0)
 	DEBUGDrawMessage(screen, fmt.Sprintf("%.2f fps / %.2f tps\n", ebiten.ActualFPS(), ebiten.ActualTPS()), FONT_SIZE)
@@ -70,9 +60,7 @@ func DrawROLLZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
 
 }
 
-//
 // printf debugging for the window lmao
-//
 
 func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions, tileSize float64, dieImgTransparent *ebiten.Image) {
 	opts.GeoM.Translate(render.GAME_BOUNDS_X/2.0-tileSize/2.0, render.SCOREZONE.MaxHeight/2.0-tileSize/2.0)
