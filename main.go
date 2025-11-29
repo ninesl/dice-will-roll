@@ -101,7 +101,7 @@ func LoadGame() *Game {
 	// Initialize rocks renderer with hybrid real-time 3D SDF system
 	rocksConfig := render.RocksConfig{
 		TotalRocks:   rockAmount,
-		SpriteSize:   TILE_SIZE / 2,
+		SpriteSize:   TILE_SIZE,
 		WorldBoundsX: float32(render.GAME_BOUNDS_X),
 		WorldBoundsY: float32(render.GAME_BOUNDS_Y),
 	}

@@ -10,8 +10,10 @@ import (
 
 // Constants for sprite system
 const (
-	NUM_ROCK_TYPES    = 2                       // 2 rock types: different shapes
-	DEGREES_PER_FRAME = 45                      // Degrees of rotation per transition frame
+	NUM_ROCK_TYPES = 2 // 2 rock types: different shapes
+
+	// TODO: need to benchmark this on varying hardware. higher number less sprites in sheet/memory used
+	DEGREES_PER_FRAME = 30                      // Degrees of rotation per transition frame
 	ROTATION_FRAMES   = 360 / DEGREES_PER_FRAME // 360/DEGREES_PER_FRAME = X frames static spin
 
 	DIRECTIONS_TO_SNAP = MAX_SLOPE * 2 // # of possible angles for SpriteSlopeX and SpriteSlopeY. wraps
@@ -21,9 +23,58 @@ const (
 	// SPEED_RANGE      = MAX_SLOPE*2 + 1 // 9 (from -4 to +4 inclusive)
 )
 
+// Spritesheet layout variables - dynamically calculated from ROTATION_FRAMES
+var (
+	SHEET_COLS = calculateSheetCols(ROTATION_FRAMES)
+	SHEET_ROWS = (ROTATION_FRAMES + SHEET_COLS - 1) / SHEET_COLS
+)
+
+// calculateSheetCols determines optimal column count for balanced spritesheet layout
+func calculateSheetCols(frames int) int {
+	// Aim for roughly square layout, slightly wider than tall
+	sqrt := int(math.Sqrt(float64(frames)))
+
+	// Round up to nearest even number for cleaner layout
+	if sqrt%2 != 0 {
+		sqrt++
+	}
+
+	// Ensure we don't make it too tall or too wide
+	if sqrt < 3 {
+		sqrt = 3
+	}
+
+	return sqrt
+}
+
 // Constants for animation rate calculation
 const baseN = 22.0
 const speedFactor = 3.5
+
+type RockScoreType uint8
+
+const (
+	Small  RockScoreType = 1
+	Medium RockScoreType = 3
+	Big    RockScoreType = 5
+	Huge   RockScoreType = 10
+)
+
+// SizeMultiplier returns the size multiplier for this RockScoreType
+func (rst RockScoreType) SizeMultiplier() float32 {
+	switch rst {
+	case Small:
+		return .4
+	case Medium:
+		return .75
+	case Big:
+		return .9
+	case Huge:
+		return 1.2
+	default:
+		return 1.0
+	}
+}
 
 // SimpleRock represents a rock using pre-extracted sprite frames
 type SimpleRock struct {
@@ -34,11 +85,49 @@ type SimpleRock struct {
 	SlopeY        int8   // Current Y speed component (-4 to +4)
 
 	// Transition system for smooth sprite rotation during direction changes
-	SpriteSlopeX int8 // Visual speed X used during transition (gradually moves toward SpeedX)
-	SpriteSlopeY int8 // Visual speed Y used during transition (gradually moves toward SpeedY)
+	SpriteSlopeX int8          // Visual speed X used during transition (gradually moves toward SpeedX)
+	SpriteSlopeY int8          // Visual speed Y used during transition (gradually moves toward SpeedY)
+	Score        RockScoreType //  how many 'rocks' this rock counts for during scoring. also determines size, etc
+
+	transitionSteps uint8 // Bit-packed: lower 4 bits = X remaining steps, upper 4 bits = Y remaining steps
+
 }
 
-const BaseVelocity = 1.0
+const BaseVelocity = .5
+
+// getTransitionStepsX returns the remaining transition steps for X axis
+func (r *SimpleRock) getTransitionStepsX() uint8 {
+	return r.transitionSteps & 0x0F
+}
+
+// getTransitionStepsY returns the remaining transition steps for Y axis
+func (r *SimpleRock) getTransitionStepsY() uint8 {
+	return (r.transitionSteps >> 4) & 0x0F
+}
+
+// setTransitionSteps sets both X and Y transition steps (each must be 0-15)
+func (r *SimpleRock) setTransitionSteps(stepsX, stepsY uint8) {
+	r.transitionSteps = (stepsY << 4) | (stepsX & 0x0F)
+}
+
+// decrementTransitionStepX decrements X transition counter if > 0
+func (r *SimpleRock) decrementTransitionStepX() {
+	if r.getTransitionStepsX() > 0 {
+		r.transitionSteps--
+	}
+}
+
+// decrementTransitionStepY decrements Y transition counter if > 0
+func (r *SimpleRock) decrementTransitionStepY() {
+	if r.getTransitionStepsY() > 0 {
+		r.transitionSteps -= 0x10 // Subtract from upper 4 bits
+	}
+}
+
+// GetSize returns the pixel size of this rock based on its RockScoreType
+func (r *SimpleRock) GetSize(baseSpriteSize int) float32 {
+	return float32(baseSpriteSize) * r.Score.SizeMultiplier()
+}
 
 // calculateAnimationRate computes the update frequency based on current slopes
 func (r *SimpleRock) calculateAnimationRate() {
@@ -47,14 +136,43 @@ func (r *SimpleRock) calculateAnimationRate() {
 	r.animationRate = uint8(n) // n is guaranteed to be <= 22, fits in uint8
 }
 
+// calculateShortestPath returns the shortest distance and direction (+1 or -1) to reach target
+func calculateShortestPath(current, target int8) (distance uint8, direction int8) {
+	diff := target - current
+
+	if diff > DIRECTIONS_TO_SNAP/2 {
+		// Going backwards is shorter
+		distance = uint8(DIRECTIONS_TO_SNAP - diff)
+		direction = -1
+	} else if diff < -DIRECTIONS_TO_SNAP/2 {
+		// Going forwards is shorter
+		distance = uint8(DIRECTIONS_TO_SNAP + diff)
+		direction = 1
+	} else if diff > 0 {
+		// Normal forward
+		distance = uint8(diff)
+		direction = 1
+	} else if diff < 0 {
+		// Normal backward
+		distance = uint8(-diff)
+		direction = -1
+	} else {
+		// Already at target
+		distance = 0
+		direction = 0
+	}
+
+	return distance, direction
+}
+
 // Updates the rock based on the current target transitions.
 //
 // will update it's state based on other params every Tick/time this is called
 func (r *SimpleRock) Update(frameCounter int) {
-	r.UpdateTransition(frameCounter)
-
 	r.Position.Y += BaseVelocity * float32(r.SlopeY)
 	r.Position.X += BaseVelocity * float32(r.SlopeX)
+
+	r.UpdateTransition(frameCounter)
 }
 
 // if newY or newX is IDENTICAL to the the current value in the struct
@@ -64,117 +182,120 @@ func (r *SimpleRock) Update(frameCounter int) {
 func (r *SimpleRock) Bounce(newX int8, newY int8) {
 	r.SlopeX = newX
 	r.SlopeY = newY
+
+	// Calculate transition steps for X
+	targetX := newX + MAX_SLOPE
+	if targetX == DIRECTIONS_TO_SNAP {
+		targetX = 0
+	}
+	distX, _ := calculateShortestPath(r.SpriteSlopeX, targetX)
+
+	// Calculate transition steps for Y
+	targetY := newY + MAX_SLOPE
+	if targetY == DIRECTIONS_TO_SNAP {
+		targetY = 0
+	}
+	distY, _ := calculateShortestPath(r.SpriteSlopeY, targetY)
+
+	// Add full rotation (DIRECTIONS_TO_SNAP) to shortest path
+	r.setTransitionSteps(distX+uint8(DIRECTIONS_TO_SNAP), distY+uint8(DIRECTIONS_TO_SNAP))
+
 	r.calculateAnimationRate() // Recalculate cached animation rate
 }
 
 // BounceX flips horizontal direction (bounce off vertical wall)
+// Rock spins around Y-axis (sideways tumble) based on Y speed
 func (r *SimpleRock) BounceX() {
 	r.SlopeX = -r.SlopeX
+
+	// X needs to transition to new target (shortest path, no extra rotation)
+	targetX := r.SlopeX + MAX_SLOPE
+	if targetX == DIRECTIONS_TO_SNAP {
+		targetX = 0
+	}
+	distX, _ := calculateShortestPath(r.SpriteSlopeX, targetX)
+
+	// When bouncing off vertical wall, tumble around Y-axis based on Y speed
+	// Y slope doesn't change, so just tumble
+	absY := r.SlopeY
+	if absY < 0 {
+		absY = -absY
+	}
+	tumbleY := uint8(absY) * 2 // 0-8 range, scaled by speed
+
+	r.setTransitionSteps(distX, tumbleY)
+
 	r.calculateAnimationRate() // Recalculate cached animation rate
 }
 
 // BounceY flips vertical direction (bounce off horizontal wall)
+// Rock spins around X-axis (forward/backward tumble) based on X speed
 func (r *SimpleRock) BounceY() {
 	r.SlopeY = -r.SlopeY
+
+	// Y needs to transition to new target (shortest path, no extra rotation)
+	targetY := r.SlopeY + MAX_SLOPE
+	if targetY == DIRECTIONS_TO_SNAP {
+		targetY = 0
+	}
+	distY, _ := calculateShortestPath(r.SpriteSlopeY, targetY)
+
+	// When bouncing off horizontal wall, tumble around X-axis based on X speed
+	// X slope doesn't change, so just tumble
+	absX := r.SlopeX
+	if absX < 0 {
+		absX = -absX
+	}
+	tumbleX := uint8(absX) * 2 // 0-8 range, scaled by speed
+
+	r.setTransitionSteps(tumbleX, distY)
+
 	r.calculateAnimationRate() // Recalculate cached animation rate
 }
 
 // UpdateTransition handles the smooth sprite rotation during direction changes
-// Each frame, SpeedX/Y gradually move toward TransitionSpeedX/Y
+// Now includes full rotation on each bounce
 func (r *SimpleRock) UpdateTransition(frameCounter int) {
 	if frameCounter%int(r.animationRate) != 0 {
-		// Only update every N frame for visible transitions (performance & visual)
+		// Only update every N frames for visible transitions (performance & visual)
 		return
 	}
 
 	// Increment or decrement sprite index based on horizontal direction
 	// Moving right (positive SlopeX): increment (rotate clockwise)
 	// Moving left (negative SlopeX): decrement (rotate counter-clockwise)
-	if r.SlopeX >= 0 {
-		if r.SpriteIndex == 0 {
-			r.SpriteIndex = ROTATION_FRAMES - 1
-		} else {
-			r.SpriteIndex--
-		}
-	} else {
-		r.SpriteIndex++
-		if r.SpriteIndex >= ROTATION_FRAMES {
-			r.SpriteIndex = 0
-		}
-	}
+	// if r.SlopeX >= 0 {
+	// 	if r.SpriteIndex == 0 {
+	// 		r.SpriteIndex = ROTATION_FRAMES - 1
+	// 	} else {
+	// 		r.SpriteIndex--
+	// 	}
+	// } else {
+	// 	r.SpriteIndex++
+	// 	if r.SpriteIndex >= ROTATION_FRAMES {
+	// 		r.SpriteIndex = 0
+	// 	}
+	// }
 
-	// Gradually move transition speeds toward target speeds (one step per frame)
-	// Takes shortest path around the circular direction system (0-7 wraps)
-
-	// Update X component
-	targetX := r.SlopeX + MAX_SLOPE
-	if targetX == DIRECTIONS_TO_SNAP { // Wrap 8 -> 0
-		targetX = 0
-	}
-
-	// Calculate shortest angular distance
-	diffX := targetX - r.SpriteSlopeX
-	if diffX > DIRECTIONS_TO_SNAP/2 { // If distance > 4, go the other way
-		// Going backwards is shorter (wrap around)
-		r.SpriteSlopeX--
-		if r.SpriteSlopeX < 0 {
-			r.SpriteSlopeX = DIRECTIONS_TO_SNAP - 1 // Wrap -1 -> 7
-		}
-	} else if diffX < -DIRECTIONS_TO_SNAP/2 { // If distance < -4, go the other way
-		// Going forwards is shorter (wrap around)
+	// Update X component with transition counter
+	if r.getTransitionStepsX() > 0 {
+		// Always increment for smooth continuous rotation
 		r.SpriteSlopeX++
-		if r.SpriteSlopeX == DIRECTIONS_TO_SNAP {
-			r.SpriteSlopeX = 0 // Wrap 8 -> 0
+		if r.SpriteSlopeX >= DIRECTIONS_TO_SNAP {
+			r.SpriteSlopeX = 0
 		}
-	} else if diffX > 0 {
-		// Normal increment (target is ahead)
-		r.SpriteSlopeX++
-		if r.SpriteSlopeX == DIRECTIONS_TO_SNAP {
-			r.SpriteSlopeX = 0 // Wrap 8 -> 0
-		}
-	} else if diffX < 0 {
-		// Normal decrement (target is behind)
-		r.SpriteSlopeX--
-		if r.SpriteSlopeX < 0 {
-			r.SpriteSlopeX = DIRECTIONS_TO_SNAP - 1 // Wrap -1 -> 7
-		}
-	}
-	// If diffX == 0, already at target, do nothing
-
-	// Update Y component (same logic)
-	targetY := r.SlopeY + MAX_SLOPE
-	if targetY == DIRECTIONS_TO_SNAP { // Wrap 8 -> 0
-		targetY = 0
+		r.decrementTransitionStepX()
 	}
 
-	// Calculate shortest angular distance
-	diffY := targetY - r.SpriteSlopeY
-	if diffY > DIRECTIONS_TO_SNAP/2 { // If distance > 4, go the other way
-		// Going backwards is shorter (wrap around)
-		r.SpriteSlopeY--
-		if r.SpriteSlopeY < 0 {
-			r.SpriteSlopeY = DIRECTIONS_TO_SNAP - 1 // Wrap -1 -> 7
-		}
-	} else if diffY < -DIRECTIONS_TO_SNAP/2 { // If distance < -4, go the other way
-		// Going forwards is shorter (wrap around)
+	// Update Y component with transition counter
+	if r.getTransitionStepsY() > 0 {
+		// Always increment for smooth continuous rotation
 		r.SpriteSlopeY++
-		if r.SpriteSlopeY == DIRECTIONS_TO_SNAP {
-			r.SpriteSlopeY = 0 // Wrap 8 -> 0
+		if r.SpriteSlopeY >= DIRECTIONS_TO_SNAP {
+			r.SpriteSlopeY = 0
 		}
-	} else if diffY > 0 {
-		// Normal increment (target is ahead)
-		r.SpriteSlopeY++
-		if r.SpriteSlopeY == DIRECTIONS_TO_SNAP {
-			r.SpriteSlopeY = 0 // Wrap 8 -> 0
-		}
-	} else if diffY < 0 {
-		// Normal decrement (target is behind)
-		r.SpriteSlopeY--
-		if r.SpriteSlopeY < 0 {
-			r.SpriteSlopeY = DIRECTIONS_TO_SNAP - 1 // Wrap -1 -> 7
-		}
+		r.decrementTransitionStepY()
 	}
-	// If diffY == 0, already at target, do nothing
 }
 
 // BounceTowardsAngle sets rock direction and speed based on target angle (0-360 degrees)
@@ -247,7 +368,6 @@ type RocksRenderer struct {
 
 	Rocks          [NUM_ROCK_TYPES][]*SimpleRock // Rocks organized by type
 	SpriteSize     int
-	FSpriteSize    float32
 	totalRocks     int
 	ActiveRockType int
 	FrameCounter   [NUM_ROCK_TYPES]int // Global frame counter for transition timing
@@ -265,10 +385,9 @@ type RocksConfig struct {
 func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 	shaderMap := shaders.LoadShaders()
 	r := &RocksRenderer{
-		shader:      shaderMap[shaders.RocksShaderKey],
-		SpriteSize:  config.SpriteSize,
-		FSpriteSize: float32(config.SpriteSize),
-		totalRocks:  config.TotalRocks,
+		shader:     shaderMap[shaders.RocksShaderKey],
+		SpriteSize: config.SpriteSize,
+		totalRocks: config.TotalRocks,
 	}
 
 	// Generate and pre-extract all sprite frames
@@ -324,9 +443,7 @@ func (r *RocksRenderer) generateSprites() {
 				angleDegY := int(YSnapIdx) * (360 / int(DIRECTIONS_TO_SNAP))
 				angleRadY := float32(angleDegY) * (math.Pi / 180.0)
 
-				// Create spritesheet: 18 columns x 4 rows = 72 frames
-				const SHEET_COLS = 18
-				const SHEET_ROWS = 4
+				// Create spritesheet based on ROTATION_FRAMES
 				sheetWidth := r.SpriteSize * SHEET_COLS
 				sheetHeight := r.SpriteSize * SHEET_ROWS
 				spriteSheet := ebiten.NewImage(sheetWidth, sheetHeight)
@@ -334,7 +451,7 @@ func (r *RocksRenderer) generateSprites() {
 				// Render all rotation frames into the spritesheet
 				for frameIdx := 0; frameIdx < ROTATION_FRAMES; frameIdx++ {
 					// Calculate Z rotation angle (0 to 360 degrees in DEGREES_PER_FRAME increments)
-					rotationAngle := float32(frameIdx*DEGREES_PER_FRAME) * (math.Pi / 180.0)
+					rotationRadAngle := float32(frameIdx*DEGREES_PER_FRAME) * (math.Pi / 180.0)
 
 					// Create temporary image for this frame
 					frameImg := ebiten.NewImage(r.SpriteSize, r.SpriteSize)
@@ -345,7 +462,7 @@ func (r *RocksRenderer) generateSprites() {
 						"Mouse":           Vec2{X: 0.0, Y: 0.0}.KageVec2(),
 						"RotationX":       angleRadX,
 						"RotationY":       angleRadY,
-						"RotationZ":       rotationAngle,
+						"RotationZ":       rotationRadAngle,
 						"InnerColorDark":  innerDark.KageVec3(),
 						"InnerColorLight": innerLight.KageVec3(),
 						"OuterColorDark":  outerDark.KageVec3(),
@@ -390,55 +507,84 @@ func (r *RocksRenderer) generateSprites() {
 	r.sprites = genSprites
 }
 
-// generateRocks creates the initial rock instances
+// generateRocks creates rock instances with random RockScoreTypes that accumulate to target score
 func (r *RocksRenderer) generateRocks(config RocksConfig) {
-	rocksPerType := config.TotalRocks / NUM_ROCK_TYPES
-	remainder := config.TotalRocks % NUM_ROCK_TYPES
+	targetScore := config.TotalRocks // e.g., 500
+	currentScore := 0
 
-	for rockType := 0; rockType < NUM_ROCK_TYPES; rockType++ {
-		numRocks := rocksPerType
-		if rockType < remainder {
-			numRocks++
+	// Track rocks by type
+	var allRocks [][]*SimpleRock
+	for i := 0; i < NUM_ROCK_TYPES; i++ {
+		allRocks = append(allRocks, []*SimpleRock{})
+	}
+
+	// Generate rocks until we reach target score
+	for currentScore < targetScore {
+		remaining := targetScore - currentScore
+
+		// Pick a random RockScoreType that doesn't exceed remaining
+		var scoreType RockScoreType
+		switch {
+		case remaining >= 10 && rand.Float32() < 0.15: // 15% chance for Huge
+			scoreType = Huge
+		case remaining >= 5 && rand.Float32() < 0.25: // 25% chance for Big
+			scoreType = Big
+		case remaining >= 3 && rand.Float32() < 0.35: // 35% chance for Medium
+			scoreType = Medium
+		default: // Otherwise Small
+			scoreType = Small
 		}
 
-		r.Rocks[rockType] = make([]*SimpleRock, numRocks)
+		// Pick random rock type (0 or 1)
+		rockType := rand.Intn(NUM_ROCK_TYPES)
 
-		for i := 0; i < numRocks; i++ {
-			// Random position
-			pos := Vec2{
-				X: rand.Float32() * config.WorldBoundsX,
-				Y: rand.Float32() * config.WorldBoundsY,
-			}
-
-			// Pick random rotation frame
-			spriteIndex := uint16(rand.Intn(ROTATION_FRAMES))
-
-			// Generate slope values from -4 to +4 (9 possible values)
-			// rand gives 0-8, subtract MAX_SLOPE to get -4 to +4
-			slopeX := int8(rand.Intn(int(DIRECTIONS_TO_SNAP)+1)) - MAX_SLOPE
-			slopeY := int8(rand.Intn(int(DIRECTIONS_TO_SNAP)+1)) - MAX_SLOPE
-
-			// Convert slopes to sprite indices (0-7), wrapping +4 back to 0
-			spriteSlopeX := slopeX + MAX_SLOPE // Convert -4..+4 to 0..8
-			if spriteSlopeX == DIRECTIONS_TO_SNAP {
-				spriteSlopeX = 0 // Wrap 8 -> 0 (so +4 uses same sprite as -4)
-			}
-			spriteSlopeY := slopeY + MAX_SLOPE // Convert -4..+4 to 0..8
-			if spriteSlopeY == DIRECTIONS_TO_SNAP {
-				spriteSlopeY = 0 // Wrap 8 -> 0 (so +4 uses same sprite as -4)
-			}
-
-			rock := &SimpleRock{
-				Position:     pos,
-				SpriteIndex:  spriteIndex,
-				SlopeX:       slopeX,
-				SlopeY:       slopeY,
-				SpriteSlopeX: spriteSlopeX,
-				SpriteSlopeY: spriteSlopeY,
-			}
-			rock.calculateAnimationRate() // Initialize cached value
-			r.Rocks[rockType][i] = rock
+		// Random position
+		pos := Vec2{
+			X: rand.Float32() * config.WorldBoundsX,
+			Y: rand.Float32() * config.WorldBoundsY,
 		}
+
+		// Pick random rotation frame
+		spriteIndex := uint16(rand.Intn(ROTATION_FRAMES))
+
+		// Generate slope values
+		slopeX := int8(rand.Intn(int(DIRECTIONS_TO_SNAP)+1)) - MAX_SLOPE
+		slopeY := int8(rand.Intn(int(DIRECTIONS_TO_SNAP)+1)) - MAX_SLOPE
+
+		// Convert slopes to sprite indices
+		spriteSlopeX := slopeX + MAX_SLOPE
+		if spriteSlopeX == DIRECTIONS_TO_SNAP {
+			spriteSlopeX = 0
+		}
+		spriteSlopeY := slopeY + MAX_SLOPE
+		if spriteSlopeY == DIRECTIONS_TO_SNAP {
+			spriteSlopeY = 0
+		}
+
+		rock := &SimpleRock{
+			Position:     pos,
+			SpriteIndex:  spriteIndex,
+			SlopeX:       slopeX,
+			SlopeY:       slopeY,
+			SpriteSlopeX: spriteSlopeX,
+			SpriteSlopeY: spriteSlopeY,
+			Score:        scoreType,
+		}
+		rock.calculateAnimationRate()
+
+		allRocks[rockType] = append(allRocks[rockType], rock)
+		currentScore += int(scoreType)
+	}
+
+	// Assign to renderer
+	for i := 0; i < NUM_ROCK_TYPES; i++ {
+		r.Rocks[i] = allRocks[i]
+	}
+
+	// Update total count
+	r.totalRocks = 0
+	for i := 0; i < NUM_ROCK_TYPES; i++ {
+		r.totalRocks += len(r.Rocks[i])
 	}
 }
 
@@ -457,8 +603,10 @@ func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
 			frameRect := sprite.SpriteSheet.Rect(int(rock.SpriteIndex))
 			frameImage := sprite.Image.SubImage(frameRect).(*ebiten.Image)
 
-			// Reset and set transform
+			// Reset and set transform with SCALING based on RockScoreType
 			opts.GeoM.Reset()
+			scale := rock.Score.SizeMultiplier()
+			opts.GeoM.Scale(float64(scale), float64(scale))
 			opts.GeoM.Translate(float64(rock.Position.X), float64(rock.Position.Y))
 			screen.DrawImage(frameImage, opts)
 		}

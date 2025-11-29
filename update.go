@@ -29,16 +29,19 @@ func (g *Game) UpdateRocks() {
 
 		rock.Update(g.RocksRenderer.FrameCounter[g.RocksRenderer.ActiveRockType])
 
-		if rock.Position.X+g.RocksRenderer.FSpriteSize >= render.GAME_BOUNDS_X {
-			rock.Position.X = render.GAME_BOUNDS_X - g.RocksRenderer.FSpriteSize
+		// Get individual rock size based on its RockScoreType
+		rockSize := rock.GetSize(g.RocksRenderer.SpriteSize)
+
+		if rock.Position.X+rockSize >= render.GAME_BOUNDS_X {
+			rock.Position.X = render.GAME_BOUNDS_X - rockSize
 			rock.BounceX() // Bounce off right wall
 		} else if rock.Position.X <= 0 {
 			rock.Position.X = 0
 			rock.BounceX() // Bounce off left wall
 		}
 
-		if rock.Position.Y+g.RocksRenderer.FSpriteSize >= render.GAME_BOUNDS_Y {
-			rock.Position.Y = render.GAME_BOUNDS_Y - g.RocksRenderer.FSpriteSize
+		if rock.Position.Y+rockSize >= render.GAME_BOUNDS_Y {
+			rock.Position.Y = render.GAME_BOUNDS_Y - rockSize
 			rock.BounceY() // Bounce off bottom wall
 		} else if rock.Position.Y <= 0 {
 			rock.Position.Y = 0
