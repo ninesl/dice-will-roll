@@ -76,25 +76,31 @@ func (g *Game) UpdateRocks() {
 				dx := rockCenterX - dieCenterX
 				dy := rockCenterY - dieCenterY
 
+				// Use 0.75 multiplier for positioning (matches the tighter collision detection)
+				effectiveTileSize := render.TileSize * 0.75
+				effectiveRockSize := rockSize * 0.75
+				dieInset := (render.TileSize - effectiveTileSize) / 2
+				rockInset := (rockSize - effectiveRockSize) / 2
+
 				// Determine primary collision axis based on which has greater separation
 				if math.Abs(float64(dx)) > math.Abs(float64(dy)) {
 					// Horizontal collision (left or right side of die)
 					if dx > 0 {
 						// Rock is on right side of die
-						rock.Position.X = die.Vec2.X + render.TileSize + 1
+						rock.Position.X = die.Vec2.X + dieInset + effectiveTileSize + 1 - rockInset
 					} else {
 						// Rock is on left side of die
-						rock.Position.X = die.Vec2.X - rockSize - 1
+						rock.Position.X = die.Vec2.X + dieInset - effectiveRockSize - 1 - rockInset
 					}
 					rock.BounceX()
 				} else {
 					// Vertical collision (top or bottom side of die)
 					if dy > 0 {
 						// Rock is below die
-						rock.Position.Y = die.Vec2.Y + render.TileSize + 1
+						rock.Position.Y = die.Vec2.Y + dieInset + effectiveTileSize + 1 - rockInset
 					} else {
 						// Rock is above die
-						rock.Position.Y = die.Vec2.Y - rockSize - 1
+						rock.Position.Y = die.Vec2.Y + dieInset - effectiveRockSize - 1 - rockInset
 					}
 					rock.BounceY()
 				}

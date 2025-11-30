@@ -115,10 +115,17 @@ type SimpleRock struct {
 const BaseVelocity = 2.0
 
 func (r *SimpleRock) RockWithinDie(die DieRenderable, rockSize float32) bool {
-	// AABB (Axis-Aligned Bounding Box) collision detection
+	// AABB (Axis-Aligned Bounding Box) collision detection with 0.75 multiplier for tighter collision
 	// Checks if rock's bounding box overlaps with die's bounding box
-	return (r.Position.X+rockSize > die.Vec2.X && r.Position.X < die.Vec2.X+TileSize) &&
-		(r.Position.Y+rockSize > die.Vec2.Y && r.Position.Y < die.Vec2.Y+TileSize)
+	effectiveTileSize := TileSize * 0.75
+	effectiveRockSize := rockSize * 0.75
+
+	// Center the effective collision boxes
+	dieInset := (TileSize - effectiveTileSize) / 2
+	rockInset := (rockSize - effectiveRockSize) / 2
+
+	return (r.Position.X+rockInset+effectiveRockSize > die.Vec2.X+dieInset && r.Position.X+rockInset < die.Vec2.X+dieInset+effectiveTileSize) &&
+		(r.Position.Y+rockInset+effectiveRockSize > die.Vec2.Y+dieInset && r.Position.Y+rockInset < die.Vec2.Y+dieInset+effectiveTileSize)
 }
 
 // TODO: determine if copy is faster than reference, and baseSpriteSize copy by ref or get it from g *Game
