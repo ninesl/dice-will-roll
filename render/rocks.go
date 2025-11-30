@@ -13,7 +13,7 @@ const (
 	NUM_ROCK_TYPES = 2 // 2 rock types: different shapes
 
 	// TODO: need to benchmark this on varying hardware. higher number less sprites in sheet/memory used
-	DEGREES_PER_FRAME = 30                      // Degrees of rotation per transition frame
+	DEGREES_PER_FRAME = 20                      // Degrees of rotation per transition frame
 	ROTATION_FRAMES   = 360 / DEGREES_PER_FRAME // 360/DEGREES_PER_FRAME = X frames static spin
 
 	DIRECTIONS_TO_SNAP = MAX_SLOPE * 2 // # of possible angles for SpriteSlopeX and SpriteSlopeY. wraps
@@ -50,6 +50,23 @@ func calculateSheetCols(frames int) int {
 // Constants for animation rate calculation
 const baseN = 22.0
 const speedFactor = 3.5
+
+// Sprite rotation rates indexed by RockScoreType value
+// LOWER value = MORE frequent updates = FASTER rotation
+// Small=1, Medium=3, Big=5, Huge=10
+var rockRotationRate = [Huge + 1]uint8{
+	0,  // 0: unused (default)
+	2,  // 1: Small - updates every 2 frames (VERY FAST)
+	0,  // 2: unused
+	5,  // 3: Medium - updates every 5 frames (fast)
+	0,  // 4: unused
+	8,  // 5: Big - updates every 10 frames (normal)
+	0,  // 6: unused
+	0,  // 7: unused
+	0,  // 8: unused
+	0,  // 9: unused
+	10, // 10: Huge - updates every 20 frames (SLOW)
+}
 
 type RockScoreType uint8
 
@@ -93,7 +110,21 @@ type SimpleRock struct {
 
 }
 
-const BaseVelocity = .5
+// const BaseVelocity = 1.0
+
+const BaseVelocity = 2.0
+
+func (r *SimpleRock) RockWithinDie(die DieRenderable, rockSize float32) bool {
+	// AABB (Axis-Aligned Bounding Box) collision detection
+	// Checks if rock's bounding box overlaps with die's bounding box
+	return (r.Position.X+rockSize > die.Vec2.X && r.Position.X < die.Vec2.X+TileSize) &&
+		(r.Position.Y+rockSize > die.Vec2.Y && r.Position.Y < die.Vec2.Y+TileSize)
+}
+
+// TODO: determine if copy is faster than reference, and baseSpriteSize copy by ref or get it from g *Game
+func (r *SimpleRock) XYWithinRock(X, Y float32, spriteSize float32) bool {
+	return (Y >= r.Position.Y && Y <= r.Position.Y+spriteSize) && (X >= r.Position.X && X <= r.Position.X+spriteSize)
+}
 
 // getTransitionStepsX returns the remaining transition steps for X axis
 func (r *SimpleRock) getTransitionStepsX() uint8 {
@@ -124,6 +155,7 @@ func (r *SimpleRock) decrementTransitionStepY() {
 	}
 }
 
+// TODO:FIXME: maybe this should be another lookup table? to reduce arithmetic ops? need to benchmark
 // GetSize returns the pixel size of this rock based on its RockScoreType
 func (r *SimpleRock) GetSize(baseSpriteSize int) float32 {
 	return float32(baseSpriteSize) * r.Score.SizeMultiplier()
@@ -256,26 +288,29 @@ func (r *SimpleRock) BounceY() {
 // UpdateTransition handles the smooth sprite rotation during direction changes
 // Now includes full rotation on each bounce
 func (r *SimpleRock) UpdateTransition(frameCounter int) {
-	if frameCounter%int(r.animationRate) != 0 {
-		// Only update every N frames for visible transitions (performance & visual)
-		return
+	// Update SpriteIndex based on rock SIZE (smaller rocks rotate faster)
+	if frameCounter%int(rockRotationRate[r.Score]) == 0 {
+		// Increment or decrement sprite index based on horizontal direction
+		// Moving right (positive SlopeX): increment (rotate clockwise)
+		// Moving left (negative SlopeX): decrement (rotate counter-clockwise)
+		if r.SlopeX >= 0 {
+			if r.SpriteIndex == 0 {
+				r.SpriteIndex = ROTATION_FRAMES - 1
+			} else {
+				r.SpriteIndex--
+			}
+		} else {
+			r.SpriteIndex++
+			if r.SpriteIndex >= ROTATION_FRAMES {
+				r.SpriteIndex = 0
+			}
+		}
 	}
 
-	// Increment or decrement sprite index based on horizontal direction
-	// Moving right (positive SlopeX): increment (rotate clockwise)
-	// Moving left (negative SlopeX): decrement (rotate counter-clockwise)
-	// if r.SlopeX >= 0 {
-	// 	if r.SpriteIndex == 0 {
-	// 		r.SpriteIndex = ROTATION_FRAMES - 1
-	// 	} else {
-	// 		r.SpriteIndex--
-	// 	}
-	// } else {
-	// 	r.SpriteIndex++
-	// 	if r.SpriteIndex >= ROTATION_FRAMES {
-	// 		r.SpriteIndex = 0
-	// 	}
-	// }
+	// Update SpriteSlopeX/Y based on SPEED (for smooth transitions during bounces)
+	if frameCounter%int(r.animationRate) != 0 {
+		return
+	}
 
 	// Update X component with transition counter
 	if r.getTransitionStepsX() > 0 {

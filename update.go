@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -32,6 +33,74 @@ func (g *Game) UpdateRocks() {
 		// Get individual rock size based on its RockScoreType
 		rockSize := rock.GetSize(g.RocksRenderer.SpriteSize)
 
+		if rock.XYWithinRock(g.cx, g.cy, rockSize) {
+			// Determine which side of rock the cursor is on
+			rockCenterX := rock.Position.X + rockSize/2
+			rockCenterY := rock.Position.Y + rockSize/2
+			dx := g.cx - rockCenterX
+			dy := g.cy - rockCenterY
+
+			// Push rock away from cursor on the primary collision axis
+			if math.Abs(float64(dx)) > math.Abs(float64(dy)) {
+				// Horizontal collision
+				if dx > 0 {
+					// Cursor is on right side, push rock left
+					rock.Position.X = g.cx - rockSize - 1
+				} else {
+					// Cursor is on left side, push rock right
+					rock.Position.X = g.cx + 1
+				}
+				rock.BounceX()
+			} else {
+				// Vertical collision
+				if dy > 0 {
+					// Cursor is below, push rock up
+					rock.Position.Y = g.cy - rockSize - 1
+				} else {
+					// Cursor is above, push rock down
+					rock.Position.Y = g.cy + 1
+				}
+				rock.BounceY()
+			}
+		}
+
+		for _, die := range g.Dice {
+			if rock.RockWithinDie(die.DieRenderable, rockSize) {
+				// Determine which side of the die was hit and position rock just outside
+				rockCenterX := rock.Position.X + rockSize/2
+				rockCenterY := rock.Position.Y + rockSize/2
+				dieCenterX := die.Vec2.X + render.TileSize/2
+				dieCenterY := die.Vec2.Y + render.TileSize/2
+
+				// Calculate which edge is closest
+				dx := rockCenterX - dieCenterX
+				dy := rockCenterY - dieCenterY
+
+				// Determine primary collision axis based on which has greater separation
+				if math.Abs(float64(dx)) > math.Abs(float64(dy)) {
+					// Horizontal collision (left or right side of die)
+					if dx > 0 {
+						// Rock is on right side of die
+						rock.Position.X = die.Vec2.X + render.TileSize + 1
+					} else {
+						// Rock is on left side of die
+						rock.Position.X = die.Vec2.X - rockSize - 1
+					}
+					rock.BounceX()
+				} else {
+					// Vertical collision (top or bottom side of die)
+					if dy > 0 {
+						// Rock is below die
+						rock.Position.Y = die.Vec2.Y + render.TileSize + 1
+					} else {
+						// Rock is above die
+						rock.Position.Y = die.Vec2.Y - rockSize - 1
+					}
+					rock.BounceY()
+				}
+			}
+		}
+
 		if rock.Position.X+rockSize >= render.GAME_BOUNDS_X {
 			rock.Position.X = render.GAME_BOUNDS_X - rockSize
 			rock.BounceX() // Bounce off right wall
@@ -47,6 +116,8 @@ func (g *Game) UpdateRocks() {
 			rock.Position.Y = 0
 			rock.BounceY() // Bounce off top wall
 		}
+
+		// g.cursorWithinBounds()
 	}
 }
 
