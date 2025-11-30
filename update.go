@@ -82,6 +82,10 @@ func (g *Game) UpdateRocks() {
 				dieInset := (render.TileSize - effectiveTileSize) / 2
 				rockInset := (rockSize - effectiveRockSize) / 2
 
+				// Convert die velocity to slope units
+				dieVelocitySlopeX := die.Velocity.X / render.BaseVelocity
+				dieVelocitySlopeY := die.Velocity.Y / render.BaseVelocity
+
 				// Determine primary collision axis based on which has greater separation
 				if math.Abs(float64(dx)) > math.Abs(float64(dy)) {
 					// Horizontal collision (left or right side of die)
@@ -92,7 +96,15 @@ func (g *Game) UpdateRocks() {
 						// Rock is on left side of die
 						rock.Position.X = die.Vec2.X + dieInset - effectiveRockSize - 1 - rockInset
 					}
-					rock.BounceX()
+
+					// Add die velocity to rock's X slope, clamp to MAX_SLOPE range
+					newSlopeX := -rock.SlopeX + int8(dieVelocitySlopeX)
+					if newSlopeX > render.MAX_SLOPE {
+						newSlopeX = render.MAX_SLOPE
+					} else if newSlopeX < render.MIN_SLOPE {
+						newSlopeX = render.MIN_SLOPE
+					}
+					rock.Bounce(newSlopeX, rock.SlopeY)
 				} else {
 					// Vertical collision (top or bottom side of die)
 					if dy > 0 {
@@ -102,7 +114,15 @@ func (g *Game) UpdateRocks() {
 						// Rock is above die
 						rock.Position.Y = die.Vec2.Y + dieInset - effectiveRockSize - 1 - rockInset
 					}
-					rock.BounceY()
+
+					// Add die velocity to rock's Y slope, clamp to MAX_SLOPE range
+					newSlopeY := -rock.SlopeY + int8(dieVelocitySlopeY)
+					if newSlopeY > render.MAX_SLOPE {
+						newSlopeY = render.MAX_SLOPE
+					} else if newSlopeY < render.MIN_SLOPE {
+						newSlopeY = render.MIN_SLOPE
+					}
+					rock.Bounce(rock.SlopeX, newSlopeY)
 				}
 			}
 		}
