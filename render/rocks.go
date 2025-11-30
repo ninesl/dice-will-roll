@@ -54,14 +54,15 @@ func calculateSheetCols(frames int) int {
 
 const (
 	// Score value constants - the actual score value of the rock
+	//TODO:FIXME: hsould this not be in render/?
 	SmallScore  = 1
 	MediumScore = 3
 	BigScore    = 5
 	HugeScore   = 10
 
 	// for animation rate calculation
-	baseN       = 22.0
-	speedFactor = 3.5
+	baseN       = 22
+	speedFactor = 3
 )
 
 // Size multiplier constants for rock variants
@@ -193,11 +194,10 @@ func (rst RockScoreType) GetMinSizeForCategory() float32 {
 
 // SimpleRock represents a rock using pre-extracted sprite frames
 type SimpleRock struct {
-	Position      Vec2  // 2D screen position
-	SpriteIndex   uint8 // Current rotation frame index (0-71)
-	animationRate uint8 // Cached update frequency, FrameCounter%animationRate is when rock updates
-	SlopeX        int8  // Current X speed component (-4 to +4)
-	SlopeY        int8  // Current Y speed component (-4 to +4)
+	Position    Vec2  // 2D screen position
+	SpriteIndex uint8 // Current rotation frame index (0-71)
+	SlopeX      int8  // Current X speed component (-4 to +4)
+	SlopeY      int8  // Current Y speed component (-4 to +4)
 
 	// Transition system for smooth sprite rotation during direction changes
 	SpriteSlopeX int8          // Visual speed X used during transition (gradually moves toward SpeedX)
@@ -290,13 +290,6 @@ func (r *SimpleRock) GetSize(baseSpriteSize float32) float32 {
 	return baseSpriteSize * r.Score.SizeMultiplier()
 }
 
-// calculateAnimationRate computes the update frequency based on current slopes
-func (r *SimpleRock) calculateAnimationRate() {
-	speed := math.Sqrt(float64(r.SlopeX*r.SlopeX + r.SlopeY*r.SlopeY))
-	n := int(math.Max(2, baseN-(speed*speedFactor)))
-	r.animationRate = uint8(n) // n is guaranteed to be <= 22, fits in uint8
-}
-
 func calculateShortestPath(current, target int8) (distance uint8) {
 	diff := target - current
 
@@ -354,8 +347,6 @@ func (r *SimpleRock) Bounce(newX int8, newY int8) {
 
 	// Add full rotation (DIRECTIONS_TO_SNAP) to shortest path
 	r.setTransitionSteps(distX+uint8(DIRECTIONS_TO_SNAP), distY+uint8(DIRECTIONS_TO_SNAP))
-
-	r.calculateAnimationRate() // Recalculate cached animation rate
 }
 
 // BounceX flips horizontal direction (bounce off vertical wall)
@@ -379,8 +370,6 @@ func (r *SimpleRock) BounceX() {
 	tumbleY := uint8(absY) * 2 // 0-8 range, scaled by speed
 
 	r.setTransitionSteps(distX, tumbleY)
-
-	r.calculateAnimationRate() // Recalculate cached animation rate
 }
 
 // BounceY flips vertical direction (bounce off horizontal wall)
@@ -404,8 +393,6 @@ func (r *SimpleRock) BounceY() {
 	tumbleX := uint8(absX) * 2 // 0-8 range, scaled by speed
 
 	r.setTransitionSteps(tumbleX, distY)
-
-	r.calculateAnimationRate() // Recalculate cached animation rate
 }
 
 // UpdateTransition handles the smooth sprite rotation during direction changes
@@ -431,7 +418,30 @@ func (r *SimpleRock) UpdateTransition(frameCounter int) {
 	}
 
 	// Update SpriteSlopeX/Y based on SPEED (for smooth transitions during bounces)
-	if frameCounter%int(r.animationRate) != 0 {
+	// Derive animation rate on-the-fly from current slopes (faster than storing/loading from memory)
+	// Fast approximation: max(|x|, |y|) + min(|x|, |y|)/2
+	absX := r.SlopeX
+	if absX < 0 {
+		absX = -absX
+	}
+	absY := r.SlopeY
+	if absY < 0 {
+		absY = -absY
+	}
+
+	var speed int8
+	if absX > absY {
+		speed = absX + absY/2
+	} else {
+		speed = absY + absX/2
+	}
+
+	n := int(baseN) - int(speed)*3 // Simplified from speed*speedFactor (3.5 → 3 for int math)
+	if n < 2 {
+		n = 2
+	}
+
+	if frameCounter%n != 0 {
 		return
 	}
 
@@ -706,7 +716,6 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 			SpriteSlopeY: spriteSlopeY,
 			Score:        scoreType,
 		}
-		rock.calculateAnimationRate()
 
 		allRocks[rockType] = append(allRocks[rockType], rock)
 		currentScore += scoreType.GetScore()

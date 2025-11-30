@@ -151,6 +151,10 @@ func main() {
 	ebiten.SetWindowSize(ResolutionX, ResolutionY)
 	ebiten.SetWindowTitle("Dice Will Roll")
 
+	//TODO:FIXME: this is how we determine the max perf for a given device.
+	// ebiten.SetTPS(ebiten.SyncWithFPS)
+	ebiten.SetVsyncEnabled(false)
+
 	game := LoadGame()
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
