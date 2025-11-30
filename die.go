@@ -105,7 +105,9 @@ func SetupPlayerDice() []*Die {
 func (d *Die) Roll() {
 	switch d.Mode {
 	case ROLLING:
-		d.Height = 0 // reset to normal height no matter where it is
+		d.Height = 0  // reset to normal height no matter where it is
+		d.Fixed.X = 0 // clear any previous fixed position
+		d.Fixed.Y = 0
 
 		d.Die.Roll()
 		// random direction

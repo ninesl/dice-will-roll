@@ -158,7 +158,17 @@ func (g *Game) SetToScore() {
 		die := g.Dice[i]
 		if die.Mode == HELD {
 			die.Mode = ROLLING
-			die.Roll()
+			// Clear fixed position and height
+			die.Fixed.X = 0
+			die.Fixed.Y = 0
+			die.Height = 0
+			// Set velocity straight down to bounce into rollzone
+			die.Velocity.X = 0
+			die.Velocity.Y = render.DieTileSize * 2 // downward velocity
+			die.Direction = render.DirectionArr[render.DOWN]
+			die.ZRotation = rand.Float32()
+			// Roll the die face value
+			die.Die.Roll()
 		}
 	}
 }
