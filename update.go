@@ -97,9 +97,9 @@ func (g *Game) UpdateDice() {
 
 func (g *Game) UpdateRocks() {
 	// Extract just the DieRenderable parts for collision detection
-	diceRenderables := make([]render.DieRenderable, len(g.Dice))
+	diceRenderables := make([]*render.DieRenderable, len(g.Dice))
 	for i, die := range g.Dice {
-		diceRenderables[i] = die.DieRenderable
+		diceRenderables[i] = &die.DieRenderable
 	}
 
 	// Single call handles all rock updates, wall bouncing, and collisions

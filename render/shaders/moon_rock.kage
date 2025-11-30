@@ -15,11 +15,12 @@ var (
     RotationY float
     RotationZ float  // Z-axis rotation for spinning animation
     
-    // Color uniforms (0.0-1.0 range)
-    InnerColorDark vec3  // Dark brownish-gold for inner/crater areas
-    InnerColorLight vec3 // Light/white for inner/crater areas
-    OuterColorDark vec3  // Darker cream/tan for outer surface
-    OuterColorLight vec3 // Lighter cream/tan for outer surface
+    // Grayscale uniforms (0.0-1.0 range) for generating base white/gray sprites
+    // These create depth/lighting variations that will be colored later via color_filter shader
+    InnerColorDark vec3  // Dark gray for inner/crater areas
+    InnerColorLight vec3 // Light gray/white for inner/crater areas
+    OuterColorDark vec3  // Medium gray for outer surface
+    OuterColorLight vec3 // Lighter gray for outer surface
 )
 
 const (

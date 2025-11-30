@@ -224,7 +224,6 @@ func (g *Game) Select() {
 
 			g.ResetHoldPoint()
 			die.Mode = ROLLING
-
 			return
 		}
 

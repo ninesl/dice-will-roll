@@ -10,7 +10,7 @@ import (
 
 // Constants for sprite system
 const (
-	NUM_ROCK_TYPES = 2 // 2 rock types: different shapes
+	NUM_ROCK_TYPES = 2 // 2 rock types: different colors
 
 	// TODO: need to benchmark this on varying hardware. higher number less sprites in sheet/memory used
 	DEGREES_PER_FRAME = 20                      // Degrees of rotation per transition frame
@@ -21,6 +21,11 @@ const (
 	MAX_SLOPE int8 = 4
 	MIN_SLOPE int8 = -MAX_SLOPE
 	// SPEED_RANGE      = MAX_SLOPE*2 + 1 // 9 (from -4 to +4 inclusive)
+
+	// Interleaving constant: controls how finely rocks of different colors are mixed
+	// Higher value = finer mixing, more draw calls but better visual interleaving
+	// Lower value = coarser mixing, fewer draw calls but more color clumping
+	NUM_INTERLEAVE_LAYERS = 3
 )
 
 // Spritesheet layout variables - dynamically calculated from ROTATION_FRAMES
@@ -47,16 +52,16 @@ func calculateSheetCols(frames int) int {
 	return sqrt
 }
 
-// Constants for animation rate calculation
-const baseN = 22.0
-const speedFactor = 3.5
-
-// Score value constants - used for actual scoring
 const (
+	// Score value constants - the actual score value of the rock
 	SmallScore  = 1
 	MediumScore = 3
 	BigScore    = 5
 	HugeScore   = 10
+
+	// for animation rate calculation
+	baseN       = 22.0
+	speedFactor = 3.5
 )
 
 // Size multiplier constants for rock variants
@@ -86,6 +91,7 @@ const (
 	HugeMinSize    = HugeSmallSize // For collision detection
 )
 
+// The underlying Score that the rock counts for. Also track rock size/size multiplier and animation rate
 type RockScoreType uint8
 
 const (
@@ -111,26 +117,6 @@ const (
 
 	MaxRockType RockScoreType = 13
 )
-
-// // Sprite rotation rates indexed by RockScoreType value
-// // LOWER value = MORE frequent updates = FASTER rotation
-// // Small variants rotate fastest, Huge variants rotate slowest
-// // Smaller variants within each category rotate slightly faster
-// var rockRotationRate = [MaxRockType]uint8{
-// 	0,  // 0: unused (default)
-// 	2,  // 1: SmallLarge - VERY FAST
-// 	2,  // 2: SmallMedium - VERY FAST
-// 	3,  // 3: SmallTiny - VERY FAST (slightly slower)
-// 	5,  // 4: MediumLarge - fast
-// 	5,  // 5: MediumMedium - fast
-// 	6,  // 6: MediumSmall - fast (slightly slower)
-// 	8,  // 7: BigLarge - normal
-// 	8,  // 8: BigMedium - normal
-// 	9,  // 9: BigSmall - normal (slightly slower)
-// 	10, // 10: HugeLarge - SLOW
-// 	10, // 11: HugeMedium - SLOW
-// 	11, // 12: HugeSmall - SLOW (slightly slower)
-// }
 
 // GetScore returns the point value for scoring (groups variants together)
 func (rst RockScoreType) GetScore() int {
@@ -226,9 +212,10 @@ type SimpleRock struct {
 
 const BaseVelocity = 2.0
 
-func (r *SimpleRock) RockWithinDie(die DieRenderable, rockSize float32) bool {
+func (r *SimpleRock) RockWithinDie(die *DieRenderable, rockSize float32) bool {
 	// AABB (Axis-Aligned Bounding Box) collision detection with 0.75 multiplier for tighter collision
 	// Checks if rock's bounding box overlaps with die's bounding box
+
 	effectiveDieTileSize := DieTileSize * 0.75
 	effectiveRockSize := rockSize * 0.75
 
@@ -261,7 +248,7 @@ func (r *SimpleRock) IsNearPoint(rockSize, pointX, pointY, radius float32) bool 
 
 // IsNearDie checks if rock is within radius of a die's center using Manhattan distance
 // This is the BROAD PHASE collision check - cheaper than precise AABB collision
-func (r *SimpleRock) IsNearDie(rockSize float32, die DieRenderable, radius float32) bool {
+func (r *SimpleRock) IsNearDie(rockSize float32, die *DieRenderable, radius float32) bool {
 	dieCenterX := die.Vec2.X + HalfDieTileSize
 	dieCenterY := die.Vec2.Y + HalfDieTileSize
 
@@ -494,13 +481,17 @@ func (r *SimpleRock) BounceTowardsAngle(angle int) {
 
 // RocksRenderer manages pre-extracted sprite rendering with ultra-fast array indexing
 type RocksRenderer struct {
-	shader *ebiten.Shader
+	shader      *ebiten.Shader
+	colorShader *ebiten.Shader // Color filter shader for applying colors to grayscale sprites
 
-	// 3D array of sprite sheets
-	// [rockType][speedX_index][speedY_index] -> Sprite struct containing spritesheet
+	// 2D array of grayscale sprite sheets (shared by all rock types)
+	// [speedX_index][speedY_index] -> Sprite struct containing spritesheet
 	// Each spritesheet has ROTATION_FRAMES (72) frames arranged in 18 columns x 4 rows
-	// Size: [2][8][8] = 64 spritesheets total
-	sprites [NUM_ROCK_TYPES][DIRECTIONS_TO_SNAP][DIRECTIONS_TO_SNAP]Sprite
+	// Size: [8][8] = 64 spritesheets total (was 128 with NUM_ROCK_TYPES before!)
+	sprites [DIRECTIONS_TO_SNAP][DIRECTIONS_TO_SNAP]*Sprite
+
+	// Color tints for each rock type (applied via shader at draw time)
+	rockTypeColors [NUM_ROCK_TYPES]Vec3
 
 	Rocks          [NUM_ROCK_TYPES][]*SimpleRock // Rocks organized by type
 	RockTileSize   float32                       // Base tile size for rock rendering and collision calculations
@@ -515,6 +506,10 @@ type RocksRenderer struct {
 	// Internal collision buffers - reused each frame to avoid allocations
 	diceCollisionBuffer   []*SimpleRock
 	cursorCollisionBuffer []*SimpleRock
+
+	// Pre-allocated temp images for rendering (reused every frame to avoid allocations)
+	// [NUM_ROCK_TYPES] temp images, one per rock color type
+	tempImages [NUM_ROCK_TYPES]*ebiten.Image
 }
 
 // RocksConfig holds configuration for rock system
@@ -530,129 +525,112 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 	shaderMap := shaders.LoadShaders()
 	r := &RocksRenderer{
 		shader:       shaderMap[shaders.RocksShaderKey],
+		colorShader:  shaderMap[shaders.ColorFilterShaderKey],
 		RockTileSize: config.RockTileSize,
 		totalRocks:   config.TotalRocks,
 		// Initialize collision check radii based on RockTileSize
-		CursorCheckRadius: config.RockTileSize * 3.0,
-		DieCheckRadius:    config.RockTileSize * 2.0,
+		CursorCheckRadius: config.RockTileSize,
+		DieCheckRadius:    config.RockTileSize,
 		// Pre-allocate collision buffers with typical capacity to avoid allocations
 		// Capacity based on typical collision counts: ~50 dice collisions, ~20 cursor collisions
-		diceCollisionBuffer:   make([]*SimpleRock, 0, 64),
-		cursorCollisionBuffer: make([]*SimpleRock, 0, 32),
+		diceCollisionBuffer:   make([]*SimpleRock, 0, 128),
+		cursorCollisionBuffer: make([]*SimpleRock, 0, 128),
+		// Define colors for each rock type (applied via shader at draw time)
+		rockTypeColors: [NUM_ROCK_TYPES]Vec3{
+			Grey,
+			Brown,
+		},
 	}
 
-	// Generate and pre-extract all sprite frames
+	// Generate and pre-extract all sprite frames (single grayscale spritesheet)
 	r.generateSprites()
 
 	// Generate rock instances
 	r.generateRocks(config)
 
+	// Pre-allocate temp images for rendering (reused every frame to avoid allocations)
+	for i := 0; i < NUM_ROCK_TYPES; i++ {
+		r.tempImages[i] = ebiten.NewImage(int(config.WorldBoundsX), int(config.WorldBoundsY))
+	}
+
 	return r
 }
 
-// generateSprites creates individual sprite images for each unique angle
-// Multiple array slots may point to the same sprite if they have the same angle (deduplication)
+// generateSprites creates a single grayscale spritesheet array (shared by all rock types)
+// Colors will be applied at draw-time via the color filter shader
 func (r *RocksRenderer) generateSprites() {
-	// Track generated sprites by angle for deduplication
-	// Key: angle in degrees, Value: [rockType][frameIdx] -> sprite
+	genSprites := [DIRECTIONS_TO_SNAP][DIRECTIONS_TO_SNAP]*Sprite{}
 
-	// genSprites := make([][DIRECTIONS_TO_SNAP][DIRECTIONS_TO_SNAP]map[int]*ebiten.Image, 0, NUM_ROCK_TYPES)
-	genSprites := [NUM_ROCK_TYPES][DIRECTIONS_TO_SNAP][DIRECTIONS_TO_SNAP]Sprite{}
+	// Use grayscale values for base sprite (will be colored via shader later)
+	// Different grayscale tones create visual variety in the base geometry
+	innerDark := KageColor(60, 60, 60)     // Dark gray for inner/crater areas
+	innerLight := KageColor(200, 200, 200) // Light gray for inner/crater areas
+	outerDark := KageColor(100, 100, 100)  // Medium gray for outer surface
+	outerLight := KageColor(220, 220, 220) // Light gray for outer surface
 
-	for rockType := range NUM_ROCK_TYPES {
-		var innerDark, innerLight, outerDark, outerLight Vec3
-		switch rockType { //TODO: make a shader for this? maybe they need to be white then we apply a shader during Draw()
-		case 1: // Dark gray
-			innerDark = KageColor(40, 40, 42)
-			innerLight = KageColor(80, 82, 85)
-			outerDark = KageColor(70, 72, 75)
-			outerLight = KageColor(100, 102, 105)
-		case 0: // Brown
-			innerDark = KageColor(60, 40, 30)
-			innerLight = KageColor(100, 70, 50)
-			outerDark = KageColor(80, 60, 45)
-			outerLight = KageColor(120, 90, 70)
-		}
+	for XSnapIdx := range DIRECTIONS_TO_SNAP {
+		angleDegX := int(XSnapIdx) * (360 / int(DIRECTIONS_TO_SNAP))
+		angleRadX := float32(angleDegX) * (math.Pi / 180.0)
 
-		XSnap := [DIRECTIONS_TO_SNAP][DIRECTIONS_TO_SNAP]Sprite{}
-		genSprites[rockType] = XSnap
-		for XSnapIdx := range DIRECTIONS_TO_SNAP {
-			YSnap := [DIRECTIONS_TO_SNAP]Sprite{}
-			genSprites[rockType][XSnapIdx] = YSnap
+		for YSnapIdx := range DIRECTIONS_TO_SNAP {
+			angleDegY := int(YSnapIdx) * (360 / int(DIRECTIONS_TO_SNAP))
+			angleRadY := float32(angleDegY) * (math.Pi / 180.0)
 
-			angleDegX := int(XSnapIdx) * (360 / int(DIRECTIONS_TO_SNAP))
-			angleRadX := float32(angleDegX) * (math.Pi / 180.0)
+			// Create spritesheet based on ROTATION_FRAMES
+			spriteSize := int(r.RockTileSize)
+			sheetWidth := spriteSize * SHEET_COLS
+			sheetHeight := spriteSize * SHEET_ROWS
+			spriteSheet := ebiten.NewImage(sheetWidth, sheetHeight)
 
-			// angleX := math.Atan2(float64(y), float64(x))
-			// angleDeg := angleRad * 180.0 / math.Pi
-			// if angleDeg < 0 {
-			// 	angleDeg += 360
-			// }
+			// Render all rotation frames into the spritesheet
+			for frameIdx := 0; frameIdx < ROTATION_FRAMES; frameIdx++ {
+				// Calculate Z rotation angle (0 to 360 degrees in DEGREES_PER_FRAME increments)
+				rotationRadAngle := float32(frameIdx*DEGREES_PER_FRAME) * (math.Pi / 180.0)
 
-			for YSnapIdx := range DIRECTIONS_TO_SNAP {
+				// Create temporary image for this frame
+				frameImg := ebiten.NewImage(spriteSize, spriteSize)
 
-				angleDegY := int(YSnapIdx) * (360 / int(DIRECTIONS_TO_SNAP))
-				angleRadY := float32(angleDegY) * (math.Pi / 180.0)
-
-				// Create spritesheet based on ROTATION_FRAMES
-				spriteSize := int(r.RockTileSize)
-				sheetWidth := spriteSize * SHEET_COLS
-				sheetHeight := spriteSize * SHEET_ROWS
-				spriteSheet := ebiten.NewImage(sheetWidth, sheetHeight)
-
-				// Render all rotation frames into the spritesheet
-				for frameIdx := 0; frameIdx < ROTATION_FRAMES; frameIdx++ {
-					// Calculate Z rotation angle (0 to 360 degrees in DEGREES_PER_FRAME increments)
-					rotationRadAngle := float32(frameIdx*DEGREES_PER_FRAME) * (math.Pi / 180.0)
-
-					// Create temporary image for this frame
-					frameImg := ebiten.NewImage(spriteSize, spriteSize)
-
-					u := map[string]interface{}{
-						"Time":            0.0,
-						"Resolution":      []float32{r.RockTileSize, r.RockTileSize},
-						"Mouse":           Vec2{X: 0.0, Y: 0.0}.KageVec2(),
-						"RotationX":       angleRadX,
-						"RotationY":       angleRadY,
-						"RotationZ":       rotationRadAngle,
-						"InnerColorDark":  innerDark.KageVec3(),
-						"InnerColorLight": innerLight.KageVec3(),
-						"OuterColorDark":  outerDark.KageVec3(),
-						"OuterColorLight": outerLight.KageVec3(),
-					}
-
-					opts := &ebiten.DrawRectShaderOptions{Uniforms: u}
-					frameImg.DrawRectShader(spriteSize, spriteSize, r.shader, opts)
-
-					// Calculate position in spritesheet (row-major order)
-					col := frameIdx % SHEET_COLS
-					row := frameIdx / SHEET_COLS
-
-					// Draw this frame into the spritesheet at the correct position
-					drawOpts := &ebiten.DrawImageOptions{}
-					drawOpts.GeoM.Translate(float64(col*spriteSize), float64(row*spriteSize))
-					spriteSheet.DrawImage(frameImg, drawOpts)
+				u := map[string]interface{}{
+					"Time":            0.0,
+					"Resolution":      []float32{r.RockTileSize, r.RockTileSize},
+					"Mouse":           Vec2{X: 0.0, Y: 0.0}.KageVec2(),
+					"RotationX":       angleRadX,
+					"RotationY":       angleRadY,
+					"RotationZ":       rotationRadAngle,
+					"InnerColorDark":  innerDark.KageVec3(),
+					"InnerColorLight": innerLight.KageVec3(),
+					"OuterColorDark":  outerDark.KageVec3(),
+					"OuterColorLight": outerLight.KageVec3(),
 				}
 
-				// Create Sprite struct with spritesheet metadata
-				sprite := Sprite{
-					Image:       spriteSheet,
-					SpriteSheet: NewSpriteSheet(SHEET_COLS, SHEET_ROWS, spriteSize),
-					ActiveFrame: 0,
-				}
+				opts := &ebiten.DrawRectShaderOptions{Uniforms: u}
+				frameImg.DrawRectShader(spriteSize, spriteSize, r.shader, opts)
 
-				if XSnapIdx >= DIRECTIONS_TO_SNAP {
-					continue
-				} else if YSnapIdx >= DIRECTIONS_TO_SNAP {
-					continue
-				}
+				// Calculate position in spritesheet (row-major order)
+				col := frameIdx % SHEET_COLS
+				row := frameIdx / SHEET_COLS
 
-				genSprites[rockType][XSnapIdx][YSnapIdx] = sprite
+				// Draw this frame into the spritesheet at the correct position
+				drawOpts := &ebiten.DrawImageOptions{}
+				drawOpts.GeoM.Translate(float64(col*spriteSize), float64(row*spriteSize))
+				spriteSheet.DrawImage(frameImg, drawOpts)
 			}
-		}
-		//TODO: should make a single spritesheet and then assign each degree key in map
-		// to the subrect of each to save memory allocations?
 
+			// Create Sprite struct with spritesheet metadata
+			sprite := Sprite{
+				Image:       spriteSheet,
+				SpriteSheet: NewSpriteSheet(SHEET_COLS, SHEET_ROWS, spriteSize),
+				ActiveFrame: 0,
+			}
+
+			if XSnapIdx >= DIRECTIONS_TO_SNAP {
+				continue
+			} else if YSnapIdx >= DIRECTIONS_TO_SNAP {
+				continue
+			}
+
+			genSprites[XSnapIdx][YSnapIdx] = &sprite
+		}
 	}
 
 	// Assign generated sprites to the renderer
@@ -675,6 +653,8 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 		remaining := targetScore - currentScore
 
 		// Pick a random RockScoreType variant that doesn't exceed remaining
+
+		//TODO: get a good distribution of rock sizes instead of % chance
 		var scoreType RockScoreType
 		switch {
 		case remaining >= HugeScore && rand.Float32() < 0.15: // 15% chance for Huge
@@ -745,26 +725,49 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 }
 
 // DrawRocks renders all rocks with ultra-fast direct array access
+// Uses grayscale sprites with color filter shader applied per rock type
+// Implements index-based interleaving to prevent one color from always appearing on top
 func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
 	// Reuse DrawImageOptions to avoid allocations (important for 10k+ rocks)
 	opts := &ebiten.DrawImageOptions{}
-	opts.Filter = ebiten.FilterLinear
+	// opts.Filter = ebiten.FilterLinear
 
-	for rockType := range NUM_ROCK_TYPES {
-		for _, rock := range r.Rocks[rockType] {
-			// Get the sprite for this slope combination
-			sprite := r.sprites[rockType][rock.SpriteSlopeX][rock.SpriteSlopeY]
+	// Interleave rocks by drawing them in layers based on their index
+	// This ensures colors are mixed visually rather than one color always on top
+	for layer := 0; layer < NUM_INTERLEAVE_LAYERS; layer++ {
+		for rockType := range NUM_ROCK_TYPES {
+			// Clear the pre-allocated temp image (reuse instead of allocating new one each frame!)
+			r.tempImages[rockType].Clear()
 
-			// Get the specific rotation frame from the spritesheet
-			frameRect := sprite.SpriteSheet.Rect(int(rock.SpriteIndex))
-			frameImage := sprite.Image.SubImage(frameRect).(*ebiten.Image)
+			// Draw only rocks whose index matches this layer using stride-based iteration
+			// This avoids expensive modulo operations and conditional checks
+			// Layer 0: indices 0, 2, 4, 6... | Layer 1: indices 1, 3, 5, 7...
+			for i := layer; i < len(r.Rocks[rockType]); i += NUM_INTERLEAVE_LAYERS {
+				rock := r.Rocks[rockType][i]
 
-			// Reset and set transform with SCALING based on RockScoreType
-			opts.GeoM.Reset()
-			scale := rock.Score.SizeMultiplier()
-			opts.GeoM.Scale(float64(scale), float64(scale))
-			opts.GeoM.Translate(float64(rock.Position.X), float64(rock.Position.Y))
-			screen.DrawImage(frameImage, opts)
+				// Get the grayscale sprite for this slope combination (same for all rock types)
+				sprite := r.sprites[rock.SpriteSlopeX][rock.SpriteSlopeY]
+
+				// Get the specific rotation frame from the spritesheet
+				frameRect := sprite.SpriteSheet.Rect(int(rock.SpriteIndex))
+				frameImage := sprite.Image.SubImage(frameRect).(*ebiten.Image)
+
+				// Reset and set transform with SCALING based on RockScoreType
+				opts.GeoM.Reset()
+				scale := rock.Score.SizeMultiplier()
+				opts.GeoM.Scale(float64(scale), float64(scale))
+				opts.GeoM.Translate(float64(rock.Position.X), float64(rock.Position.Y))
+				r.tempImages[rockType].DrawImage(frameImage, opts)
+			}
+
+			// Apply color shader to all rocks of this type in this layer
+			colorOpts := &ebiten.DrawRectShaderOptions{
+				Images: [4]*ebiten.Image{r.tempImages[rockType], nil, nil, nil},
+				Uniforms: map[string]interface{}{
+					"TintColor": r.rockTypeColors[rockType].KageVec3(),
+				},
+			}
+			screen.DrawRectShader(int(GAME_BOUNDS_X), int(GAME_BOUNDS_Y), r.colorShader, colorOpts)
 		}
 	}
 }
@@ -792,7 +795,7 @@ type dieCollisionData struct {
 }
 
 // UpdateAndHandleCollisions performs all rock updates, wall bouncing, and collision detection/response
-func (r *RocksRenderer) UpdateAndHandleCollisions(cursorX, cursorY float32, dice []DieRenderable) {
+func (r *RocksRenderer) UpdateAndHandleCollisions(cursorX, cursorY float32, dice []*DieRenderable) {
 	// Advance frame counter and rock type
 	r.ActiveRockType++
 	if r.ActiveRockType >= NUM_ROCK_TYPES {
@@ -885,7 +888,7 @@ func (r *RocksRenderer) handleCursorCollisions(cursorX, cursorY float32) {
 }
 
 // handleDieCollisions processes die-rock collision responses with pre-calculated die data
-func (r *RocksRenderer) handleDieCollisions(dice []DieRenderable) {
+func (r *RocksRenderer) handleDieCollisions(dice []*DieRenderable) {
 	if len(r.diceCollisionBuffer) == 0 {
 		return
 	}

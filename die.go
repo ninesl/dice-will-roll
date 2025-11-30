@@ -71,20 +71,10 @@ func SetupNewDie(color render.Vec3) *Die {
 func SetupPlayerDice() []*Die {
 	var dice []*Die
 
-	var colors = []render.Vec3{
-		render.KageColor(150, 0, 0),    // red
-		render.KageColor(175, 127, 25), // orange
-		render.KageColor(160, 160, 0),  // yellow
-		render.KageColor(0, 150, 50),   // green
-		render.KageColor(50, 50, 200),  // blue
-		render.KageColor(75, 0, 130),   // indigo
-		render.KageColor(125, 50, 183), // purple
-	}
-
 	// NUM_PLAYER_DICE = len(colors)
 
-	for i := range len(colors) {
-		dice = append(dice, SetupNewDie(colors[i]))
+	for _, color := range render.RainbowColors {
+		dice = append(dice, SetupNewDie(color))
 		// dice = append(dice, SetupNewDie(render.KageColor(
 		// 	max(rand.IntN(255), 150),
 		// 	max(rand.IntN(255), 150),

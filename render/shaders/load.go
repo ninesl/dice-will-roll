@@ -29,6 +29,9 @@ var (
 	//go:embed moon_rock.kage
 	rocksKage []byte
 
+	//go:embed color_filter.kage
+	colorFilterKage []byte
+
 	// POST PROCESSING
 
 	//go:embed fxaa.kage
@@ -51,6 +54,7 @@ type ShaderKey uint16
 const (
 	DieShaderKey ShaderKey = iota
 	RocksShaderKey
+	ColorFilterShaderKey
 	FXAAShaderKey
 	BackgroundShaderKey
 )
@@ -60,6 +64,7 @@ func LoadShaders() map[ShaderKey]*ebiten.Shader {
 
 	shaders[DieShaderKey] = loadShader(dieKage)
 	shaders[RocksShaderKey] = loadShader(rocksKage)
+	shaders[ColorFilterShaderKey] = loadShader(colorFilterKage)
 	shaders[FXAAShaderKey] = loadShader(fxaaKage)
 	shaders[BackgroundShaderKey] = loadShader(backgroundKage)
 

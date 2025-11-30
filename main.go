@@ -51,7 +51,6 @@ type Game struct {
 	RocksImage     *ebiten.Image
 	RocksRenderer  *render.RocksRenderer // New rocks rendering system, //TODO:FIXME: make a new one per level?, game renders the same but active level reassigns
 	Dice           []*Die                // Player's dice
-	Time           time.Time
 	startTime      time.Time
 	holdTime       time.Time
 	holdCx, holdCy float32
