@@ -30,8 +30,8 @@ func SetupNewDie(color render.Vec3) *Die {
 
 	// random position
 	pos := render.Vec2{
-		X: render.ROLLZONE.MinWidth + TileSize*float32(rand.IntN(6))*2.0,
-		Y: render.ROLLZONE.MaxHeight/2 - render.HalfTileSize,
+		X: render.ROLLZONE.MinWidth + render.DieTileSize*float32(rand.IntN(6))*2.0,
+		Y: render.ROLLZONE.MaxHeight/2 - render.HalfDieTileSize,
 	}
 
 	dieRenderable := render.DieRenderable{
@@ -45,7 +45,7 @@ func SetupNewDie(color render.Vec3) *Die {
 		Color:     color,
 		// ColorSpot: 1 * 6,
 	}
-	image := ebiten.NewImage(TILE_SIZE, TILE_SIZE)
+	image := ebiten.NewImage(int(render.DieTileSize), int(render.DieTileSize))
 
 	// set pips randomly 1-9
 	// values := [6]int{}
@@ -111,8 +111,8 @@ func (d *Die) Roll() {
 		// random direction
 		direction := render.DirectionArr[render.Direction(rand.IntN(len(render.DirectionArr)))]
 
-		d.Velocity.X = TileSize * rand.Float32() * direction.X
-		d.Velocity.Y = TileSize * rand.Float32() * direction.Y
+		d.Velocity.X = render.DieTileSize * rand.Float32() * direction.X
+		d.Velocity.Y = render.DieTileSize * rand.Float32() * direction.Y
 		d.Direction = direction
 
 		d.ZRotation = rand.Float32()

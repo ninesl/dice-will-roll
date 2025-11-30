@@ -21,10 +21,12 @@ var (
 	GAME_BOUNDS_X, GAME_BOUNDS_Y int     = ebiten.Monitor().Size()
 	ResolutionX                  int     = GAME_BOUNDS_X // placeholder, options later
 	ResolutionY                  int     = GAME_BOUNDS_Y
-	TILE_SIZE                    int     = GAME_BOUNDS_Y / 9
+	TILE_SIZE                    int     = GAME_BOUNDS_Y / 9 //Base tile size, roughly the size of the Die
 	FONT_SIZE                    float64 = float64(ResolutionY / 64)
 	// tile size is always the width and height of the die image
 	TileSize float32 = float32(TILE_SIZE)
+
+	ClickTime = time.Millisecond * 250
 
 	NUM_PLAYER_DICE int = 7
 )
@@ -35,10 +37,8 @@ func init() {
 
 	render.TileSize = TileSize
 	render.HalfTileSize = float32(TILE_SIZE / 2)
-
-	// Initialize collision check radii based on TileSize
-	render.CursorCheckRadius = TileSize * 3.0
-	render.DieCheckRadius = TileSize * 2.0
+	render.DieTileSize = TileSize                   // Die-specific tile size, same as base TileSize
+	render.HalfDieTileSize = float32(TILE_SIZE / 2) // Half of DieTileSize for die center calculations
 
 	FONT_SIZE = float64(GAME_BOUNDS_Y / 64)
 
@@ -47,16 +47,20 @@ func init() {
 }
 
 type Game struct {
-	Shaders       map[shaders.ShaderKey]*ebiten.Shader
-	RocksImage    *ebiten.Image
-	RocksRenderer *render.RocksRenderer // New rocks rendering system, //TODO:FIXME: make a new one per level?, game renders the same but active level reassigns
-	Dice          []*Die                // Player's dice
-	Time          time.Time
-	startTime     time.Time
-	ActiveLevel   *Level // keeping track of rocks
+	Shaders        map[shaders.ShaderKey]*ebiten.Shader
+	RocksImage     *ebiten.Image
+	RocksRenderer  *render.RocksRenderer // New rocks rendering system, //TODO:FIXME: make a new one per level?, game renders the same but active level reassigns
+	Dice           []*Die                // Player's dice
+	Time           time.Time
+	startTime      time.Time
+	holdTime       time.Time
+	holdCx, holdCy float32
+	ActiveLevel    *Level // keeping track of rocks
 	// is updated with UpdateCursor() in update loop
 	cx, cy float32 // the x/y coordinates of the cursor
-	time   float32 // tracks time for shaders. updated in g.Update()
+	// holdCx, holdCy float32
+	time float32 // tracks time for shaders. updated in g.Update()
+
 }
 
 //TODO: make mode and action different types
@@ -100,12 +104,12 @@ func LoadGame() *Game {
 
 	dice := SetupPlayerDice()
 
-	rockAmount := 10000
+	rockAmount := 1000
 
 	// Initialize rocks renderer with hybrid real-time 3D SDF system
 	rocksConfig := render.RocksConfig{
 		TotalRocks:   rockAmount,
-		SpriteSize:   TILE_SIZE,
+		RockTileSize: render.CalculateRockTileSize(TileSize, rockAmount), // Dynamically scaled based on rock amount
 		WorldBoundsX: float32(render.GAME_BOUNDS_X),
 		WorldBoundsY: float32(render.GAME_BOUNDS_Y),
 	}
@@ -173,4 +177,10 @@ func (a Action) String() string {
 		str = "SELECT"
 	}
 	return str
+}
+
+func (g *Game) ResetHoldPoint() {
+	g.holdTime = time.Time{}
+	g.holdCx = 0
+	g.holdCy = 0
 }

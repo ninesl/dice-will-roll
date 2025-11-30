@@ -11,8 +11,10 @@ var (
 	GAME_BOUNDS_X float32
 	GAME_BOUNDS_Y float32
 
-	TileSize     float32
-	HalfTileSize float32
+	TileSize        float32
+	HalfTileSize    float32
+	DieTileSize     float32 // Die-specific tile size for rendering and collisions
+	HalfDieTileSize float32 // Half of DieTileSize for die center calculations
 )
 
 // generally used to make a die move into a direction.

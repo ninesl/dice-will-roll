@@ -39,22 +39,22 @@ type DieRenderable struct {
 // TODO: benchmarking
 // TODO: could use this same idea for rocks. would need a hardcoded constant for the inset vs recalcing each time
 func (d *DieRenderable) Rect() image.Rectangle {
-	// Inset each side by a small amount, e.g., 5% of TileSize
-	// This makes the total width and height smaller by 10% of TileSize
-	insetAmount := float32(TileSize * 0.15)
+	// Inset each side by a small amount, e.g., 5% of DieTileSize
+	// This makes the total width and height smaller by 10% of DieTileSize
+	insetAmount := float32(DieTileSize * 0.15)
 
 	minX := int(d.Vec2.X + insetAmount)
 	minY := int(d.Vec2.Y + insetAmount)
-	maxX := int(d.Vec2.X + TileSize - insetAmount)
-	maxY := int(d.Vec2.Y + TileSize - insetAmount)
+	maxX := int(d.Vec2.X + DieTileSize - insetAmount)
+	maxY := int(d.Vec2.Y + DieTileSize - insetAmount)
 
-	// Ensure min is not greater than max, which can happen if TileSize is very small or insetAmount is too large
+	// Ensure min is not greater than max, which can happen if DieTileSize is very small or insetAmount is too large
 	if minX > maxX {
-		minX = int(math.Round(float64(d.Vec2.X + HalfTileSize)))
+		minX = int(math.Round(float64(d.Vec2.X + HalfDieTileSize)))
 		maxX = minX
 	}
 	if minY > maxY {
-		minY = int(math.Round(float64(d.Vec2.Y + HalfTileSize)))
+		minY = int(math.Round(float64(d.Vec2.Y + HalfDieTileSize)))
 		maxY = minY
 	}
 
@@ -103,10 +103,10 @@ func HandleMovingHeldDice(dice []*DieRenderable) {
 
 	// positioning
 	var x, y float32
-	x = GAME_BOUNDS_X/2 - HalfTileSize
-	y = SCOREZONE.MinHeight/2 + TileSize/5
+	x = GAME_BOUNDS_X/2 - HalfDieTileSize
+	y = SCOREZONE.MinHeight/2 + DieTileSize/5
 	if num > 1 {
-		x -= TileSize * (float32(num) - 1.0)
+		x -= DieTileSize * (float32(num) - 1.0)
 	}
 
 	// find where the moving dice should be going towards
@@ -116,7 +116,7 @@ func HandleMovingHeldDice(dice []*DieRenderable) {
 		die.Fixed.X = x
 		die.Fixed.Y = y
 
-		x += TileSize * 2
+		x += DieTileSize * 2
 	}
 
 	for i := 0; i < num; i++ {
@@ -132,6 +132,40 @@ func HandleMovingHeldDice(dice []*DieRenderable) {
 		die.Vec2.X += die.Velocity.X
 		die.Vec2.Y += die.Velocity.Y
 	}
+}
+
+// HandleResettingDice animates ROLLING dice that have a Fixed position set
+// This is used when a die needs to animate back to a specific location (e.g., center of ROLLZONE)
+func HandleResettingDice(dice []*DieRenderable) {
+	for _, die := range dice {
+		// Calculate velocity towards the fixed position
+		die.Velocity.X = (die.Fixed.X - die.Vec2.X) * MoveFactor
+		die.Velocity.Y = (die.Fixed.Y - die.Vec2.Y) * MoveFactor
+
+		// Gradually reduce rotation back to 0
+		die.ZRotation *= BounceFactor
+
+		// Update position
+		die.Vec2.X += die.Velocity.X
+		die.Vec2.Y += die.Velocity.Y
+
+		// Check if die has arrived at its destination
+		if math.Abs(float64(die.Vec2.Y-die.Fixed.Y)) < 0.5 && math.Abs(float64(die.Vec2.X-die.Fixed.X)) < 0.5 {
+			// Clear the Fixed position to stop resetting behavior
+			die.Fixed.X = 0
+			die.Fixed.Y = 0
+			die.Velocity.X = 0
+			die.Velocity.Y = 0
+		}
+	}
+}
+
+// AnimateDieToPosition sets up a die to animate towards a target center position
+// centerX, centerY specify where the CENTER of the die should end up
+func AnimateDieToPosition(die *DieRenderable, centerX, centerY float32) {
+	// Convert center position to top-left corner (since Vec2 is top-left)
+	die.Fixed.X = centerX - HalfDieTileSize
+	die.Fixed.Y = centerY - HalfDieTileSize
 }
 
 // gross code
@@ -161,12 +195,12 @@ func HandleDiceCollisions(dice []*DieRenderable) {
 // TODO: make this just better entirely lmao
 func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
 	// Calculate distance and collision normal vector
-	collNormalX := (die1.Vec2.X + HalfTileSize) - (die2.Vec2.X + HalfTileSize)
-	collNormalY := (die1.Vec2.Y + HalfTileSize) - (die2.Vec2.Y + HalfTileSize)
+	collNormalX := (die1.Vec2.X + HalfDieTileSize) - (die2.Vec2.X + HalfDieTileSize)
+	collNormalY := (die1.Vec2.Y + HalfDieTileSize) - (die2.Vec2.Y + HalfDieTileSize)
 	distSq := collNormalX*collNormalX + collNormalY*collNormalY
 
 	// Check if they are actually overlapping
-	if distSq < TileSize*TileSize {
+	if distSq < DieTileSize*DieTileSize {
 		dist := float32(math.Sqrt(float64(distSq)))
 
 		// Avoid division by zero if dice are perfectly on top of each other
@@ -178,7 +212,7 @@ func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
 		}
 
 		// Move dice apart so they no longer overlap
-		overlap := (TileSize - dist) * 0.5
+		overlap := (DieTileSize - dist) * 0.5
 		correctionX := (collNormalX / dist) * overlap
 		correctionY := (collNormalY / dist) * overlap
 		die1.Vec2.X += correctionX
@@ -225,14 +259,14 @@ func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
 // does not modify velocity, only Vec2 positioning
 func ClampInZone(die *DieRenderable, zone ZoneRenderable) {
 	// Handle X-axis collisions
-	if die.Vec2.X+TileSize >= zone.MaxWidth {
-		die.Vec2.X = zone.MaxWidth - TileSize - 1
+	if die.Vec2.X+DieTileSize >= zone.MaxWidth {
+		die.Vec2.X = zone.MaxWidth - DieTileSize - 1
 	} else if die.Vec2.X < zone.MinWidth {
 		die.Vec2.X = zone.MinWidth + 1
 	}
 
-	if die.Vec2.Y+TileSize >= zone.MaxHeight {
-		die.Vec2.Y = zone.MaxHeight - TileSize - 1
+	if die.Vec2.Y+DieTileSize >= zone.MaxHeight {
+		die.Vec2.Y = zone.MaxHeight - DieTileSize - 1
 	} else if die.Vec2.Y < zone.MinHeight {
 		die.Vec2.Y = zone.MinWidth + 1
 	}
@@ -241,10 +275,10 @@ func ClampInZone(die *DieRenderable, zone ZoneRenderable) {
 func BounceAndClamp(dice []*DieRenderable) {
 	for _, die := range dice {
 		// Handle X-axis collisions
-		if (die.Vec2.X+TileSize >= ROLLZONE.MaxWidth && die.Velocity.X > 0) || (die.Vec2.X < ROLLZONE.MinWidth && die.Velocity.X < 0) {
+		if (die.Vec2.X+DieTileSize >= ROLLZONE.MaxWidth && die.Velocity.X > 0) || (die.Vec2.X < ROLLZONE.MinWidth && die.Velocity.X < 0) {
 			// Correct position to be just inside the boundary
 			if die.Velocity.X > 0 {
-				die.Vec2.X = ROLLZONE.MaxWidth - TileSize - 1
+				die.Vec2.X = ROLLZONE.MaxWidth - DieTileSize - 1
 			} else {
 				die.Vec2.X = ROLLZONE.MinWidth + 1
 			}
@@ -255,10 +289,10 @@ func BounceAndClamp(dice []*DieRenderable) {
 		}
 
 		// Handle Y-axis collisions
-		if (die.Vec2.Y+TileSize >= ROLLZONE.MaxHeight && die.Velocity.Y > 0) || (die.Vec2.Y < ROLLZONE.MinHeight && die.Velocity.Y < 0) {
+		if (die.Vec2.Y+DieTileSize >= ROLLZONE.MaxHeight && die.Velocity.Y > 0) || (die.Vec2.Y < ROLLZONE.MinHeight && die.Velocity.Y < 0) {
 			// Correct position to be just inside the boundary
 			if die.Velocity.Y > 0 {
-				die.Vec2.Y = ROLLZONE.MaxHeight - TileSize - 1
+				die.Vec2.Y = ROLLZONE.MaxHeight - DieTileSize - 1
 			} else {
 				die.Vec2.Y = ROLLZONE.MinHeight + 1
 			}
@@ -269,21 +303,3 @@ func BounceAndClamp(dice []*DieRenderable) {
 		}
 	}
 }
-
-// const hoverAdjust = .1
-//
-// TODO: make this 'flick' the die based on mouse velocity?
-// small hover away effect
-// func (d *DieRenderable) HoverFromFromFixed() {
-// if d.Vec2.X > d.Fixed.X {
-// d.Velocity.X = hoverAdjust
-// } else {
-// d.Velocity.X = -hoverAdjust
-// }
-// if d.Vec2.Y > d.Fixed.Y {
-// d.Velocity.Y = hoverAdjust
-// } else {
-// d.Velocity.Y = -hoverAdjust
-// }
-// }
-//

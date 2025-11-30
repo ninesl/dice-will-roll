@@ -50,6 +50,7 @@ func (g *Game) UpdateDice() {
 		rolling     []*render.DieRenderable
 		held        []*render.DieRenderable
 		moving      []*render.DieRenderable
+		resetting   []*render.DieRenderable
 		scoringDice []*Die
 	)
 
@@ -59,10 +60,16 @@ func (g *Game) UpdateDice() {
 
 		// when logic for a d.Mode gets too complex put it in render/
 		if die.Mode == ROLLING {
-			d.Velocity.X *= render.BounceFactor
-			d.Velocity.Y *= render.BounceFactor
-			d.Vec2.X += d.Velocity.X
-			d.Vec2.Y += d.Velocity.Y
+			// Check if this die has a Fixed position set (meaning it's resetting)
+			if d.Fixed.X != 0 || d.Fixed.Y != 0 {
+				resetting = append(resetting, d)
+			} else {
+				// Normal rolling behavior
+				d.Velocity.X *= render.BounceFactor
+				d.Velocity.Y *= render.BounceFactor
+				d.Vec2.X += d.Velocity.X
+				d.Vec2.Y += d.Velocity.Y
+			}
 
 			rolling = append(rolling, d)
 		} else if die.Mode == DRAG {
@@ -80,6 +87,7 @@ func (g *Game) UpdateDice() {
 	}
 	moving = append(moving, rolling...)
 
+	render.HandleResettingDice(resetting)
 	render.HandleMovingHeldDice(held)
 	render.HandleDiceCollisions(moving)
 	render.BounceAndClamp(rolling)

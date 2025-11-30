@@ -26,6 +26,10 @@ type Zone struct {
 	// Image     *ebiten.Image
 }
 
+func (z *ZoneRenderable) ContainsPoint(x, y float32) bool {
+	return x >= z.MinWidth && x <= z.MaxWidth && y >= z.MinHeight && y <= z.MaxHeight
+}
+
 // is true if any part of the die is within the bounds of the zone
 func (z *ZoneRenderable) ContainsDie(die *DieRenderable) bool {
 	return die.Rect().Overlaps(z.Image.Bounds())

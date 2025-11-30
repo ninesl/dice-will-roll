@@ -23,21 +23,6 @@ const (
 	// SPEED_RANGE      = MAX_SLOPE*2 + 1 // 9 (from -4 to +4 inclusive)
 )
 
-// Collision check radius for broad-phase collision detection
-// These define the Manhattan distance threshold for collecting rocks into collision candidate lists
-// Initialized based on TileSize during game setup
-var (
-	// CursorCheckRadius is the distance from cursor to check for rock collisions
-	// Larger values = more rocks checked (slower but catches more), smaller = fewer rocks (faster)
-	// Should be set to TileSize * 3 during initialization
-	CursorCheckRadius float32
-
-	// DieCheckRadius is the distance from die center to check for rock collisions
-	// Should be at least TileSize to catch adjacent rocks
-	// Should be set to TileSize * 2 during initialization
-	DieCheckRadius float32
-)
-
 // Spritesheet layout variables - dynamically calculated from ROTATION_FRAMES
 var (
 	SHEET_COLS = calculateSheetCols(ROTATION_FRAMES)
@@ -66,43 +51,155 @@ func calculateSheetCols(frames int) int {
 const baseN = 22.0
 const speedFactor = 3.5
 
-// Sprite rotation rates indexed by RockScoreType value
-// LOWER value = MORE frequent updates = FASTER rotation
-// Small=1, Medium=3, Big=5, Huge=10
-var rockRotationRate = [Huge + 1]uint8{
-	0,  // 0: unused (default)
-	2,  // 1: Small - updates every 2 frames (VERY FAST)
-	0,  // 2: unused
-	5,  // 3: Medium - updates every 5 frames (fast)
-	0,  // 4: unused
-	8,  // 5: Big - updates every 10 frames (normal)
-	0,  // 6: unused
-	0,  // 7: unused
-	0,  // 8: unused
-	0,  // 9: unused
-	10, // 10: Huge - updates every 20 frames (SLOW)
-}
+// Score value constants - used for actual scoring
+const (
+	SmallScore  = 1
+	MediumScore = 3
+	BigScore    = 5
+	HugeScore   = 10
+)
+
+// Size multiplier constants for rock variants
+const (
+	// Small rock size multipliers
+	SmallLargeSize  = 0.25
+	SmallMediumSize = 0.22
+	SmallTinySize   = 0.20
+	SmallMinSize    = SmallTinySize // For collision detection
+
+	// Medium rock size multipliers
+	MediumLargeSize  = 0.50
+	MediumMediumSize = 0.45
+	MediumSmallSize  = 0.40
+	MediumMinSize    = MediumSmallSize // For collision detection
+
+	// Big rock size multipliers
+	BigLargeSize  = 0.80
+	BigMediumSize = 0.75
+	BigSmallSize  = 0.70
+	BigMinSize    = BigSmallSize // For collision detection
+
+	// Huge rock size multipliers
+	HugeLargeSize  = 1.20
+	HugeMediumSize = 1.10
+	HugeSmallSize  = 1.00
+	HugeMinSize    = HugeSmallSize // For collision detection
+)
 
 type RockScoreType uint8
 
 const (
-	Small  RockScoreType = 1
-	Medium RockScoreType = 3
-	Big    RockScoreType = 5
-	Huge   RockScoreType = 10
+	// Small rocks (enum 1-3) - all worth SmallScore points
+	SmallLarge  RockScoreType = 1 // 0.25× size
+	SmallMedium RockScoreType = 2 // 0.22× size
+	SmallTiny   RockScoreType = 3 // 0.20× size
+
+	// Medium rocks (enum 4-6) - all worth MediumScore points
+	MediumLarge  RockScoreType = 4 // 0.50× size
+	MediumMedium RockScoreType = 5 // 0.45× size
+	MediumSmall  RockScoreType = 6 // 0.40× size
+
+	// Big rocks (enum 7-9) - all worth BigScore points
+	BigLarge  RockScoreType = 7 // 0.80× size
+	BigMedium RockScoreType = 8 // 0.75× size
+	BigSmall  RockScoreType = 9 // 0.70× size
+
+	// Huge rocks (enum 10-12) - all worth HugeScore points
+	HugeLarge  RockScoreType = 10 // 1.20× size
+	HugeMedium RockScoreType = 11 // 1.10× size
+	HugeSmall  RockScoreType = 12 // 1.00× size
+
+	MaxRockType RockScoreType = 13
 )
 
-// SizeMultiplier returns the size multiplier for this RockScoreType
+// // Sprite rotation rates indexed by RockScoreType value
+// // LOWER value = MORE frequent updates = FASTER rotation
+// // Small variants rotate fastest, Huge variants rotate slowest
+// // Smaller variants within each category rotate slightly faster
+// var rockRotationRate = [MaxRockType]uint8{
+// 	0,  // 0: unused (default)
+// 	2,  // 1: SmallLarge - VERY FAST
+// 	2,  // 2: SmallMedium - VERY FAST
+// 	3,  // 3: SmallTiny - VERY FAST (slightly slower)
+// 	5,  // 4: MediumLarge - fast
+// 	5,  // 5: MediumMedium - fast
+// 	6,  // 6: MediumSmall - fast (slightly slower)
+// 	8,  // 7: BigLarge - normal
+// 	8,  // 8: BigMedium - normal
+// 	9,  // 9: BigSmall - normal (slightly slower)
+// 	10, // 10: HugeLarge - SLOW
+// 	10, // 11: HugeMedium - SLOW
+// 	11, // 12: HugeSmall - SLOW (slightly slower)
+// }
+
+// GetScore returns the point value for scoring (groups variants together)
+func (rst RockScoreType) GetScore() int {
+	switch rst {
+	case SmallLarge, SmallMedium, SmallTiny:
+		return SmallScore // 1
+	case MediumLarge, MediumMedium, MediumSmall:
+		return MediumScore // 3
+	case BigLarge, BigMedium, BigSmall:
+		return BigScore // 5
+	case HugeLarge, HugeMedium, HugeSmall:
+		return HugeScore // 10
+	default:
+		return SmallScore
+	}
+}
+
+// SizeMultiplier returns the size multiplier for this RockScoreType variant
 func (rst RockScoreType) SizeMultiplier() float32 {
 	switch rst {
-	case Small:
-		return .3
-	case Medium:
-		return .5
-	case Big:
-		return .75
-	case Huge:
+	// Small variants
+	case SmallLarge:
+		return SmallLargeSize
+	case SmallMedium:
+		return SmallMediumSize
+	case SmallTiny:
+		return SmallTinySize
+
+	// Medium variants
+	case MediumLarge:
+		return MediumLargeSize
+	case MediumMedium:
+		return MediumMediumSize
+	case MediumSmall:
+		return MediumSmallSize
+
+	// Big variants
+	case BigLarge:
+		return BigLargeSize
+	case BigMedium:
+		return BigMediumSize
+	case BigSmall:
+		return BigSmallSize
+
+	// Huge variants
+	case HugeLarge:
+		return HugeLargeSize
+	case HugeMedium:
+		return HugeMediumSize
+	case HugeSmall:
+		return HugeSmallSize
+
+	default:
 		return 1.0
+	}
+}
+
+// GetMinSizeForCategory returns the smallest size variant for collision detection
+// This allows using a single hitbox size per category for simplified collision
+func (rst RockScoreType) GetMinSizeForCategory() float32 {
+	switch rst {
+	case SmallLarge, SmallMedium, SmallTiny:
+		return SmallMinSize
+	case MediumLarge, MediumMedium, MediumSmall:
+		return MediumMinSize
+	case BigLarge, BigMedium, BigSmall:
+		return BigMinSize
+	case HugeLarge, HugeMedium, HugeSmall:
+		return HugeMinSize
 	default:
 		return 1.0
 	}
@@ -132,15 +229,15 @@ const BaseVelocity = 2.0
 func (r *SimpleRock) RockWithinDie(die DieRenderable, rockSize float32) bool {
 	// AABB (Axis-Aligned Bounding Box) collision detection with 0.75 multiplier for tighter collision
 	// Checks if rock's bounding box overlaps with die's bounding box
-	effectiveTileSize := TileSize * 0.75
+	effectiveDieTileSize := DieTileSize * 0.75
 	effectiveRockSize := rockSize * 0.75
 
 	// Center the effective collision boxes
-	dieInset := (TileSize - effectiveTileSize) / 2
+	dieInset := (DieTileSize - effectiveDieTileSize) / 2
 	rockInset := (rockSize - effectiveRockSize) / 2
 
-	return (r.Position.X+rockInset+effectiveRockSize > die.Vec2.X+dieInset && r.Position.X+rockInset < die.Vec2.X+dieInset+effectiveTileSize) &&
-		(r.Position.Y+rockInset+effectiveRockSize > die.Vec2.Y+dieInset && r.Position.Y+rockInset < die.Vec2.Y+dieInset+effectiveTileSize)
+	return (r.Position.X+rockInset+effectiveRockSize > die.Vec2.X+dieInset && r.Position.X+rockInset < die.Vec2.X+dieInset+effectiveDieTileSize) &&
+		(r.Position.Y+rockInset+effectiveRockSize > die.Vec2.Y+dieInset && r.Position.Y+rockInset < die.Vec2.Y+dieInset+effectiveDieTileSize)
 }
 
 // TODO: determine if copy is faster than reference, and baseSpriteSize copy by ref or get it from g *Game
@@ -165,8 +262,8 @@ func (r *SimpleRock) IsNearPoint(rockSize, pointX, pointY, radius float32) bool 
 // IsNearDie checks if rock is within radius of a die's center using Manhattan distance
 // This is the BROAD PHASE collision check - cheaper than precise AABB collision
 func (r *SimpleRock) IsNearDie(rockSize float32, die DieRenderable, radius float32) bool {
-	dieCenterX := die.Vec2.X + TileSize/2
-	dieCenterY := die.Vec2.Y + TileSize/2
+	dieCenterX := die.Vec2.X + HalfDieTileSize
+	dieCenterY := die.Vec2.Y + HalfDieTileSize
 
 	return r.IsNearPoint(rockSize, dieCenterX, dieCenterY, radius)
 }
@@ -202,8 +299,8 @@ func (r *SimpleRock) decrementTransitionStepY() {
 
 // TODO:FIXME: maybe this should be another lookup table? to reduce arithmetic ops? need to benchmark
 // GetSize returns the pixel size of this rock based on its RockScoreType
-func (r *SimpleRock) GetSize(baseSpriteSize int) float32 {
-	return float32(baseSpriteSize) * r.Score.SizeMultiplier()
+func (r *SimpleRock) GetSize(baseSpriteSize float32) float32 {
+	return baseSpriteSize * r.Score.SizeMultiplier()
 }
 
 // calculateAnimationRate computes the update frequency based on current slopes
@@ -213,33 +310,27 @@ func (r *SimpleRock) calculateAnimationRate() {
 	r.animationRate = uint8(n) // n is guaranteed to be <= 22, fits in uint8
 }
 
-// calculateShortestPath returns the shortest distance and direction (+1 or -1) to reach target
-func calculateShortestPath(current, target int8) (distance uint8, direction int8) {
+func calculateShortestPath(current, target int8) (distance uint8) {
 	diff := target - current
 
 	if diff > DIRECTIONS_TO_SNAP/2 {
 		// Going backwards is shorter
 		distance = uint8(DIRECTIONS_TO_SNAP - diff)
-		direction = -1
 	} else if diff < -DIRECTIONS_TO_SNAP/2 {
 		// Going forwards is shorter
 		distance = uint8(DIRECTIONS_TO_SNAP + diff)
-		direction = 1
 	} else if diff > 0 {
 		// Normal forward
 		distance = uint8(diff)
-		direction = 1
 	} else if diff < 0 {
 		// Normal backward
 		distance = uint8(-diff)
-		direction = -1
 	} else {
 		// Already at target
 		distance = 0
-		direction = 0
 	}
 
-	return distance, direction
+	return distance
 }
 
 // Updates the rock based on the current target transitions.
@@ -265,14 +356,14 @@ func (r *SimpleRock) Bounce(newX int8, newY int8) {
 	if targetX == DIRECTIONS_TO_SNAP {
 		targetX = 0
 	}
-	distX, _ := calculateShortestPath(r.SpriteSlopeX, targetX)
+	distX := calculateShortestPath(r.SpriteSlopeX, targetX)
 
 	// Calculate transition steps for Y
 	targetY := newY + MAX_SLOPE
 	if targetY == DIRECTIONS_TO_SNAP {
 		targetY = 0
 	}
-	distY, _ := calculateShortestPath(r.SpriteSlopeY, targetY)
+	distY := calculateShortestPath(r.SpriteSlopeY, targetY)
 
 	// Add full rotation (DIRECTIONS_TO_SNAP) to shortest path
 	r.setTransitionSteps(distX+uint8(DIRECTIONS_TO_SNAP), distY+uint8(DIRECTIONS_TO_SNAP))
@@ -290,7 +381,7 @@ func (r *SimpleRock) BounceX() {
 	if targetX == DIRECTIONS_TO_SNAP {
 		targetX = 0
 	}
-	distX, _ := calculateShortestPath(r.SpriteSlopeX, targetX)
+	distX := calculateShortestPath(r.SpriteSlopeX, targetX)
 
 	// When bouncing off vertical wall, tumble around Y-axis based on Y speed
 	// Y slope doesn't change, so just tumble
@@ -315,7 +406,7 @@ func (r *SimpleRock) BounceY() {
 	if targetY == DIRECTIONS_TO_SNAP {
 		targetY = 0
 	}
-	distY, _ := calculateShortestPath(r.SpriteSlopeY, targetY)
+	distY := calculateShortestPath(r.SpriteSlopeY, targetY)
 
 	// When bouncing off horizontal wall, tumble around X-axis based on X speed
 	// X slope doesn't change, so just tumble
@@ -334,7 +425,7 @@ func (r *SimpleRock) BounceY() {
 // Now includes full rotation on each bounce
 func (r *SimpleRock) UpdateTransition(frameCounter int) {
 	// Update SpriteIndex based on rock SIZE (smaller rocks rotate faster)
-	if frameCounter%int(rockRotationRate[r.Score]) == 0 {
+	if frameCounter%r.Score.GetScore() == 0 {
 		// Increment or decrement sprite index based on horizontal direction
 		// Moving right (positive SlopeX): increment (rotate clockwise)
 		// Moving left (negative SlopeX): decrement (rotate counter-clockwise)
@@ -380,61 +471,26 @@ func (r *SimpleRock) UpdateTransition(frameCounter int) {
 
 // BounceTowardsAngle sets rock direction and speed based on target angle (0-360 degrees)
 // Angle system: 0°=right, 90°=down, 180°=left, 270°=up (standard screen coordinates)
-// Uses trigonometry to accurately map angles to SpeedX/SpeedY components
-// func (r *SimpleRock) BounceTowardsAngle(angle int) {
-// 	// Normalize angle to 0-360 range
-// 	// angle = angle % 360
-// 	if angle >= 360 || angle < 0 { // technically this is an assert
-// 		panic("angle out of range")
-// 	}
+// Uses trigonometry to accurately map angles to SlopeX/SlopeY components
+func (r *SimpleRock) BounceTowardsAngle(angle int) {
+	// Convert angle to radians for trigonometric functions
+	angleRad := float64(angle) * math.Pi / 180.0
 
-// 	// Calculate current angle for transition frame calculation
-// 	currentAngle := int(math.Atan2(float64(r.SlopeY), float64(r.SlopeY)) * 180 / math.Pi)
+	// Calculate velocity components using trigonometry
+	speedX := math.Cos(angleRad)
+	speedY := math.Sin(angleRad)
 
-// 	// Convert angle to radians for trigonometric functions
-// 	angleRad := float64(angle) * math.Pi / 180.0
+	// Scale to int8 range (-4 to +4) while maintaining ratio
+	const maxVal = float64(MAX_SLOPE) // 4
 
-// 	// Calculate velocity components using trigonometry
-// 	// cos gives X-component, sin gives Y-component
-// 	speedX := math.Cos(angleRad)
-// 	speedY := math.Sin(angleRad)
+	// Scale both components so the larger one reaches maxVal
+	maxComponent := math.Max(math.Abs(speedX), math.Abs(speedY))
+	scale := maxVal / maxComponent
+	targetSlopeX := int8(math.Round(speedX * scale))
+	targetSlopeY := int8(math.Round(speedY * scale))
 
-// 	// Scale to int8 range (-4 to +4) while maintaining ratio
-// 	// const maxVal = float64(MAX_SLOPE) // 4
-
-// 	// Scale both components so the larger one reaches maxVal
-// 	maxComponent := math.Max(math.Abs(speedX), math.Abs(speedY))
-// 	var targetSlopeX, targetSlopeY int8
-// 	if maxComponent > 0 {
-// 		scale := maxVal / maxComponent
-// 		targetSlopeX = int8(math.Round(speedX * scale))
-// 		targetSlopeY = int8(math.Round(speedY * scale))
-// 	} else {
-// 		// Edge case: shouldn't happen, but default to stationary
-// 		targetSlopeX = 0
-// 		targetSlopeY = 0
-// 	}
-
-// 	// Ensure at least one speed is non-zero to prevent truly stationary rocks
-// 	if targetSlopeX == 0 && targetSlopeY == 0 {
-// 		targetSlopeX = 1
-// 		targetSlopeY = 0
-// 	}
-
-// 	// Calculate angle difference for transition frames
-// 	angleDiff := angle - currentAngle
-// 	if angleDiff < 0 {
-// 		angleDiff = -angleDiff
-// 	}
-// 	if angleDiff > 180 {
-// 		angleDiff = 360 - angleDiff
-// 	}
-
-// 	// Set new speeds immediately
-// 	r.SlopeX = targetSlopeX
-// 	r.SlopeY = targetSlopeY
-
-// }
+	r.Bounce(targetSlopeX, targetSlopeY)
+}
 
 // RocksRenderer manages pre-extracted sprite rendering with ultra-fast array indexing
 type RocksRenderer struct {
@@ -447,10 +503,14 @@ type RocksRenderer struct {
 	sprites [NUM_ROCK_TYPES][DIRECTIONS_TO_SNAP][DIRECTIONS_TO_SNAP]Sprite
 
 	Rocks          [NUM_ROCK_TYPES][]*SimpleRock // Rocks organized by type
-	SpriteSize     int
+	RockTileSize   float32                       // Base tile size for rock rendering and collision calculations
 	totalRocks     int
 	ActiveRockType int
 	FrameCounter   [NUM_ROCK_TYPES]int // Global frame counter for transition timing
+
+	// Collision check radii for this rock renderer
+	CursorCheckRadius float32 // Distance from cursor to check for rock collisions
+	DieCheckRadius    float32 // Distance from die center to check for rock collisions
 
 	// Internal collision buffers - reused each frame to avoid allocations
 	diceCollisionBuffer   []*SimpleRock
@@ -460,7 +520,7 @@ type RocksRenderer struct {
 // RocksConfig holds configuration for rock system
 type RocksConfig struct {
 	TotalRocks   int
-	SpriteSize   int
+	RockTileSize float32 // Base tile size for rock rendering and collision calculations
 	WorldBoundsX float32
 	WorldBoundsY float32
 }
@@ -469,9 +529,12 @@ type RocksConfig struct {
 func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 	shaderMap := shaders.LoadShaders()
 	r := &RocksRenderer{
-		shader:     shaderMap[shaders.RocksShaderKey],
-		SpriteSize: config.SpriteSize,
-		totalRocks: config.TotalRocks,
+		shader:       shaderMap[shaders.RocksShaderKey],
+		RockTileSize: config.RockTileSize,
+		totalRocks:   config.TotalRocks,
+		// Initialize collision check radii based on RockTileSize
+		CursorCheckRadius: config.RockTileSize * 3.0,
+		DieCheckRadius:    config.RockTileSize * 2.0,
 		// Pre-allocate collision buffers with typical capacity to avoid allocations
 		// Capacity based on typical collision counts: ~50 dice collisions, ~20 cursor collisions
 		diceCollisionBuffer:   make([]*SimpleRock, 0, 64),
@@ -532,8 +595,9 @@ func (r *RocksRenderer) generateSprites() {
 				angleRadY := float32(angleDegY) * (math.Pi / 180.0)
 
 				// Create spritesheet based on ROTATION_FRAMES
-				sheetWidth := r.SpriteSize * SHEET_COLS
-				sheetHeight := r.SpriteSize * SHEET_ROWS
+				spriteSize := int(r.RockTileSize)
+				sheetWidth := spriteSize * SHEET_COLS
+				sheetHeight := spriteSize * SHEET_ROWS
 				spriteSheet := ebiten.NewImage(sheetWidth, sheetHeight)
 
 				// Render all rotation frames into the spritesheet
@@ -542,11 +606,11 @@ func (r *RocksRenderer) generateSprites() {
 					rotationRadAngle := float32(frameIdx*DEGREES_PER_FRAME) * (math.Pi / 180.0)
 
 					// Create temporary image for this frame
-					frameImg := ebiten.NewImage(r.SpriteSize, r.SpriteSize)
+					frameImg := ebiten.NewImage(spriteSize, spriteSize)
 
 					u := map[string]interface{}{
 						"Time":            0.0,
-						"Resolution":      []float32{float32(r.SpriteSize), float32(r.SpriteSize)},
+						"Resolution":      []float32{r.RockTileSize, r.RockTileSize},
 						"Mouse":           Vec2{X: 0.0, Y: 0.0}.KageVec2(),
 						"RotationX":       angleRadX,
 						"RotationY":       angleRadY,
@@ -558,7 +622,7 @@ func (r *RocksRenderer) generateSprites() {
 					}
 
 					opts := &ebiten.DrawRectShaderOptions{Uniforms: u}
-					frameImg.DrawRectShader(r.SpriteSize, r.SpriteSize, r.shader, opts)
+					frameImg.DrawRectShader(spriteSize, spriteSize, r.shader, opts)
 
 					// Calculate position in spritesheet (row-major order)
 					col := frameIdx % SHEET_COLS
@@ -566,14 +630,14 @@ func (r *RocksRenderer) generateSprites() {
 
 					// Draw this frame into the spritesheet at the correct position
 					drawOpts := &ebiten.DrawImageOptions{}
-					drawOpts.GeoM.Translate(float64(col*r.SpriteSize), float64(row*r.SpriteSize))
+					drawOpts.GeoM.Translate(float64(col*spriteSize), float64(row*spriteSize))
 					spriteSheet.DrawImage(frameImg, drawOpts)
 				}
 
 				// Create Sprite struct with spritesheet metadata
 				sprite := Sprite{
 					Image:       spriteSheet,
-					SpriteSheet: NewSpriteSheet(SHEET_COLS, SHEET_ROWS, r.SpriteSize),
+					SpriteSheet: NewSpriteSheet(SHEET_COLS, SHEET_ROWS, spriteSize),
 					ActiveFrame: 0,
 				}
 
@@ -610,17 +674,21 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 	for currentScore < targetScore {
 		remaining := targetScore - currentScore
 
-		// Pick a random RockScoreType that doesn't exceed remaining
+		// Pick a random RockScoreType variant that doesn't exceed remaining
 		var scoreType RockScoreType
 		switch {
-		case remaining >= 10 && rand.Float32() < 0.15: // 15% chance for Huge
-			scoreType = Huge
-		case remaining >= 5 && rand.Float32() < 0.25: // 25% chance for Big
-			scoreType = Big
-		case remaining >= 3 && rand.Float32() < 0.35: // 35% chance for Medium
-			scoreType = Medium
+		case remaining >= HugeScore && rand.Float32() < 0.15: // 15% chance for Huge
+			// Pick random Huge variant (10, 11, or 12)
+			scoreType = HugeLarge + RockScoreType(rand.Intn(3))
+		case remaining >= BigScore && rand.Float32() < 0.25: // 25% chance for Big
+			// Pick random Big variant (7, 8, or 9)
+			scoreType = BigLarge + RockScoreType(rand.Intn(3))
+		case remaining >= MediumScore && rand.Float32() < 0.35: // 35% chance for Medium
+			// Pick random Medium variant (4, 5, or 6)
+			scoreType = MediumLarge + RockScoreType(rand.Intn(3))
 		default: // Otherwise Small
-			scoreType = Small
+			// Pick random Small variant (1, 2, or 3)
+			scoreType = SmallLarge + RockScoreType(rand.Intn(3))
 		}
 
 		// Pick random rock type (0 or 1)
@@ -661,7 +729,7 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 		rock.calculateAnimationRate()
 
 		allRocks[rockType] = append(allRocks[rockType], rock)
-		currentScore += int(scoreType)
+		currentScore += scoreType.GetScore()
 	}
 
 	// Assign to renderer
@@ -701,12 +769,10 @@ func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
 	}
 }
 
-// GetStats returns rendering statistics
 func (r *RocksRenderer) GetStats() (visible, total int) {
 	return r.totalRocks, r.totalRocks
 }
 
-// Utility functions
 func Clamp(value, min, max float64) float64 {
 	if value < min {
 		return min
@@ -742,7 +808,7 @@ func (r *RocksRenderer) UpdateAndHandleCollisions(cursorX, cursorY float32, dice
 	for _, rock := range r.Rocks[r.ActiveRockType] {
 		rock.Update(r.FrameCounter[r.ActiveRockType])
 
-		rockSize := rock.GetSize(r.SpriteSize)
+		rockSize := rock.GetSize(r.RockTileSize)
 
 		// Wall bouncing
 		if rock.Position.X+rockSize >= GAME_BOUNDS_X {
@@ -762,13 +828,13 @@ func (r *RocksRenderer) UpdateAndHandleCollisions(cursorX, cursorY float32, dice
 		}
 
 		// BROAD PHASE: Collect rocks near cursor
-		if rock.IsNearPoint(rockSize, cursorX, cursorY, CursorCheckRadius) {
+		if rock.IsNearPoint(rockSize, cursorX, cursorY, r.CursorCheckRadius) {
 			r.cursorCollisionBuffer = append(r.cursorCollisionBuffer, rock)
 		}
 
 		// BROAD PHASE: Collect rocks near any die
 		for _, die := range dice {
-			if rock.IsNearDie(rockSize, die, DieCheckRadius) {
+			if rock.IsNearDie(rockSize, die, r.DieCheckRadius) {
 				r.diceCollisionBuffer = append(r.diceCollisionBuffer, rock)
 				break // Only add once even if near multiple dice
 			}
@@ -783,7 +849,7 @@ func (r *RocksRenderer) UpdateAndHandleCollisions(cursorX, cursorY float32, dice
 // handleCursorCollisions processes cursor-rock collision responses
 func (r *RocksRenderer) handleCursorCollisions(cursorX, cursorY float32) {
 	for _, rock := range r.cursorCollisionBuffer {
-		rockSize := rock.GetSize(r.SpriteSize)
+		rockSize := rock.GetSize(r.RockTileSize)
 
 		if rock.XYWithinRock(cursorX, cursorY, rockSize) {
 			// Determine which side of rock the cursor is on
@@ -824,16 +890,16 @@ func (r *RocksRenderer) handleDieCollisions(dice []DieRenderable) {
 		return
 	}
 
-	// Calculate once for all collisions
-	effectiveTileSize := TileSize * 0.75
-	dieInset := (TileSize - effectiveTileSize) / 2
+	// Calculate once for all collisions - dice use their own DieTileSize
+	effectiveTileSize := DieTileSize * 0.75
+	dieInset := (DieTileSize - effectiveTileSize) / 2
 
 	// Pre-compute per-die data to avoid redundant calculations
 	diceData := make([]dieCollisionData, len(dice))
 	for i, die := range dice {
 		diceData[i] = dieCollisionData{
-			centerX:        die.Vec2.X + TileSize/2,
-			centerY:        die.Vec2.Y + TileSize/2,
+			centerX:        die.Vec2.X + HalfDieTileSize,
+			centerY:        die.Vec2.Y + HalfDieTileSize,
 			velocitySlopeX: int8(die.Velocity.X / BaseVelocity),
 			velocitySlopeY: int8(die.Velocity.Y / BaseVelocity),
 			left:           die.Vec2.X + dieInset,
@@ -845,7 +911,7 @@ func (r *RocksRenderer) handleDieCollisions(dice []DieRenderable) {
 
 	// Process collisions with pre-calculated data
 	for _, rock := range r.diceCollisionBuffer {
-		rockSize := rock.GetSize(r.SpriteSize)
+		rockSize := rock.GetSize(r.RockTileSize)
 		effectiveRockSize := rockSize * 0.75
 		rockInset := (rockSize - effectiveRockSize) / 2
 		rockCenterX := rock.Position.X + rockSize/2
@@ -900,4 +966,27 @@ func (r *RocksRenderer) handleDieCollisions(dice []DieRenderable) {
 			}
 		}
 	}
+}
+
+// CalculateRockTileSize dynamically calculates rock tile size based on the number of rocks
+// Uses tiered scaling system:
+//
+//	< 100 rocks    → 2.0× base tile size (large rocks)
+//	100-1000 rocks → 1.0× base tile size (normal)
+//	1000-10000     → 0.75× base tile size (smaller)
+//	> 10000 rocks  → 0.5× base tile size (tiny)
+func CalculateRockTileSize(baseTileSize float32, rockAmount int) float32 {
+	var scaleFactor float32
+
+	if rockAmount <= 100 {
+		scaleFactor = 2.0
+	} else if rockAmount <= 1000 {
+		scaleFactor = 1.5
+	} else if rockAmount <= 10000 {
+		scaleFactor = 1.0
+	} else {
+		scaleFactor = 1.0
+	}
+
+	return baseTileSize * scaleFactor
 }

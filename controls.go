@@ -169,6 +169,9 @@ func (g *Game) SetToScore() {
 func (g *Game) Press() {
 	die := g.PickDie()
 	if die != nil {
+		g.holdTime = time.Now()
+		g.holdCx = g.cx
+		g.holdCy = g.cy
 
 		// g.Time = time.Now()
 
@@ -200,28 +203,25 @@ func (g *Game) Select() {
 		return
 	}
 
-	if g.cursorWithin(render.SCOREZONE) {
+	// if clicked or within ScoreZone
+	if (g.cursorWithin(render.SmallRollZone) && time.Since(g.holdTime) < ClickTime) || g.cursorWithin(render.SCOREZONE) {
+
+		if render.SCOREZONE.ContainsPoint(g.holdCx, g.holdCy) && time.Since(g.holdTime) < ClickTime {
+			// Calculate center of ROLLZONE and animate die to that position
+			centerX := (render.ROLLZONE.MinWidth + render.ROLLZONE.MaxWidth) / 2
+			centerY := (render.ROLLZONE.MinHeight + render.ROLLZONE.MaxHeight) / 2
+			render.AnimateDieToPosition(&die.DieRenderable, centerX, centerY)
+
+			g.ResetHoldPoint()
+			die.Mode = ROLLING
+
+			return
+		}
+
+		g.ResetHoldPoint()
 		die.Mode = HELD
 		return
 	}
-	// check if die was flicked
-
-	// since := time.Since(g.Time)
-	// if since < time.Second {
-	// 	flickBuffer := d.TileSize * 3
-
-	// 	above := g.y < d.Fixed.Y+d.TileSize/2
-	// 	below := g.y > d.Fixed.Y-flickBuffer*2
-	// 	left := g.x > d.Fixed.X-flickBuffer
-	// 	right := g.x < d.Fixed.X+flickBuffer
-
-	// 	flicked := above && below && left && right
-
-	// 	if flicked {
-	// 		d.Mode = HELD
-	// 		return
-	// 	}
-	// }
 
 	// let go of die
 	die.Mode = ROLLING
@@ -230,9 +230,4 @@ func (g *Game) Select() {
 	if !g.cursorWithin(render.ROLLZONE) {
 		render.ClampInZone(&die.DieRenderable, render.ROLLZONE)
 	}
-	// if g.cursorWithin(render.SmallRollZone) {
-	// d.HoverFromFromFixed()
-	// d.Fixed = render.Vec2{}
-	// 	return
-	// }
 }
