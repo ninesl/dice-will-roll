@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -13,138 +12,6 @@ import (
 func DEBUGTitleFPS(x, y float32) {
 	msg := fmt.Sprintf("T%0.2f F%0.2f x%4.0f y%4.0f ", ebiten.ActualTPS(), ebiten.ActualFPS(), x, y)
 	ebiten.SetWindowTitle("Dice Will Roll " + msg)
-}
-
-func (g *Game) UpdateRocks() {
-	g.RocksRenderer.ActiveRockType++
-	if g.RocksRenderer.ActiveRockType >= render.NUM_ROCK_TYPES {
-		g.RocksRenderer.ActiveRockType = 0
-	}
-	g.RocksRenderer.FrameCounter[g.RocksRenderer.ActiveRockType]++
-
-	//TODO: bounce off eachother, bounce off rocks etc.
-	//  best idea i have is to find rocks that match the collisions we need
-	// and then calculate them. so collect during normal update, then do special update after,
-	// similar to how the dice have different modes but the modes are based on X/Y and game state (mouse, dice etc)
-	for _, rock := range g.RocksRenderer.Rocks[g.RocksRenderer.ActiveRockType] {
-
-		rock.Update(g.RocksRenderer.FrameCounter[g.RocksRenderer.ActiveRockType])
-
-		// Get individual rock size based on its RockScoreType
-		rockSize := rock.GetSize(g.RocksRenderer.SpriteSize)
-
-		if rock.XYWithinRock(g.cx, g.cy, rockSize) {
-			// Determine which side of rock the cursor is on
-			rockCenterX := rock.Position.X + rockSize/2
-			rockCenterY := rock.Position.Y + rockSize/2
-			dx := g.cx - rockCenterX
-			dy := g.cy - rockCenterY
-
-			// Push rock away from cursor on the primary collision axis
-			if math.Abs(float64(dx)) > math.Abs(float64(dy)) {
-				// Horizontal collision
-				if dx > 0 {
-					// Cursor is on right side, push rock left
-					rock.Position.X = g.cx - rockSize - 1
-				} else {
-					// Cursor is on left side, push rock right
-					rock.Position.X = g.cx + 1
-				}
-				rock.BounceX()
-			} else {
-				// Vertical collision
-				if dy > 0 {
-					// Cursor is below, push rock up
-					rock.Position.Y = g.cy - rockSize - 1
-				} else {
-					// Cursor is above, push rock down
-					rock.Position.Y = g.cy + 1
-				}
-				rock.BounceY()
-			}
-		}
-
-		for _, die := range g.Dice {
-			if rock.RockWithinDie(die.DieRenderable, rockSize) {
-				// Determine which side of the die was hit and position rock just outside
-				rockCenterX := rock.Position.X + rockSize/2
-				rockCenterY := rock.Position.Y + rockSize/2
-				dieCenterX := die.Vec2.X + render.TileSize/2
-				dieCenterY := die.Vec2.Y + render.TileSize/2
-
-				// Calculate which edge is closest
-				dx := rockCenterX - dieCenterX
-				dy := rockCenterY - dieCenterY
-
-				// Use 0.75 multiplier for positioning (matches the tighter collision detection)
-				effectiveTileSize := render.TileSize * 0.75
-				effectiveRockSize := rockSize * 0.75
-				dieInset := (render.TileSize - effectiveTileSize) / 2
-				rockInset := (rockSize - effectiveRockSize) / 2
-
-				// Convert die velocity to slope units
-				dieVelocitySlopeX := die.Velocity.X / render.BaseVelocity
-				dieVelocitySlopeY := die.Velocity.Y / render.BaseVelocity
-
-				// Determine primary collision axis based on which has greater separation
-				if math.Abs(float64(dx)) > math.Abs(float64(dy)) {
-					// Horizontal collision (left or right side of die)
-					if dx > 0 {
-						// Rock is on right side of die
-						rock.Position.X = die.Vec2.X + dieInset + effectiveTileSize + 1 - rockInset
-					} else {
-						// Rock is on left side of die
-						rock.Position.X = die.Vec2.X + dieInset - effectiveRockSize - 1 - rockInset
-					}
-
-					// Add die velocity to rock's X slope, clamp to MAX_SLOPE range
-					newSlopeX := -rock.SlopeX + int8(dieVelocitySlopeX)
-					if newSlopeX > render.MAX_SLOPE {
-						newSlopeX = render.MAX_SLOPE
-					} else if newSlopeX < render.MIN_SLOPE {
-						newSlopeX = render.MIN_SLOPE
-					}
-					rock.Bounce(newSlopeX, rock.SlopeY)
-				} else {
-					// Vertical collision (top or bottom side of die)
-					if dy > 0 {
-						// Rock is below die
-						rock.Position.Y = die.Vec2.Y + dieInset + effectiveTileSize + 1 - rockInset
-					} else {
-						// Rock is above die
-						rock.Position.Y = die.Vec2.Y + dieInset - effectiveRockSize - 1 - rockInset
-					}
-
-					// Add die velocity to rock's Y slope, clamp to MAX_SLOPE range
-					newSlopeY := -rock.SlopeY + int8(dieVelocitySlopeY)
-					if newSlopeY > render.MAX_SLOPE {
-						newSlopeY = render.MAX_SLOPE
-					} else if newSlopeY < render.MIN_SLOPE {
-						newSlopeY = render.MIN_SLOPE
-					}
-					rock.Bounce(rock.SlopeX, newSlopeY)
-				}
-			}
-		}
-
-		if rock.Position.X+rockSize >= render.GAME_BOUNDS_X {
-			rock.Position.X = render.GAME_BOUNDS_X - rockSize
-			rock.BounceX() // Bounce off right wall
-		} else if rock.Position.X <= 0 {
-			rock.Position.X = 0
-			rock.BounceX() // Bounce off left wall
-		}
-
-		if rock.Position.Y+rockSize >= render.GAME_BOUNDS_Y {
-			rock.Position.Y = render.GAME_BOUNDS_Y - rockSize
-			rock.BounceY() // Bounce off bottom wall
-		} else if rock.Position.Y <= 0 {
-			rock.Position.Y = 0
-			rock.BounceY() // Bounce off top wall
-		}
-
-		// g.cursorWithinBounds()
-	}
 }
 
 func (g *Game) Update() error {
@@ -218,6 +85,17 @@ func (g *Game) UpdateDice() {
 	render.BounceAndClamp(rolling)
 
 	g.ActiveLevel.HandleScoring(scoringDice)
+}
+
+func (g *Game) UpdateRocks() {
+	// Extract just the DieRenderable parts for collision detection
+	diceRenderables := make([]render.DieRenderable, len(g.Dice))
+	for i, die := range g.Dice {
+		diceRenderables[i] = die.DieRenderable
+	}
+
+	// Single call handles all rock updates, wall bouncing, and collisions
+	g.RocksRenderer.UpdateAndHandleCollisions(g.cx, g.cy, diceRenderables)
 }
 
 // always is called at the beginning of the update loop

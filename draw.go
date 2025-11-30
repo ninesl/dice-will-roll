@@ -21,8 +21,8 @@ func (g *Game) Draw(s *ebiten.Image) {
 
 	opts := &ebiten.DrawImageOptions{}
 
-	DrawROLLZONE(screen, opts)
 	g.RocksRenderer.DrawRocks(screen)
+	DrawROLLZONE(screen, opts)
 
 	if g.cursorWithin(render.SCOREZONE) {
 		//TODO:FIXME: have to make this work for standard input, etc. will probably change with shaders anyways later

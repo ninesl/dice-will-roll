@@ -23,6 +23,21 @@ const (
 	// SPEED_RANGE      = MAX_SLOPE*2 + 1 // 9 (from -4 to +4 inclusive)
 )
 
+// Collision check radius for broad-phase collision detection
+// These define the Manhattan distance threshold for collecting rocks into collision candidate lists
+// Initialized based on TileSize during game setup
+var (
+	// CursorCheckRadius is the distance from cursor to check for rock collisions
+	// Larger values = more rocks checked (slower but catches more), smaller = fewer rocks (faster)
+	// Should be set to TileSize * 3 during initialization
+	CursorCheckRadius float32
+
+	// DieCheckRadius is the distance from die center to check for rock collisions
+	// Should be at least TileSize to catch adjacent rocks
+	// Should be set to TileSize * 2 during initialization
+	DieCheckRadius float32
+)
+
 // Spritesheet layout variables - dynamically calculated from ROTATION_FRAMES
 var (
 	SHEET_COLS = calculateSheetCols(ROTATION_FRAMES)
@@ -81,13 +96,13 @@ const (
 func (rst RockScoreType) SizeMultiplier() float32 {
 	switch rst {
 	case Small:
-		return .4
+		return .3
 	case Medium:
-		return .75
+		return .5
 	case Big:
-		return .9
+		return .75
 	case Huge:
-		return 1.2
+		return 1.0
 	default:
 		return 1.0
 	}
@@ -95,11 +110,11 @@ func (rst RockScoreType) SizeMultiplier() float32 {
 
 // SimpleRock represents a rock using pre-extracted sprite frames
 type SimpleRock struct {
-	Position      Vec2   // 2D screen position
-	SpriteIndex   uint16 // Current rotation frame index (0-71)
-	animationRate uint8  // Cached update frequency, FrameCounter%animationRate is when rock updates
-	SlopeX        int8   // Current X speed component (-4 to +4)
-	SlopeY        int8   // Current Y speed component (-4 to +4)
+	Position      Vec2  // 2D screen position
+	SpriteIndex   uint8 // Current rotation frame index (0-71)
+	animationRate uint8 // Cached update frequency, FrameCounter%animationRate is when rock updates
+	SlopeX        int8  // Current X speed component (-4 to +4)
+	SlopeY        int8  // Current Y speed component (-4 to +4)
 
 	// Transition system for smooth sprite rotation during direction changes
 	SpriteSlopeX int8          // Visual speed X used during transition (gradually moves toward SpeedX)
@@ -131,6 +146,29 @@ func (r *SimpleRock) RockWithinDie(die DieRenderable, rockSize float32) bool {
 // TODO: determine if copy is faster than reference, and baseSpriteSize copy by ref or get it from g *Game
 func (r *SimpleRock) XYWithinRock(X, Y float32, spriteSize float32) bool {
 	return (Y >= r.Position.Y && Y <= r.Position.Y+spriteSize) && (X >= r.Position.X && X <= r.Position.X+spriteSize)
+}
+
+// IsNearPoint checks if rock is within radius of a point using Manhattan distance (fast, no sqrt)
+// This is the BROAD PHASE collision check - cheaper than precise AABB collision
+func (r *SimpleRock) IsNearPoint(rockSize, pointX, pointY, radius float32) bool {
+	rockCenterX := r.Position.X + rockSize/2
+	rockCenterY := r.Position.Y + rockSize/2
+
+	dx := rockCenterX - pointX
+	dy := rockCenterY - pointY
+
+	// Manhattan distance approximation (fast, no sqrt)
+	manhattanDist := float32(math.Abs(float64(dx)) + math.Abs(float64(dy)))
+	return manhattanDist < radius
+}
+
+// IsNearDie checks if rock is within radius of a die's center using Manhattan distance
+// This is the BROAD PHASE collision check - cheaper than precise AABB collision
+func (r *SimpleRock) IsNearDie(rockSize float32, die DieRenderable, radius float32) bool {
+	dieCenterX := die.Vec2.X + TileSize/2
+	dieCenterY := die.Vec2.Y + TileSize/2
+
+	return r.IsNearPoint(rockSize, dieCenterX, dieCenterY, radius)
 }
 
 // getTransitionStepsX returns the remaining transition steps for X axis
@@ -413,6 +451,10 @@ type RocksRenderer struct {
 	totalRocks     int
 	ActiveRockType int
 	FrameCounter   [NUM_ROCK_TYPES]int // Global frame counter for transition timing
+
+	// Internal collision buffers - reused each frame to avoid allocations
+	diceCollisionBuffer   []*SimpleRock
+	cursorCollisionBuffer []*SimpleRock
 }
 
 // RocksConfig holds configuration for rock system
@@ -430,6 +472,10 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 		shader:     shaderMap[shaders.RocksShaderKey],
 		SpriteSize: config.SpriteSize,
 		totalRocks: config.TotalRocks,
+		// Pre-allocate collision buffers with typical capacity to avoid allocations
+		// Capacity based on typical collision counts: ~50 dice collisions, ~20 cursor collisions
+		diceCollisionBuffer:   make([]*SimpleRock, 0, 64),
+		cursorCollisionBuffer: make([]*SimpleRock, 0, 32),
 	}
 
 	// Generate and pre-extract all sprite frames
@@ -452,13 +498,13 @@ func (r *RocksRenderer) generateSprites() {
 
 	for rockType := range NUM_ROCK_TYPES {
 		var innerDark, innerLight, outerDark, outerLight Vec3
-		switch rockType {
-		case 0: // Dark gray
+		switch rockType { //TODO: make a shader for this? maybe they need to be white then we apply a shader during Draw()
+		case 1: // Dark gray
 			innerDark = KageColor(40, 40, 42)
 			innerLight = KageColor(80, 82, 85)
 			outerDark = KageColor(70, 72, 75)
 			outerLight = KageColor(100, 102, 105)
-		case 1: // Brown
+		case 0: // Brown
 			innerDark = KageColor(60, 40, 30)
 			innerLight = KageColor(100, 70, 50)
 			outerDark = KageColor(80, 60, 45)
@@ -587,7 +633,7 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 		}
 
 		// Pick random rotation frame
-		spriteIndex := uint16(rand.Intn(ROTATION_FRAMES))
+		spriteIndex := uint8(rand.Intn(ROTATION_FRAMES))
 
 		// Generate slope values
 		slopeX := int8(rand.Intn(int(DIRECTIONS_TO_SNAP)+1)) - MAX_SLOPE
@@ -669,4 +715,189 @@ func Clamp(value, min, max float64) float64 {
 		return max
 	}
 	return value
+}
+
+// dieCollisionData holds pre-computed collision data for a die
+type dieCollisionData struct {
+	centerX, centerY         float32
+	velocitySlopeX           int8
+	velocitySlopeY           int8
+	left, right, top, bottom float32
+}
+
+// UpdateAndHandleCollisions performs all rock updates, wall bouncing, and collision detection/response
+func (r *RocksRenderer) UpdateAndHandleCollisions(cursorX, cursorY float32, dice []DieRenderable) {
+	// Advance frame counter and rock type
+	r.ActiveRockType++
+	if r.ActiveRockType >= NUM_ROCK_TYPES {
+		r.ActiveRockType = 0
+	}
+	r.FrameCounter[r.ActiveRockType]++
+
+	// Reset collision buffers to length 0 (keeps capacity - no allocation!)
+	r.diceCollisionBuffer = r.diceCollisionBuffer[:0]
+	r.cursorCollisionBuffer = r.cursorCollisionBuffer[:0]
+
+	// PASS 1: BROAD PHASE - Update all rocks and collect collision candidates
+	for _, rock := range r.Rocks[r.ActiveRockType] {
+		rock.Update(r.FrameCounter[r.ActiveRockType])
+
+		rockSize := rock.GetSize(r.SpriteSize)
+
+		// Wall bouncing
+		if rock.Position.X+rockSize >= GAME_BOUNDS_X {
+			rock.Position.X = GAME_BOUNDS_X - rockSize
+			rock.BounceX()
+		} else if rock.Position.X <= 0 {
+			rock.Position.X = 0
+			rock.BounceX()
+		}
+
+		if rock.Position.Y+rockSize >= GAME_BOUNDS_Y {
+			rock.Position.Y = GAME_BOUNDS_Y - rockSize
+			rock.BounceY()
+		} else if rock.Position.Y <= 0 {
+			rock.Position.Y = 0
+			rock.BounceY()
+		}
+
+		// BROAD PHASE: Collect rocks near cursor
+		if rock.IsNearPoint(rockSize, cursorX, cursorY, CursorCheckRadius) {
+			r.cursorCollisionBuffer = append(r.cursorCollisionBuffer, rock)
+		}
+
+		// BROAD PHASE: Collect rocks near any die
+		for _, die := range dice {
+			if rock.IsNearDie(rockSize, die, DieCheckRadius) {
+				r.diceCollisionBuffer = append(r.diceCollisionBuffer, rock)
+				break // Only add once even if near multiple dice
+			}
+		}
+	}
+
+	// PASS 2: NARROW PHASE - Precise collision checks and responses
+	r.handleCursorCollisions(cursorX, cursorY)
+	r.handleDieCollisions(dice)
+}
+
+// handleCursorCollisions processes cursor-rock collision responses
+func (r *RocksRenderer) handleCursorCollisions(cursorX, cursorY float32) {
+	for _, rock := range r.cursorCollisionBuffer {
+		rockSize := rock.GetSize(r.SpriteSize)
+
+		if rock.XYWithinRock(cursorX, cursorY, rockSize) {
+			// Determine which side of rock the cursor is on
+			rockCenterX := rock.Position.X + rockSize/2
+			rockCenterY := rock.Position.Y + rockSize/2
+			dx := cursorX - rockCenterX
+			dy := cursorY - rockCenterY
+
+			// Push rock away from cursor on the primary collision axis
+			if math.Abs(float64(dx)) > math.Abs(float64(dy)) {
+				// Horizontal collision
+				if dx > 0 {
+					// Cursor is on right side, push rock left
+					rock.Position.X = cursorX - rockSize - 1
+				} else {
+					// Cursor is on left side, push rock right
+					rock.Position.X = cursorX + 1
+				}
+				rock.BounceX()
+			} else {
+				// Vertical collision
+				if dy > 0 {
+					// Cursor is below, push rock up
+					rock.Position.Y = cursorY - rockSize - 1
+				} else {
+					// Cursor is above, push rock down
+					rock.Position.Y = cursorY + 1
+				}
+				rock.BounceY()
+			}
+		}
+	}
+}
+
+// handleDieCollisions processes die-rock collision responses with pre-calculated die data
+func (r *RocksRenderer) handleDieCollisions(dice []DieRenderable) {
+	if len(r.diceCollisionBuffer) == 0 {
+		return
+	}
+
+	// Calculate once for all collisions
+	effectiveTileSize := TileSize * 0.75
+	dieInset := (TileSize - effectiveTileSize) / 2
+
+	// Pre-compute per-die data to avoid redundant calculations
+	diceData := make([]dieCollisionData, len(dice))
+	for i, die := range dice {
+		diceData[i] = dieCollisionData{
+			centerX:        die.Vec2.X + TileSize/2,
+			centerY:        die.Vec2.Y + TileSize/2,
+			velocitySlopeX: int8(die.Velocity.X / BaseVelocity),
+			velocitySlopeY: int8(die.Velocity.Y / BaseVelocity),
+			left:           die.Vec2.X + dieInset,
+			right:          die.Vec2.X + dieInset + effectiveTileSize,
+			top:            die.Vec2.Y + dieInset,
+			bottom:         die.Vec2.Y + dieInset + effectiveTileSize,
+		}
+	}
+
+	// Process collisions with pre-calculated data
+	for _, rock := range r.diceCollisionBuffer {
+		rockSize := rock.GetSize(r.SpriteSize)
+		effectiveRockSize := rockSize * 0.75
+		rockInset := (rockSize - effectiveRockSize) / 2
+		rockCenterX := rock.Position.X + rockSize/2
+		rockCenterY := rock.Position.Y + rockSize/2
+
+		for i, die := range dice {
+			if rock.RockWithinDie(die, rockSize) {
+				data := diceData[i]
+
+				// Calculate which edge is closest
+				dx := rockCenterX - data.centerX
+				dy := rockCenterY - data.centerY
+
+				// Determine primary collision axis based on which has greater separation
+				if math.Abs(float64(dx)) > math.Abs(float64(dy)) {
+					// Horizontal collision (left or right side of die)
+					if dx > 0 {
+						// Rock is on right side of die
+						rock.Position.X = data.right + 1 - rockInset
+					} else {
+						// Rock is on left side of die
+						rock.Position.X = data.left - effectiveRockSize - 1 - rockInset
+					}
+
+					// Add die velocity to rock's X slope, clamp to MAX_SLOPE range
+					newSlopeX := -rock.SlopeX + data.velocitySlopeX
+					if newSlopeX > MAX_SLOPE {
+						newSlopeX = MAX_SLOPE
+					} else if newSlopeX < MIN_SLOPE {
+						newSlopeX = MIN_SLOPE
+					}
+					rock.Bounce(newSlopeX, rock.SlopeY)
+				} else {
+					// Vertical collision (top or bottom side of die)
+					if dy > 0 {
+						// Rock is below die
+						rock.Position.Y = data.bottom + 1 - rockInset
+					} else {
+						// Rock is above die
+						rock.Position.Y = data.top - effectiveRockSize - 1 - rockInset
+					}
+
+					// Add die velocity to rock's Y slope, clamp to MAX_SLOPE range
+					newSlopeY := -rock.SlopeY + data.velocitySlopeY
+					if newSlopeY > MAX_SLOPE {
+						newSlopeY = MAX_SLOPE
+					} else if newSlopeY < MIN_SLOPE {
+						newSlopeY = MIN_SLOPE
+					}
+					rock.Bounce(rock.SlopeX, newSlopeY)
+				}
+			}
+		}
+	}
 }

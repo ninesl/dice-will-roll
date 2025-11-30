@@ -36,6 +36,10 @@ func init() {
 	render.TileSize = TileSize
 	render.HalfTileSize = float32(TILE_SIZE / 2)
 
+	// Initialize collision check radii based on TileSize
+	render.CursorCheckRadius = TileSize * 3.0
+	render.DieCheckRadius = TileSize * 2.0
+
 	FONT_SIZE = float64(GAME_BOUNDS_Y / 64)
 
 	ebiten.SetFullscreen(true)
