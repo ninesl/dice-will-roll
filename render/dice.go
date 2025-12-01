@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	DampingFactor float32 = 0.7
-	BounceFactor  float32 = .95
+	DampingFactor float32 = 0.8
+	BounceFactor  float32 = .9
 	MoveFactor    float32 = .2
 )
 
@@ -127,7 +127,7 @@ func HandleMovingHeldDice(dice []*DieRenderable) {
 		die.Velocity.Y = (die.Fixed.Y - die.Vec2.Y) * MoveFactor
 
 		// puts it back to 0
-		die.ZRotation *= float32(BounceFactor)
+		die.ZRotation *= DampingFactor
 
 		die.Vec2.X += die.Velocity.X
 		die.Vec2.Y += die.Velocity.Y
@@ -143,7 +143,7 @@ func HandleResettingDice(dice []*DieRenderable) {
 		die.Velocity.Y = (die.Fixed.Y - die.Vec2.Y) * MoveFactor
 
 		// Gradually reduce rotation back to 0
-		die.ZRotation *= BounceFactor
+		// die.ZRotation *= BounceFactor
 
 		// Update position
 		die.Vec2.X += die.Velocity.X
