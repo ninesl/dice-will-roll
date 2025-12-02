@@ -100,11 +100,15 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 		}
 
 		l.Rocks -= l.CurrentScore
+
 		l.CurrentScore = 0
-		//
 		for _, die := range heldDice {
 			die.Mode = ROLLING
-			die.Roll()
+			die.Roll() // set diff die value
+
+			die.Velocity.Y = render.DieTileSize * 2 // downward velocity
+			die.Direction = render.DirectionArr[render.DOWN]
+
 		}
 		l.ScoringHand = l.ScoringHand[:0] // Clear the hand
 		l.scoringState = SCORING_IDLE
@@ -114,12 +118,18 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 	die := heldDice[l.scoringIndex]
 
 	if l.scoringState == SCORING_MOVING {
-		// positioning
-		x := float32(GAME_BOUNDS_X)/2 - render.HalfTileSize
-		y := render.SCOREZONE.MinHeight/2 + TileSize/5
-		if len(heldDice) > 1 {
-			x += TileSize * (float32(len(heldDice) - l.scoringIndex))
+		// positioning - matches HandleMovingHeldDice logic
+		num := len(heldDice)
+		x := float32(GAME_BOUNDS_X)/2 - render.HalfDieTileSize
+		y := render.SmallRollZone.MaxHeight + render.SCOREZONE.MinHeight/2 + render.DieTileSize/5
+
+		// Shift left to center the group
+		if num > 1 {
+			x -= render.DieTileSize * (float32(num) - 1.0)
 		}
+
+		// Position this specific die based on its index with DieTileSize * 2 spacing
+		x += render.DieTileSize * 2 * float32(l.scoringIndex)
 
 		die.Fixed.X = x
 		die.Fixed.Y = y

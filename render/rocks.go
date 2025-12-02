@@ -503,8 +503,11 @@ type RocksRenderer struct {
 	// Color tints for each rock type (applied via shader at draw time)
 	rockTypeColors [NUM_ROCK_TYPES]Vec3
 
-	Rocks          [NUM_ROCK_TYPES][]*SimpleRock // Rocks organized by type
-	RockTileSize   float32                       // Base tile size for rock rendering and collision calculations
+	Rocks [NUM_ROCK_TYPES][]*SimpleRock // Rocks organized by type
+
+	ColorRocksBuffer []*SimpleRock //
+
+	RockTileSize   float32 // Base tile size for rock rendering and collision calculations
 	totalRocks     int
 	ActiveRockType int
 	FrameCounter   [NUM_ROCK_TYPES]int // Global frame counter for transition timing

@@ -177,7 +177,7 @@ func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
     var rt vec3 = distObj(pos*mr,ray*mr,pradius,mradius)
     
     // Early exit for background pixels - skip expensive calculations
-    if length(rt) > 100.0 {
+    if length(rt) > 150.0 {
             return vec4(0.0, 0.0, 0.0, 0.0)
 
         if Time > 0.0 {
