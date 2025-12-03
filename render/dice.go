@@ -14,6 +14,9 @@ var (
 	MoveFactor    float32 = .2
 )
 
+// used to identify dice in indexing, etc.
+type DieIdentity uint8
+
 // TODO: determine if a 'uniforms' map is better than hardcoded consts
 type DieRenderable struct {
 	Vec2      Vec2 // current position

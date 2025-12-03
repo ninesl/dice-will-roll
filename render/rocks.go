@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 
@@ -206,12 +207,11 @@ type SimpleRock struct {
 	Score        RockScoreType //  how many 'rocks' this rock counts for during scoring. also determines size, etc
 
 	transitionSteps uint8 // Bit-packed: lower 4 bits = X remaining steps, upper 4 bits = Y remaining steps
-
 }
 
 // const BaseVelocity = 1.0
 
-const BaseVelocity = 2.0
+const BaseVelocity = 1.0
 
 func (r *SimpleRock) RockWithinDie(die *DieRenderable, rockSize float32) bool {
 	// AABB (Axis-Aligned Bounding Box) collision detection with 0.75 multiplier for tighter collision
@@ -247,14 +247,14 @@ func (r *SimpleRock) IsNearPoint(rockSize, pointX, pointY, radius float32) bool 
 	return manhattanDist < radius
 }
 
-// IsNearDie checks if rock is within radius of a die's center using Manhattan distance
-// This is the BROAD PHASE collision check - cheaper than precise AABB collision
-func (r *SimpleRock) IsNearDie(rockSize float32, die *DieRenderable, radius float32) bool {
-	dieCenterX := die.Vec2.X + HalfDieTileSize
-	dieCenterY := die.Vec2.Y + HalfDieTileSize
+// // IsNearDie checks if rock is within radius of a die's center using Manhattan distance
+// // This is the BROAD PHASE collision check - cheaper than precise AABB collision
+// func (r *SimpleRock) IsNearDie(rockSize float32, die *DieRenderable, radius float32) bool {
+// 	dieCenterX := die.Vec2.X + HalfDieTileSize
+// 	dieCenterY := die.Vec2.Y + HalfDieTileSize
 
-	return r.IsNearPoint(rockSize, dieCenterX, dieCenterY, radius)
-}
+// 	return r.IsNearPoint(rockSize, dieCenterX, dieCenterY, radius)
+// }
 
 // getTransitionStepsX returns the remaining transition steps for X axis
 func (r *SimpleRock) getTransitionStepsX() uint8 {
@@ -514,7 +514,7 @@ type RocksRenderer struct {
 	// ActiveRockBuffer int
 
 	RockBuffers     []RockBuffer // Rocks organized by type
-	HeldRockBuffers []RockBuffer
+	HeldRockBuffers map[DieIdentity]RockBuffer
 	totalRocks      int
 
 	ActiveRockFlag bool // true/false to update RockBuffers[even] or RockBuffers[odd]
@@ -535,6 +535,8 @@ type RocksRenderer struct {
 	// Pre-allocated temp images for rendering (reused every frame to avoid allocations)
 	// [NUM_ROCK_TYPES] temp images, one per rock color type
 	tempImages []*ebiten.Image
+
+	config RocksConfig
 }
 
 // RocksConfig holds configuration for rock system
@@ -545,6 +547,18 @@ type RocksConfig struct {
 	WorldBoundsX float32
 	WorldBoundsY float32
 }
+
+// func (r *RocksRenderer) SetActiveBuffers() {
+// 	//clear buffer
+// 	r.ActiveBuffers = r.ActiveBuffers[:0]
+
+// 	for _, buffer := range r.RockBuffers {
+// 		r.ActiveBuffers = append(r.ActiveBuffers, &buffer)
+// 	}
+// 	for _, buffer := range r.HeldRockBuffers {
+// 		r.ActiveBuffers = append(r.ActiveBuffers, &buffer)
+// 	}
+// }
 
 // NewRocksRenderer creates a new ultra-fast sprite rendering system
 func NewRocksRenderer(config RocksConfig) *RocksRenderer {
@@ -563,11 +577,15 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 		// Capacity based on typical collision counts: ~50 dice collisions, ~20 cursor collisions
 		diceCollisionBuffer:   make([]*SimpleRock, 0, 128),
 		cursorCollisionBuffer: make([]*SimpleRock, 0, 128),
+
+		config: config,
+		// ActiveBuffers: make([]*RockBuffer, 0, 16),
 		// Define colors for each rock type (applied via shader at draw time)
 	}
 
 	// Initialize empty rock buffers slice (will grow dynamically)
 	r.RockBuffers = make([]RockBuffer, 0, len(config.BaseColors))
+	r.HeldRockBuffers = make(map[DieIdentity]RockBuffer)
 
 	// Generate and pre-extract all sprite frames (single grayscale spritesheet)
 	r.generateSprites()
@@ -808,6 +826,40 @@ func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
 			screen.DrawRectShader(int(GAME_BOUNDS_X), int(GAME_BOUNDS_Y), r.colorShader, colorOpts)
 		}
 	}
+
+	//TODO: will make this not draw in order??
+	for _, buffer := range r.HeldRockBuffers {
+		// Clear the pre-allocated temp image (reuse instead of allocating new one each frame!)
+		r.tempImages[0].Clear()
+
+		// Draw only rocks whose index matches this layer using stride-based iteration
+		// This avoids expensive modulo operations and conditional checks
+		// Layer 0: indices 0, 2, 4, 6... | Layer 1: indices 1, 3, 5, 7...
+		for _, rock := range buffer.Rocks {
+			// Get the grayscale sprite for this slope combination (same for all rock types)
+			sprite := r.sprites[rock.SpriteSlopeX][rock.SpriteSlopeY]
+
+			// Get the specific rotation frame from the spritesheet
+			frameRect := sprite.SpriteSheet.Rect(int(rock.SpriteIndex))
+			frameImage := sprite.Image.SubImage(frameRect).(*ebiten.Image)
+
+			// Reset and set transform with SCALING based on RockScoreType
+			opts.GeoM.Reset()
+			scale := rock.Score.SizeMultiplier()
+			opts.GeoM.Scale(float64(scale), float64(scale))
+			opts.GeoM.Translate(float64(rock.Position.X), float64(rock.Position.Y))
+			r.tempImages[0].DrawImage(frameImage, opts)
+		}
+
+		// Apply color shader to all rocks of this type in this layer
+		colorOpts := &ebiten.DrawRectShaderOptions{
+			Images: [4]*ebiten.Image{r.tempImages[0], nil, nil, nil},
+			Uniforms: map[string]interface{}{
+				"TintColor": buffer.Color.KageVec3(),
+			},
+		}
+		screen.DrawRectShader(int(GAME_BOUNDS_X), int(GAME_BOUNDS_Y), r.colorShader, colorOpts)
+	}
 }
 
 func (r *RocksRenderer) GetStats() (visible, total int) {
@@ -883,6 +935,48 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCent
 		}
 	}
 
+	// PASS 1: BROAD PHASE - Update all rocks and collect collision candidates
+	for k, rockBuffer := range r.HeldRockBuffers {
+		rockBuffer.FrameCounter++
+		for i := range rockBuffer.Rocks {
+			rock := &rockBuffer.Rocks[i]
+			rock.Update(rockBuffer.FrameCounter)
+
+			rockSize := rock.GetSize(r.RockTileSize)
+
+			// Wall bouncing
+			if rock.Position.X+rockSize >= GAME_BOUNDS_X {
+				rock.Position.X = GAME_BOUNDS_X - rockSize
+				rock.BounceX()
+			} else if rock.Position.X <= 0 {
+				rock.Position.X = 0
+				rock.BounceX()
+			}
+
+			if rock.Position.Y+rockSize >= GAME_BOUNDS_Y {
+				rock.Position.Y = GAME_BOUNDS_Y - rockSize
+				rock.BounceY()
+			} else if rock.Position.Y <= 0 {
+				rock.Position.Y = 0
+				rock.BounceY()
+			}
+
+			// BROAD PHASE: Collect rocks near cursor
+			if rock.IsNearPoint(rockSize, cursorX, cursorY, r.CursorCheckRadius) {
+				r.cursorCollisionBuffer = append(r.cursorCollisionBuffer, rock)
+			}
+
+			// BROAD PHASE: Collect rocks near any die center
+			for i := range diceCenters {
+				if rock.IsNearPoint(rockSize, diceCenters[i].X, diceCenters[i].Y, r.DieCheckRadius) {
+					r.diceCollisionBuffer = append(r.diceCollisionBuffer, rock)
+					break // Only add once even if near multiple dice
+				}
+			}
+		}
+		r.HeldRockBuffers[k] = rockBuffer
+	}
+
 	// PASS 2: NARROW PHASE - Precise collision checks and responses
 	r.handleCursorCollisions(cursorX, cursorY)
 	r.handleDieCollisions(diceCenters)
@@ -928,74 +1022,166 @@ func (r *RocksRenderer) handleCursorCollisions(cursorX, cursorY float32) {
 
 // handleDieCollisions processes die-rock collision responses using die centers
 // diceCenters: X=centerX, Y=centerY, Z=speed (for velocity transfer to rocks)
+// Each rock collides with at most one die per frame (first collision wins)
 func (r *RocksRenderer) handleDieCollisions(diceCenters []Vec3) {
 	if len(r.diceCollisionBuffer) == 0 {
 		return
 	}
 
-	// Process collisions - compute bounds from center on the fly
+	// OUTER LOOP: Each rock (allows break to work correctly)
 	for _, rock := range r.diceCollisionBuffer {
 		rockSize := rock.GetSize(r.RockTileSize)
-		effectiveRockSize := rockSize * 0.75
-		rockInset := (rockSize - effectiveRockSize) / 2
+
+		// Track the die with maximum total overlap (deepest penetration)
+		// This prevents rocks from getting stuck between multiple dice
+		var maxOverlap float32 = -1
+		var bestDieIndex int = -1
+		var bestXOverlap, bestYOverlap float32
+		var bestDieCenter Vec3
+
+		// PASS 1: Find die with deepest penetration
+		for dieIdx, dieCenter := range diceCenters {
+			// Calculate die AABB bounds
+			dieLeft := dieCenter.X - HalfEffectiveDie
+			dieRight := dieCenter.X + HalfEffectiveDie
+			dieTop := dieCenter.Y - HalfEffectiveDie
+			dieBottom := dieCenter.Y + HalfEffectiveDie
+
+			// Calculate rock AABB bounds
+			rockLeft := rock.Position.X
+			rockRight := rock.Position.X + rockSize
+			rockTop := rock.Position.Y
+			rockBottom := rock.Position.Y + rockSize
+
+			// NARROW PHASE: Check for actual AABB overlap
+			if rockRight <= dieLeft || rockLeft >= dieRight ||
+				rockBottom <= dieTop || rockTop >= dieBottom {
+				continue // No collision with this die, try next die
+			}
+
+			// Calculate overlap amounts
+			xOverlap := rockRight
+			if dieRight < xOverlap {
+				xOverlap = dieRight
+			}
+			if rockLeft > dieLeft {
+				xOverlap -= rockLeft
+			} else {
+				xOverlap -= dieLeft
+			}
+
+			yOverlap := rockBottom
+			if dieBottom < yOverlap {
+				yOverlap = dieBottom
+			}
+			if rockTop > dieTop {
+				yOverlap -= rockTop
+			} else {
+				yOverlap -= dieTop
+			}
+
+			// Calculate total overlap (deepest penetration wins)
+			totalOverlap := xOverlap + yOverlap
+
+			// Track die with maximum overlap
+			if totalOverlap > maxOverlap {
+				maxOverlap = totalOverlap
+				bestDieIndex = dieIdx
+				bestXOverlap = xOverlap
+				bestYOverlap = yOverlap
+				bestDieCenter = dieCenter
+			}
+		}
+
+		// If no collision found, skip this rock
+		if bestDieIndex == -1 {
+			continue
+		}
+
+		// PASS 2: Process collision with the die that has deepest penetration
+		dieCenter := bestDieCenter
+		xOverlap := bestXOverlap
+		yOverlap := bestYOverlap
+
+		// Calculate die bounds for position correction
+		dieLeft := dieCenter.X - HalfEffectiveDie
+		dieRight := dieCenter.X + HalfEffectiveDie
+		dieTop := dieCenter.Y - HalfEffectiveDie
+		dieBottom := dieCenter.Y + HalfEffectiveDie
+
+		// Prepare speed boost and rock center
+		speedBoost := int8(math.Round(float64(dieCenter.Z)))
 		rockCenterX := rock.Position.X + rockSize/2
 		rockCenterY := rock.Position.Y + rockSize/2
 
-		for i := range diceCenters {
-			die := diceCenters[i]
+		var newSlopeX, newSlopeY int8
 
-			// Compute die bounds from center
-			dieLeft := die.X - HalfEffectiveDie
-			dieRight := die.X + HalfEffectiveDie
-			dieTop := die.Y - HalfEffectiveDie
-			dieBottom := die.Y + HalfEffectiveDie
-
-			// Check AABB collision
-			if (rock.Position.X+rockInset+effectiveRockSize > dieLeft &&
-				rock.Position.X+rockInset < dieRight) &&
-				(rock.Position.Y+rockInset+effectiveRockSize > dieTop &&
-					rock.Position.Y+rockInset < dieBottom) {
-				// Calculate which edge is closest
-				dx := rockCenterX - die.X
-				dy := rockCenterY - die.Y
-
-				// Speed boost from die (Z component), convert to int8 slope modifier
-				speedBoost := int8(die.Z)
-
-				// Determine primary collision axis based on which has greater separation
-				if math.Abs(float64(dx)) > math.Abs(float64(dy)) {
-					// Horizontal collision (left or right side of die)
-					if dx > 0 {
-						rock.Position.X = dieRight + 1 - rockInset
-					} else {
-						rock.Position.X = dieLeft - effectiveRockSize - 1 - rockInset
-					}
-					// Apply velocity: reverse + add die speed
-					newSlopeX := -rock.SlopeX + speedBoost
-					if newSlopeX > MAX_SLOPE {
-						newSlopeX = MAX_SLOPE
-					} else if newSlopeX < MIN_SLOPE {
-						newSlopeX = MIN_SLOPE
-					}
-					rock.Bounce(newSlopeX, rock.SlopeY)
-				} else {
-					// Vertical collision (top or bottom side of die)
-					if dy > 0 {
-						rock.Position.Y = dieBottom + 1 - rockInset
-					} else {
-						rock.Position.Y = dieTop - effectiveRockSize - 1 - rockInset
-					}
-					// Apply velocity: reverse + add die speed
-					newSlopeY := -rock.SlopeY + speedBoost
-					if newSlopeY > MAX_SLOPE {
-						newSlopeY = MAX_SLOPE
-					} else if newSlopeY < MIN_SLOPE {
-						newSlopeY = MIN_SLOPE
-					}
-					rock.Bounce(rock.SlopeX, newSlopeY)
+		// Determine primary collision axis (lesser overlap = collision direction)
+		// Corner case (xOverlap == yOverlap) defaults to Y-axis
+		if xOverlap < yOverlap {
+			// HORIZONTAL collision (rock hit left or right side of die)
+			if rockCenterX > dieCenter.X {
+				// Rock hit RIGHT side of die - push rock right
+				rock.Position.X = dieRight + 1
+				// Bounce right with speed boost (positive direction)
+				absSlope := rock.SlopeX
+				if absSlope < 0 {
+					absSlope = -absSlope
 				}
+				newSlopeX = absSlope + speedBoost
+			} else {
+				// Rock hit LEFT side of die - push rock left
+				rock.Position.X = dieLeft - rockSize - 1
+				// Bounce left with speed boost (negative direction)
+				absSlope := rock.SlopeX
+				if absSlope < 0 {
+					absSlope = -absSlope
+				}
+				newSlopeX = -(absSlope + speedBoost)
 			}
+			// Y axis unchanged - rock continues its Y trajectory
+			newSlopeY = rock.SlopeY
+
+		} else {
+			// VERTICAL collision (rock hit top or bottom side of die)
+			if rockCenterY > dieCenter.Y {
+				// Rock hit BOTTOM side of die - push rock down
+				rock.Position.Y = dieBottom + 1
+				// Bounce down with speed boost (positive direction)
+				absSlope := rock.SlopeY
+				if absSlope < 0 {
+					absSlope = -absSlope
+				}
+				newSlopeY = absSlope + speedBoost
+			} else {
+				// Rock hit TOP side of die - push rock up
+				rock.Position.Y = dieTop - rockSize - 1
+				// Bounce up with speed boost (negative direction)
+				absSlope := rock.SlopeY
+				if absSlope < 0 {
+					absSlope = -absSlope
+				}
+				newSlopeY = -(absSlope + speedBoost)
+			}
+			// X axis unchanged - rock continues its X trajectory
+			newSlopeX = rock.SlopeX
 		}
+
+		// Clamp slopes to valid range [MIN_SLOPE, MAX_SLOPE]
+		if newSlopeX > MAX_SLOPE {
+			newSlopeX = MAX_SLOPE
+		} else if newSlopeX < MIN_SLOPE {
+			newSlopeX = MIN_SLOPE
+		}
+
+		if newSlopeY > MAX_SLOPE {
+			newSlopeY = MAX_SLOPE
+		} else if newSlopeY < MIN_SLOPE {
+			newSlopeY = MIN_SLOPE
+		}
+
+		// Apply bounce with new slopes
+		rock.Bounce(newSlopeX, newSlopeY)
 	}
 }
 
@@ -1020,4 +1206,53 @@ func CalculateRockTileSize(baseTileSize float32, rockAmount int) float32 {
 	}
 
 	return baseTileSize * scaleFactor
+}
+
+func (r *RocksRenderer) SelectRocksColor(color Vec3, dieIdentity DieIdentity, numDie int) {
+	// var numRocksAvail int
+	// for _, buffer := range r.RockBuffers {
+	// 	numRocksAvail += len(buffer.Rocks)
+	// }
+	// for _, buffer := range r.HeldRockBuffers {
+	// 	numRocksAvail += len(buffer.Rocks)
+	// }
+	// rockNeedRatio := len(r.config.BaseColors) + numDie
+	// rocksNeeded := numRocksAvail / rockNeedRatio
+	// rocksPerBuffer := rocksNeeded / len(r.RockBuffers)
+
+	rocksPerBuffer := 10
+
+	// fmt.Printf("%2d rockNeedRatio\n%2d rocksNeeded\n%2d rocksPerBuffer\n", rockNeedRatio, rocksNeeded, rocksPerBuffer)
+
+	heldBuffer := RockBuffer{
+		Rocks:           make([]SimpleRock, 0),
+		TransitionColor: Grey,
+		Color:           color,
+	}
+
+	for i := range r.RockBuffers {
+		buffer := &r.RockBuffers[i]
+		fmt.Printf("Currently have %d rocks in buffer we're taking from\n", len(buffer.Rocks))
+		heldBuffer.Rocks = append(
+			r.HeldRockBuffers[dieIdentity].Rocks,
+			buffer.Rocks[0:rocksPerBuffer]...,
+		)
+		fmt.Printf("This held buffer now has %d rocks\n", len(heldBuffer.Rocks))
+		buffer.Rocks = buffer.Rocks[rocksPerBuffer:]
+		fmt.Printf("The buffer we took from now has %d rocks\n\n", len(buffer.Rocks))
+	}
+
+	r.HeldRockBuffers[dieIdentity] = heldBuffer
+}
+
+func (r *RocksRenderer) DeselectRocksColor(color Vec3, dieIdentity DieIdentity, numDie int) {
+	buffer := r.HeldRockBuffers[dieIdentity]
+	buffer.TransitionColor = buffer.Color
+	buffer.Color = color
+
+	// rocks_ToDisperse
+	//TODO:FIXME: just get a better overall idea for this. this hwole thing sucks and is hard to reason with
+
+	r.RockBuffers = append(r.RockBuffers, buffer)
+	delete(r.HeldRockBuffers, dieIdentity)
 }

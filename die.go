@@ -15,7 +15,8 @@ type Die struct {
 	image *ebiten.Image
 	render.DieRenderable
 	dice.Die
-	Mode Action // Current mode of the die, is modified thru player Controls()
+	Mode       Action // Current mode of the die, is modified thru player Controls()
+	Identifier render.DieIdentity
 }
 
 func SetupNewDie(color render.Vec3) *Die {
@@ -73,8 +74,10 @@ func SetupPlayerDice() []*Die {
 
 	// NUM_PLAYER_DICE = len(colors)
 
-	for _, color := range render.RainbowColors {
-		dice = append(dice, SetupNewDie(color))
+	for i, color := range render.RainbowColors {
+		die := SetupNewDie(color)
+		die.Identifier = render.DieIdentity(i)
+		dice = append(dice, die)
 		// dice = append(dice, SetupNewDie(render.KageColor(
 		// 	max(rand.IntN(255), 150),
 		// 	max(rand.IntN(255), 150),

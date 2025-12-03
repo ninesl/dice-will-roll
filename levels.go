@@ -94,7 +94,7 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 	if l.scoringIndex >= len(heldDice) {
 		if l.scoringIndex == len(heldDice) {
 			l.scoringIndex++ // skips this final mult animation
-			l.scoringTimer = scoringDelay * 3
+			l.scoringTimer = scoringDelay * 2
 			l.CurrentScore = int(float32(l.CurrentScore) * l.ScoreHand.Multiplier())
 			return
 		}
