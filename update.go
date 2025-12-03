@@ -103,7 +103,7 @@ func (g *Game) UpdateRocks() {
 	}
 
 	// Single call handles all rock updates, wall bouncing, and collisions
-	g.RocksRenderer.UpdateAndHandleCollisions(g.cx, g.cy, diceRenderables)
+	g.RocksRenderer.UpdateRocksAndCollide(g.cx, g.cy, diceRenderables)
 }
 
 // always is called at the beginning of the update loop

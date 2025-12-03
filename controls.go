@@ -120,16 +120,16 @@ func (g *Game) ControlAction(action Action) {
 				}
 			}
 
-			for rockType := range render.NUM_ROCK_TYPES {
-				for _, rock := range g.RocksRenderer.Rocks[rockType] {
-					// Toggle bounce direction for rocks
-					if rock.SpriteIndex%2 == 1 {
-						rock.BounceX()
-					} else {
-						rock.BounceY()
-					}
-				}
-			}
+			// for rockType := range render.NUM_ROCK_TYPES {
+			// 	for _, rock := range g.RocksRenderer.Rocks[rockType] {
+			// 		// Toggle bounce direction for rocks
+			// 		if rock.SpriteIndex%2 == 1 {
+			// 			rock.BounceX()
+			// 		} else {
+			// 			rock.BounceY()
+			// 		}
+			// 	}
+			// }
 		}
 	case PRESS:
 		g.Press()
@@ -224,6 +224,9 @@ func (g *Game) Select() {
 
 			g.ResetHoldPoint()
 			die.Mode = ROLLING
+
+			//TODO:FIXME: when a rock is click and dragged it keeps rolling. it isn't in held dice anymore but it's still spinning
+			// likely needs a check when held or stm
 			return
 		}
 

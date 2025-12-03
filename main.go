@@ -35,8 +35,8 @@ func init() {
 	render.GAME_BOUNDS_X = float32(GAME_BOUNDS_X)
 	render.GAME_BOUNDS_Y = float32(GAME_BOUNDS_Y)
 
-	render.TileSize = TileSize
-	render.HalfTileSize = float32(TILE_SIZE / 2)
+	// render.TileSize = TileSize
+	// render.HalfTileSize = float32(TILE_SIZE / 2)
 	render.DieTileSize = TileSize                   // Die-specific tile size, same as base TileSize
 	render.HalfDieTileSize = float32(TILE_SIZE / 2) // Half of DieTileSize for die center calculations
 
@@ -103,11 +103,21 @@ func LoadGame() *Game {
 
 	dice := SetupPlayerDice()
 
-	rockAmount := 1000
+	rockAmount := 10000
 
 	// Initialize rocks renderer with hybrid real-time 3D SDF system
 	rocksConfig := render.RocksConfig{
-		TotalRocks:   rockAmount,
+		TotalRocks: rockAmount,
+		BaseColors: []render.Vec3{
+			render.Grey, render.Brown,
+			render.RainbowColors[0],
+			render.RainbowColors[1],
+			render.RainbowColors[2],
+			render.RainbowColors[3],
+			render.RainbowColors[4],
+			render.RainbowColors[5],
+			render.RainbowColors[6],
+		},
 		RockTileSize: render.CalculateRockTileSize(TileSize, rockAmount), // Dynamically scaled based on rock amount
 		WorldBoundsX: float32(render.GAME_BOUNDS_X),
 		WorldBoundsY: float32(render.GAME_BOUNDS_Y),
