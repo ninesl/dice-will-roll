@@ -513,8 +513,8 @@ type RocksRenderer struct {
 	// rockTypeColors [NUM_ROCK_TYPES]Vec3
 	// ActiveRockBuffer int
 
-	RockBuffers     []*RockBuffer // Rocks organized by type
-	HeldRockBuffers []*RockBuffer
+	RockBuffers     []RockBuffer // Rocks organized by type
+	HeldRockBuffers []RockBuffer
 	totalRocks      int
 
 	ActiveRockFlag bool // true/false to update RockBuffers[even] or RockBuffers[odd]
@@ -567,7 +567,7 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 	}
 
 	// Initialize empty rock buffers slice (will grow dynamically)
-	r.RockBuffers = make([]*RockBuffer, 0, len(config.BaseColors))
+	r.RockBuffers = make([]RockBuffer, 0, len(config.BaseColors))
 
 	// Generate and pre-extract all sprite frames (single grayscale spritesheet)
 	r.generateSprites()
@@ -747,7 +747,7 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 
 	// Assign to renderer using append for dynamic growth
 	for i := range len(allRocks) {
-		r.RockBuffers = append(r.RockBuffers, &RockBuffer{
+		r.RockBuffers = append(r.RockBuffers, RockBuffer{
 			Color:           config.BaseColors[i],
 			TransitionColor: config.BaseColors[i],
 			Transition:      0,
@@ -839,10 +839,11 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCent
 	r.cursorCollisionBuffer = r.cursorCollisionBuffer[:0]
 
 	// PASS 1: BROAD PHASE - Update all rocks and collect collision candidates
-	for k, rockBuffer := range r.RockBuffers {
+	for k := range r.RockBuffers {
 		if (k%2 == 0) != r.ActiveRockFlag {
 			continue
 		}
+		rockBuffer := &r.RockBuffers[k]
 		rockBuffer.FrameCounter++
 		for i := range rockBuffer.Rocks {
 			rock := &rockBuffer.Rocks[i]
