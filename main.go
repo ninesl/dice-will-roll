@@ -40,6 +40,10 @@ func init() {
 	render.DieTileSize = TileSize                   // Die-specific tile size, same as base TileSize
 	render.HalfDieTileSize = float32(TILE_SIZE / 2) // Half of DieTileSize for die center calculations
 
+	// Pre-compute die collision constants (used for rock-die collision detection)
+	render.EffectiveDieTileSize = render.DieTileSize * 0.75
+	render.DieTileInset = (render.DieTileSize - render.EffectiveDieTileSize) / 2
+
 	FONT_SIZE = float64(GAME_BOUNDS_Y / 64)
 
 	ebiten.SetFullscreen(true)
@@ -49,8 +53,9 @@ func init() {
 type Game struct {
 	Shaders        map[shaders.ShaderKey]*ebiten.Shader
 	RocksImage     *ebiten.Image
-	RocksRenderer  *render.RocksRenderer // New rocks rendering system, //TODO:FIXME: make a new one per level?, game renders the same but active level reassigns
-	Dice           []*Die                // Player's dice
+	RocksRenderer  *render.RocksRenderer     // New rocks rendering system, //TODO:FIXME: make a new one per level?, game renders the same but active level reassigns
+	Dice           []*Die                    // Player's dice
+	diceDataBuffer []render.DieCollisionData // Pre-allocated collision data buffer
 	startTime      time.Time
 	holdTime       time.Time
 	holdCx, holdCy float32
@@ -124,10 +129,11 @@ func LoadGame() *Game {
 	}
 
 	g := &Game{
-		Dice:          dice,
-		Shaders:       shaders.LoadShaders(),
-		RocksRenderer: render.NewRocksRenderer(rocksConfig),
-		startTime:     time.Now(),
+		Dice:           dice,
+		Shaders:        shaders.LoadShaders(),
+		RocksRenderer:  render.NewRocksRenderer(rocksConfig),
+		diceDataBuffer: make([]render.DieCollisionData, 0, NUM_PLAYER_DICE),
+		startTime:      time.Now(),
 		ActiveLevel: NewLevel(LevelOptions{
 			Rocks: rockAmount,
 			Hands: 3,

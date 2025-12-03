@@ -93,17 +93,29 @@ func (g *Game) UpdateDice() {
 	render.BounceAndClamp(rolling)
 
 	g.ActiveLevel.HandleScoring(scoringDice)
+
+	// Populate dice collision data buffer after all dice physics are resolved
+	g.diceDataBuffer = g.diceDataBuffer[:0]
+	for _, die := range g.Dice {
+		d := &die.DieRenderable
+		g.diceDataBuffer = append(g.diceDataBuffer, render.DieCollisionData{
+			PosX:           d.Vec2.X,
+			PosY:           d.Vec2.Y,
+			CenterX:        d.Vec2.X + render.HalfDieTileSize,
+			CenterY:        d.Vec2.Y + render.HalfDieTileSize,
+			VelocitySlopeX: int8(d.Velocity.X / render.BaseVelocity),
+			VelocitySlopeY: int8(d.Velocity.Y / render.BaseVelocity),
+			Left:           d.Vec2.X + render.DieTileInset,
+			Right:          d.Vec2.X + render.DieTileInset + render.EffectiveDieTileSize,
+			Top:            d.Vec2.Y + render.DieTileInset,
+			Bottom:         d.Vec2.Y + render.DieTileInset + render.EffectiveDieTileSize,
+		})
+	}
 }
 
 func (g *Game) UpdateRocks() {
-	// Extract just the DieRenderable parts for collision detection
-	diceRenderables := make([]*render.DieRenderable, len(g.Dice))
-	for i, die := range g.Dice {
-		diceRenderables[i] = &die.DieRenderable
-	}
-
-	// Single call handles all rock updates, wall bouncing, and collisions
-	g.RocksRenderer.UpdateRocksAndCollide(g.cx, g.cy, diceRenderables)
+	// Pass pre-computed dice collision data to renderer
+	g.RocksRenderer.UpdateRocksAndCollide(g.cx, g.cy, g.diceDataBuffer)
 }
 
 // always is called at the beginning of the update loop

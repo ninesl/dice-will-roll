@@ -814,16 +814,23 @@ func (r *RocksRenderer) GetStats() (visible, total int) {
 	return r.totalRocks, r.totalRocks
 }
 
-// dieCollisionData holds pre-computed collision data for a die
-type dieCollisionData struct {
-	centerX, centerY         float32
-	velocitySlopeX           int8
-	velocitySlopeY           int8
-	left, right, top, bottom float32
+// DieCollisionData holds pre-computed collision data for a die
+type DieCollisionData struct {
+	PosX, PosY               float32 // Die position (top-left corner)
+	CenterX, CenterY         float32 // Die center point
+	VelocitySlopeX           int8    // X velocity component
+	VelocitySlopeY           int8    // Y velocity component
+	Left, Right, Top, Bottom float32 // Collision bounds
 }
 
+// Pre-computed die collision constants (computed once at init time)
+var (
+	EffectiveDieTileSize float32
+	DieTileInset         float32
+)
+
 // performs all rock updates, wall bouncing, and collision detection/response
-func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, dice []*DieRenderable) {
+func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceData []DieCollisionData) {
 	// Advance frame counter and rock type
 	// r.ActiveRockBuffer++
 	// if r.ActiveRockBuffer >= len(r.RockBuffers) {
@@ -871,9 +878,9 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, dice []*
 				r.cursorCollisionBuffer = append(r.cursorCollisionBuffer, rock)
 			}
 
-			// BROAD PHASE: Collect rocks near any die
-			for _, die := range dice {
-				if rock.IsNearDie(rockSize, die, r.DieCheckRadius) {
+			// BROAD PHASE: Collect rocks near any die using pre-computed collision data
+			for i := range diceData {
+				if rock.IsNearPoint(rockSize, diceData[i].CenterX, diceData[i].CenterY, r.DieCheckRadius) {
 					r.diceCollisionBuffer = append(r.diceCollisionBuffer, rock)
 					break // Only add once even if near multiple dice
 				}
@@ -883,7 +890,7 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, dice []*
 
 	// PASS 2: NARROW PHASE - Precise collision checks and responses
 	r.handleCursorCollisions(cursorX, cursorY)
-	r.handleDieCollisions(dice)
+	r.handleDieCollisions(diceData)
 }
 
 // handleCursorCollisions processes cursor-rock collision responses
@@ -925,28 +932,9 @@ func (r *RocksRenderer) handleCursorCollisions(cursorX, cursorY float32) {
 }
 
 // handleDieCollisions processes die-rock collision responses with pre-calculated die data
-func (r *RocksRenderer) handleDieCollisions(dice []*DieRenderable) {
+func (r *RocksRenderer) handleDieCollisions(diceData []DieCollisionData) {
 	if len(r.diceCollisionBuffer) == 0 {
 		return
-	}
-
-	// Calculate once for all collisions - dice use their own DieTileSize
-	effectiveTileSize := DieTileSize * 0.75
-	dieInset := (DieTileSize - effectiveTileSize) / 2
-
-	// Pre-compute per-die data to avoid redundant calculations
-	diceData := make([]dieCollisionData, len(dice))
-	for i, die := range dice {
-		diceData[i] = dieCollisionData{
-			centerX:        die.Vec2.X + HalfDieTileSize,
-			centerY:        die.Vec2.Y + HalfDieTileSize,
-			velocitySlopeX: int8(die.Velocity.X / BaseVelocity),
-			velocitySlopeY: int8(die.Velocity.Y / BaseVelocity),
-			left:           die.Vec2.X + dieInset,
-			right:          die.Vec2.X + dieInset + effectiveTileSize,
-			top:            die.Vec2.Y + dieInset,
-			bottom:         die.Vec2.Y + dieInset + effectiveTileSize,
-		}
 	}
 
 	// Process collisions with pre-calculated data
@@ -957,27 +945,31 @@ func (r *RocksRenderer) handleDieCollisions(dice []*DieRenderable) {
 		rockCenterX := rock.Position.X + rockSize/2
 		rockCenterY := rock.Position.Y + rockSize/2
 
-		for i, die := range dice {
-			if rock.RockWithinDie(die, rockSize) {
-				data := diceData[i]
+		for i := range diceData {
+			data := diceData[i]
 
+			// Check AABB collision using pre-computed bounds
+			if (rock.Position.X+rockInset+effectiveRockSize > data.PosX+DieTileInset &&
+				rock.Position.X+rockInset < data.PosX+DieTileInset+EffectiveDieTileSize) &&
+				(rock.Position.Y+rockInset+effectiveRockSize > data.PosY+DieTileInset &&
+					rock.Position.Y+rockInset < data.PosY+DieTileInset+EffectiveDieTileSize) {
 				// Calculate which edge is closest
-				dx := rockCenterX - data.centerX
-				dy := rockCenterY - data.centerY
+				dx := rockCenterX - data.CenterX
+				dy := rockCenterY - data.CenterY
 
 				// Determine primary collision axis based on which has greater separation
 				if math.Abs(float64(dx)) > math.Abs(float64(dy)) {
 					// Horizontal collision (left or right side of die)
 					if dx > 0 {
 						// Rock is on right side of die
-						rock.Position.X = data.right + 1 - rockInset
+						rock.Position.X = data.Right + 1 - rockInset
 					} else {
 						// Rock is on left side of die
-						rock.Position.X = data.left - effectiveRockSize - 1 - rockInset
+						rock.Position.X = data.Left - effectiveRockSize - 1 - rockInset
 					}
 
 					// Add die velocity to rock's X slope, clamp to MAX_SLOPE range
-					newSlopeX := -rock.SlopeX + data.velocitySlopeX
+					newSlopeX := -rock.SlopeX + data.VelocitySlopeX
 					if newSlopeX > MAX_SLOPE {
 						newSlopeX = MAX_SLOPE
 					} else if newSlopeX < MIN_SLOPE {
@@ -988,14 +980,14 @@ func (r *RocksRenderer) handleDieCollisions(dice []*DieRenderable) {
 					// Vertical collision (top or bottom side of die)
 					if dy > 0 {
 						// Rock is below die
-						rock.Position.Y = data.bottom + 1 - rockInset
+						rock.Position.Y = data.Bottom + 1 - rockInset
 					} else {
 						// Rock is above die
-						rock.Position.Y = data.top - effectiveRockSize - 1 - rockInset
+						rock.Position.Y = data.Top - effectiveRockSize - 1 - rockInset
 					}
 
 					// Add die velocity to rock's Y slope, clamp to MAX_SLOPE range
-					newSlopeY := -rock.SlopeY + data.velocitySlopeY
+					newSlopeY := -rock.SlopeY + data.VelocitySlopeY
 					if newSlopeY > MAX_SLOPE {
 						newSlopeY = MAX_SLOPE
 					} else if newSlopeY < MIN_SLOPE {
