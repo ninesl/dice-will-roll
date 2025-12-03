@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -94,21 +95,16 @@ func (g *Game) UpdateDice() {
 
 	g.ActiveLevel.HandleScoring(scoringDice)
 
-	// Populate dice collision data buffer after all dice physics are resolved
+	// Populate dice data buffer after all dice physics are resolved
+	// X=centerX, Y=centerY, Z=speed (velocity magnitude / BaseVelocity for slope compatibility)
 	g.diceDataBuffer = g.diceDataBuffer[:0]
-	for _, die := range g.Dice {
-		d := &die.DieRenderable
-		g.diceDataBuffer = append(g.diceDataBuffer, render.DieCollisionData{
-			PosX:           d.Vec2.X,
-			PosY:           d.Vec2.Y,
-			CenterX:        d.Vec2.X + render.HalfDieTileSize,
-			CenterY:        d.Vec2.Y + render.HalfDieTileSize,
-			VelocitySlopeX: int8(d.Velocity.X / render.BaseVelocity),
-			VelocitySlopeY: int8(d.Velocity.Y / render.BaseVelocity),
-			Left:           d.Vec2.X + render.DieTileInset,
-			Right:          d.Vec2.X + render.DieTileInset + render.EffectiveDieTileSize,
-			Top:            d.Vec2.Y + render.DieTileInset,
-			Bottom:         d.Vec2.Y + render.DieTileInset + render.EffectiveDieTileSize,
+	for _, d := range g.Dice {
+		// Compute speed as average of absolute velocities, scaled to slope range
+		speed := (float32(math.Abs(float64(d.Velocity.X))) + float32(math.Abs(float64(d.Velocity.Y)))) / (2 * render.BaseVelocity)
+		g.diceDataBuffer = append(g.diceDataBuffer, render.Vec3{
+			X: d.Vec2.X + render.HalfDieTileSize,
+			Y: d.Vec2.Y + render.HalfDieTileSize,
+			Z: speed,
 		})
 	}
 }

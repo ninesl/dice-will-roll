@@ -61,7 +61,7 @@ type Vec2 struct {
 
 // used for determining color values
 type Vec3 struct {
-	R, G, B float32
+	X, Y, Z float32
 }
 
 // makes it 0.0 - 1.0 for Kage
@@ -72,15 +72,15 @@ func normalize(v int) float32 {
 // give 0-255 for r g b values return normalized to kages 0.0 - 1.0
 func KageColor(r, g, b int) Vec3 {
 	return Vec3{
-		R: normalize(r),
-		G: normalize(g),
-		B: normalize(b),
+		X: normalize(r),
+		Y: normalize(g),
+		Z: normalize(b),
 	}
 }
 
 // Returns a Vec3 representation of itself for a Kage uniform
 func (v Vec3) KageVec3() []float32 {
-	return []float32{v.R, v.G, v.B}
+	return []float32{v.X, v.Y, v.Z}
 }
 
 // Returns a Vec2 representation of itself for a Kage uniform

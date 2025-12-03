@@ -43,6 +43,7 @@ func init() {
 	// Pre-compute die collision constants (used for rock-die collision detection)
 	render.EffectiveDieTileSize = render.DieTileSize * 0.75
 	render.DieTileInset = (render.DieTileSize - render.EffectiveDieTileSize) / 2
+	render.HalfEffectiveDie = render.EffectiveDieTileSize / 2
 
 	FONT_SIZE = float64(GAME_BOUNDS_Y / 64)
 
@@ -53,9 +54,9 @@ func init() {
 type Game struct {
 	Shaders        map[shaders.ShaderKey]*ebiten.Shader
 	RocksImage     *ebiten.Image
-	RocksRenderer  *render.RocksRenderer     // New rocks rendering system, //TODO:FIXME: make a new one per level?, game renders the same but active level reassigns
-	Dice           []*Die                    // Player's dice
-	diceDataBuffer []render.DieCollisionData // Pre-allocated collision data buffer
+	RocksRenderer  *render.RocksRenderer // New rocks rendering system, //TODO:FIXME: make a new one per level?, game renders the same but active level reassigns
+	Dice           []*Die                // Player's dice
+	diceDataBuffer []render.Vec3         // Pre-allocated die data buffer (X=centerX, Y=centerY, Z=speed)
 	startTime      time.Time
 	holdTime       time.Time
 	holdCx, holdCy float32
@@ -108,7 +109,7 @@ func LoadGame() *Game {
 
 	dice := SetupPlayerDice()
 
-	rockAmount := 10000
+	rockAmount := 100
 
 	// Initialize rocks renderer with hybrid real-time 3D SDF system
 	rocksConfig := render.RocksConfig{
@@ -132,7 +133,7 @@ func LoadGame() *Game {
 		Dice:           dice,
 		Shaders:        shaders.LoadShaders(),
 		RocksRenderer:  render.NewRocksRenderer(rocksConfig),
-		diceDataBuffer: make([]render.DieCollisionData, 0, NUM_PLAYER_DICE),
+		diceDataBuffer: make([]render.Vec3, 0, NUM_PLAYER_DICE),
 		startTime:      time.Now(),
 		ActiveLevel: NewLevel(LevelOptions{
 			Rocks: rockAmount,
@@ -169,7 +170,7 @@ func main() {
 
 	//TODO:FIXME: this is how we determine the max perf for a given device.
 	// ebiten.SetTPS(ebiten.SyncWithFPS)
-	// ebiten.SetVsyncEnabled(false)
+	ebiten.SetVsyncEnabled(false)
 
 	game := LoadGame()
 	if err := ebiten.RunGame(game); err != nil {
