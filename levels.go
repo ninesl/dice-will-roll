@@ -63,7 +63,7 @@ func NewLevel(ops LevelOptions) *Level {
 // handles scoring and render changes, used in g.ActiveLevel
 //
 // TODO: make this animation better/more fun
-func (l *Level) HandleScoring(heldDice []*Die) {
+func (l *Level) HandleScoring(heldDice []*Die, rockRenderer *render.RocksRenderer) {
 	// If there are no dice to score, ensure we are idle.
 	if len(heldDice) == 0 {
 		l.scoringState = SCORING_IDLE
@@ -110,6 +110,9 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 			die.Direction = render.DirectionArr[render.DOWN]
 
 		}
+
+		rockRenderer.DeselectAll()
+
 		l.ScoringHand = l.ScoringHand[:0] // Clear the hand
 		l.scoringState = SCORING_IDLE
 		return
@@ -153,6 +156,10 @@ func (l *Level) HandleScoring(heldDice []*Die) {
 
 			l.scoringState = SCORING_PAUSING
 			l.scoringTimer = scoringDelay // Start the timer
+
+			// TODO: rocks blow up
+			// rockRenderer.Explode(die.ActiveFace().Value())
+			rockRenderer.DeselectRocks(die.Identifier)
 
 			if l.scoringIndex == len(heldDice)-1 {
 				l.scoringTimer *= 2

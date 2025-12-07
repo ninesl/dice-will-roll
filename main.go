@@ -109,13 +109,14 @@ func LoadGame() *Game {
 
 	dice := SetupPlayerDice()
 
-	rockAmount := 1000
+	rockAmount := 10000
 
 	// Initialize rocks renderer with hybrid real-time 3D SDF system
 	rocksConfig := render.RocksConfig{
 		TotalRocks: rockAmount,
 		BaseColors: []render.Vec3{
-			render.Grey, render.Brown,
+			render.Grey,
+			// render.Brown,
 			// render.RainbowColors[0],
 			// render.RainbowColors[1],
 			// render.RainbowColors[2],
@@ -124,9 +125,10 @@ func LoadGame() *Game {
 			// render.RainbowColors[5],
 			// render.RainbowColors[6],
 		},
-		RockTileSize: render.CalculateRockTileSize(TileSize, rockAmount), // Dynamically scaled based on rock amount
-		WorldBoundsX: float32(render.GAME_BOUNDS_X),
-		WorldBoundsY: float32(render.GAME_BOUNDS_Y),
+		RockTileSize:          render.CalculateRockTileSize(TileSize, rockAmount), // Dynamically scaled based on rock amount
+		WorldBoundsX:          float32(render.GAME_BOUNDS_X),
+		WorldBoundsY:          float32(render.GAME_BOUNDS_Y),
+		ColorTransitionFrames: 30, // 30 frames (~0.5 seconds at 60fps)
 	}
 
 	g := &Game{
@@ -170,7 +172,7 @@ func main() {
 
 	//TODO:FIXME: this is how we determine the max perf for a given device.
 	// ebiten.SetTPS(ebiten.SyncWithFPS)
-	ebiten.SetVsyncEnabled(false)
+	// ebiten.SetVsyncEnabled(false)
 
 	game := LoadGame()
 	if err := ebiten.RunGame(game); err != nil {

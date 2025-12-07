@@ -1,9 +1,9 @@
 package render
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
+	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ninesl/dice-will-roll/render/shaders"
@@ -509,20 +509,16 @@ type RocksRenderer struct {
 	// Size: [8][8] = 64 spritesheets total (was 128 with NUM_ROCK_TYPES before!)
 	sprites [DIRECTIONS_TO_SNAP][DIRECTIONS_TO_SNAP]*Sprite
 
-	// Color tints for each rock type (applied via shader at draw time)
-	// rockTypeColors [NUM_ROCK_TYPES]Vec3
-	// ActiveRockBuffer int
+	// Three-tier buffer system for rock color management
+	BaseColorBuffers  []RockBuffer                // Source rocks (Grey, Brown, etc.)
+	HeldColorBuffers  map[DieIdentity]*RockBuffer // Rocks owned by held dice
+	TransitionBuffers []*RockBuffer               // Rocks transitioning back to base colors
 
-	RockBuffers     []RockBuffer // Rocks organized by type
-	HeldRockBuffers map[DieIdentity]RockBuffer
-	totalRocks      int
+	totalRocks int
 
-	ActiveRockFlag bool // true/false to update RockBuffers[even] or RockBuffers[odd]
-
-	// ColorRocksBuffer []*SimpleRock
+	ActiveRockFlag bool // true/false to update BaseColorBuffers[even] or BaseColorBuffers[odd]
 
 	RockTileSize float32 // Base tile size for rock rendering and collision calculations
-	// FrameCounter   [NUM_ROCK_TYPES]int // Global frame counter for transition timing
 
 	// Collision check radii for this rock renderer
 	CursorCheckRadius float32 // Distance from cursor to check for rock collisions
@@ -532,20 +528,20 @@ type RocksRenderer struct {
 	diceCollisionBuffer   []*SimpleRock
 	cursorCollisionBuffer []*SimpleRock
 
-	// Pre-allocated temp images for rendering (reused every frame to avoid allocations)
-	// [NUM_ROCK_TYPES] temp images, one per rock color type
-	tempImages []*ebiten.Image
+	// Image pool for temporary rendering buffers (lazily allocated and reused every frame)
+	imagePool *ImagePool
 
 	config RocksConfig
 }
 
 // RocksConfig holds configuration for rock system
 type RocksConfig struct {
-	TotalRocks   int
-	BaseColors   []Vec3  // the colors that rock render applies
-	RockTileSize float32 // Base tile size for rock rendering and collision calculations
-	WorldBoundsX float32
-	WorldBoundsY float32
+	TotalRocks            int
+	BaseColors            []Vec3  // the colors that rock render applies
+	RockTileSize          float32 // Base tile size for rock rendering and collision calculations
+	WorldBoundsX          float32
+	WorldBoundsY          float32
+	ColorTransitionFrames int // frames for color transitions (default: 30)
 }
 
 // func (r *RocksRenderer) SetActiveBuffers() {
@@ -584,8 +580,9 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 	}
 
 	// Initialize empty rock buffers slice (will grow dynamically)
-	r.RockBuffers = make([]RockBuffer, 0, len(config.BaseColors))
-	r.HeldRockBuffers = make(map[DieIdentity]RockBuffer)
+	r.BaseColorBuffers = make([]RockBuffer, 0, len(config.BaseColors))
+	r.HeldColorBuffers = make(map[DieIdentity]*RockBuffer)
+	r.TransitionBuffers = make([]*RockBuffer, 0, 10)
 
 	// Generate and pre-extract all sprite frames (single grayscale spritesheet)
 	r.generateSprites()
@@ -593,12 +590,8 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 	// Generate rock instances
 	r.generateRocks(config)
 
-	r.tempImages = make([]*ebiten.Image, 0)
-
-	// Pre-allocate temp images for rendering (reused every frame to avoid allocations)
-	for range 10 {
-		r.tempImages = append(r.tempImages, ebiten.NewImage(int(config.WorldBoundsX), int(config.WorldBoundsY)))
-	}
+	// Initialize image pool for temporary rendering (lazy allocation)
+	r.imagePool = NewImagePool(int(config.WorldBoundsX), int(config.WorldBoundsY))
 
 	return r
 }
@@ -608,12 +601,12 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 func (r *RocksRenderer) generateSprites() {
 	genSprites := [DIRECTIONS_TO_SNAP][DIRECTIONS_TO_SNAP]*Sprite{}
 
-	// Use grayscale values for base sprite (will be colored via shader later)
-	// Different grayscale tones create visual variety in the base geometry
-	innerDark := KageColor(60, 60, 60)     // Dark gray for inner/crater areas
-	innerLight := KageColor(200, 200, 200) // Light gray for inner/crater areas
-	outerDark := KageColor(100, 100, 100)  // Medium gray for outer surface
-	outerLight := KageColor(220, 220, 220) // Light gray for outer surface
+	// Use white values for base sprite (will be colored via shader later)
+	// Different white tones create visual variety in the base geometry
+	innerDark := WhiteDark    // Darker white for inner/crater areas
+	innerLight := WhiteMid    // Medium white for inner/crater areas
+	outerDark := WhiteLight   // Light white for outer surface
+	outerLight := WhiteBright // Pure white for outer surface highlights
 
 	for XSnapIdx := range DIRECTIONS_TO_SNAP {
 		angleDegX := int(XSnapIdx) * (360 / int(DIRECTIONS_TO_SNAP))
@@ -765,7 +758,7 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 
 	// Assign to renderer using append for dynamic growth
 	for i := range len(allRocks) {
-		r.RockBuffers = append(r.RockBuffers, RockBuffer{
+		r.BaseColorBuffers = append(r.BaseColorBuffers, RockBuffer{
 			Color:           config.BaseColors[i],
 			TransitionColor: config.BaseColors[i],
 			Transition:      0,
@@ -780,85 +773,111 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 	// }
 }
 
+// drawBufferToImage draws all rocks from a buffer to a temporary image
+func (r *RocksRenderer) drawBufferToImage(
+	buffer *RockBuffer,
+	tempImage *ebiten.Image,
+	opts *ebiten.DrawImageOptions,
+) {
+	// Note: tempImage is already cleared by imagePool.GetNext()
+
+	for _, rock := range buffer.Rocks {
+		sprite := r.sprites[rock.SpriteSlopeX][rock.SpriteSlopeY]
+		frameRect := sprite.SpriteSheet.Rect(int(rock.SpriteIndex))
+		frameImage := sprite.Image.SubImage(frameRect).(*ebiten.Image)
+
+		opts.GeoM.Reset()
+		scale := rock.Score.SizeMultiplier()
+		opts.GeoM.Scale(float64(scale), float64(scale))
+		opts.GeoM.Translate(float64(rock.Position.X), float64(rock.Position.Y))
+		tempImage.DrawImage(frameImage, opts)
+	}
+}
+
+// drawWithColorShader applies color tint shader to a temp image and draws to screen
+// Handles color transitions via shader uniforms (GPU-side mixing)
+func (r *RocksRenderer) drawWithColorShader(
+	buffer *RockBuffer,
+	tempImage *ebiten.Image,
+	screen *ebiten.Image,
+) {
+	// Calculate transition amount (0.0 to 1.0)
+	var transitionAmount float32
+	if buffer.Transition > 0 {
+		// Transition counter counts down from max to 0
+		// At start: Transition = max, transitionAmount = 1.0 (full TransitionColor)
+		// At end: Transition = 0, transitionAmount = 0.0 (full Color)
+		transitionAmount = float32(buffer.Transition) / float32(r.config.ColorTransitionFrames)
+	} else {
+		transitionAmount = 0.0 // No transition, use ColorFrom only
+	}
+
+	colorOpts := &ebiten.DrawRectShaderOptions{
+		Images: [4]*ebiten.Image{tempImage, nil, nil, nil},
+		Uniforms: map[string]interface{}{
+			"ColorFrom":        buffer.Color.KageVec3(),           // Target color (where we end up)
+			"ColorTo":          buffer.TransitionColor.KageVec3(), // Source color (where we start)
+			"TransitionAmount": transitionAmount,                  // 1.0 at start, 0.0 at end
+		},
+	}
+	screen.DrawRectShader(int(GAME_BOUNDS_X), int(GAME_BOUNDS_Y), r.colorShader, colorOpts)
+}
+
 // DrawRocks renders all rocks with ultra-fast direct array access
 // Uses grayscale sprites with color filter shader applied per rock type
 // Implements index-based interleaving to prevent one color from always appearing on top
 func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
+	// Reset image pool for this frame
+	r.imagePool.Reset()
+
 	// Reuse DrawImageOptions to avoid allocations (important for 10k+ rocks)
 	opts := &ebiten.DrawImageOptions{}
-	// opts.Filter = ebiten.FilterLinear
 
-	// Interleave rocks by drawing them in layers based on their index
-	// This ensures colors are mixed visually rather than one color always on top
+	// Render base color buffers with interleaving
 	for layer := 0; layer < NUM_INTERLEAVE_LAYERS; layer++ {
-		for rockType := range len(r.RockBuffers) {
-			// Clear the pre-allocated temp image (reuse instead of allocating new one each frame!)
-			r.tempImages[rockType].Clear()
+		for rockType := range len(r.BaseColorBuffers) {
+			buffer := &r.BaseColorBuffers[rockType]
 
-			// Draw only rocks whose index matches this layer using stride-based iteration
-			// This avoids expensive modulo operations and conditional checks
-			// Layer 0: indices 0, 2, 4, 6... | Layer 1: indices 1, 3, 5, 7...
-			for i := layer; i < len(r.RockBuffers[rockType].Rocks); i += NUM_INTERLEAVE_LAYERS {
-				rock := r.RockBuffers[rockType].Rocks[i]
+			// Get next temp image from pool (already cleared)
+			tempImg := r.imagePool.GetNext()
 
-				// Get the grayscale sprite for this slope combination (same for all rock types)
+			// Draw rocks with interleaving
+			for i := layer; i < len(buffer.Rocks); i += NUM_INTERLEAVE_LAYERS {
+				rock := buffer.Rocks[i]
 				sprite := r.sprites[rock.SpriteSlopeX][rock.SpriteSlopeY]
+				frameImage := sprite.Image.SubImage(
+					sprite.SpriteSheet.Rect(int(rock.SpriteIndex)),
+				).(*ebiten.Image)
 
-				// Get the specific rotation frame from the spritesheet
-				frameRect := sprite.SpriteSheet.Rect(int(rock.SpriteIndex))
-				frameImage := sprite.Image.SubImage(frameRect).(*ebiten.Image)
-
-				// Reset and set transform with SCALING based on RockScoreType
 				opts.GeoM.Reset()
 				scale := rock.Score.SizeMultiplier()
 				opts.GeoM.Scale(float64(scale), float64(scale))
 				opts.GeoM.Translate(float64(rock.Position.X), float64(rock.Position.Y))
-				r.tempImages[rockType].DrawImage(frameImage, opts)
+				tempImg.DrawImage(frameImage, opts)
 			}
 
-			// Apply color shader to all rocks of this type in this layer
-			colorOpts := &ebiten.DrawRectShaderOptions{
-				Images: [4]*ebiten.Image{r.tempImages[rockType], nil, nil, nil},
-				Uniforms: map[string]interface{}{
-					"TintColor": r.RockBuffers[rockType].Color.KageVec3(),
-				},
-			}
-			screen.DrawRectShader(int(GAME_BOUNDS_X), int(GAME_BOUNDS_Y), r.colorShader, colorOpts)
+			// Apply color shader (base buffers should have Transition = 0, so just use base color)
+			r.drawWithColorShader(buffer, tempImg, screen)
 		}
 	}
 
-	//TODO: will make this not draw in order??
-	for _, buffer := range r.HeldRockBuffers {
-		// Clear the pre-allocated temp image (reuse instead of allocating new one each frame!)
-		r.tempImages[0].Clear()
-
-		// Draw only rocks whose index matches this layer using stride-based iteration
-		// This avoids expensive modulo operations and conditional checks
-		// Layer 0: indices 0, 2, 4, 6... | Layer 1: indices 1, 3, 5, 7...
-		for _, rock := range buffer.Rocks {
-			// Get the grayscale sprite for this slope combination (same for all rock types)
-			sprite := r.sprites[rock.SpriteSlopeX][rock.SpriteSlopeY]
-
-			// Get the specific rotation frame from the spritesheet
-			frameRect := sprite.SpriteSheet.Rect(int(rock.SpriteIndex))
-			frameImage := sprite.Image.SubImage(frameRect).(*ebiten.Image)
-
-			// Reset and set transform with SCALING based on RockScoreType
-			opts.GeoM.Reset()
-			scale := rock.Score.SizeMultiplier()
-			opts.GeoM.Scale(float64(scale), float64(scale))
-			opts.GeoM.Translate(float64(rock.Position.X), float64(rock.Position.Y))
-			r.tempImages[0].DrawImage(frameImage, opts)
+	// Render held color buffers
+	for i := range len(RainbowColors) {
+		buffer, ok := r.HeldColorBuffers[DieIdentity(i)]
+		if !ok {
+			continue
 		}
 
-		// Apply color shader to all rocks of this type in this layer
-		colorOpts := &ebiten.DrawRectShaderOptions{
-			Images: [4]*ebiten.Image{r.tempImages[0], nil, nil, nil},
-			Uniforms: map[string]interface{}{
-				"TintColor": buffer.Color.KageVec3(),
-			},
-		}
-		screen.DrawRectShader(int(GAME_BOUNDS_X), int(GAME_BOUNDS_Y), r.colorShader, colorOpts)
+		tempImg := r.imagePool.GetNext()
+		r.drawBufferToImage(buffer, tempImg, opts)
+		r.drawWithColorShader(buffer, tempImg, screen)
+	}
+
+	// Render transition buffers
+	for _, buffer := range r.TransitionBuffers {
+		tempImg := r.imagePool.GetNext()
+		r.drawBufferToImage(buffer, tempImg, opts)
+		r.drawWithColorShader(buffer, tempImg, screen)
 	}
 }
 
@@ -872,6 +891,88 @@ var (
 	DieTileInset         float32
 	HalfEffectiveDie     float32 // EffectiveDieTileSize / 2, for computing bounds from center
 )
+
+// updateBufferRocks updates all rocks in a buffer: physics, wall bouncing, and collision detection
+func (r *RocksRenderer) updateBufferRocks(
+	buffer *RockBuffer,
+	cursorX, cursorY float32,
+	diceCenters []Vec3,
+) {
+	buffer.FrameCounter++
+
+	for i := range buffer.Rocks {
+		rock := &buffer.Rocks[i]
+		rock.Update(buffer.FrameCounter)
+
+		rockSize := rock.GetSize(r.RockTileSize)
+
+		// Wall bouncing
+		if rock.Position.X+rockSize >= GAME_BOUNDS_X {
+			rock.Position.X = GAME_BOUNDS_X - rockSize
+			rock.BounceX()
+		} else if rock.Position.X <= 0 {
+			rock.Position.X = 0
+			rock.BounceX()
+		}
+
+		if rock.Position.Y+rockSize >= GAME_BOUNDS_Y {
+			rock.Position.Y = GAME_BOUNDS_Y - rockSize
+			rock.BounceY()
+		} else if rock.Position.Y <= 0 {
+			rock.Position.Y = 0
+			rock.BounceY()
+		}
+
+		// BROAD PHASE: Collect rocks near cursor
+		if rock.IsNearPoint(rockSize, cursorX, cursorY, r.CursorCheckRadius) {
+			r.cursorCollisionBuffer = append(r.cursorCollisionBuffer, rock)
+		}
+
+		// BROAD PHASE: Collect rocks near any die center
+		for j := range diceCenters {
+			if rock.IsNearPoint(rockSize, diceCenters[j].X, diceCenters[j].Y, r.DieCheckRadius) {
+				r.diceCollisionBuffer = append(r.diceCollisionBuffer, rock)
+				break // Only add once even if near multiple dice
+			}
+		}
+	}
+}
+
+// updateAllBufferTransitions decrements transition counters for all buffer types
+func (r *RocksRenderer) updateAllBufferTransitions() {
+	// Update HeldColorBuffers transitions (stop at 0, don't go negative)
+	for _, buffer := range r.HeldColorBuffers {
+		if buffer.Transition > 0 {
+			buffer.Transition--
+		}
+	}
+
+	// Update TransitionBuffers transitions and move completed ones to base buffers
+	for i := len(r.TransitionBuffers) - 1; i >= 0; i-- {
+		buffer := r.TransitionBuffers[i]
+
+		// Decrement transition counter (stop at 0)
+		if buffer.Transition > 0 {
+			buffer.Transition--
+		}
+
+		// If transition complete, move rocks to base buffer
+		if buffer.Transition <= 0 {
+			// Find matching base buffer by color
+			for j := range r.BaseColorBuffers {
+				baseBuffer := &r.BaseColorBuffers[j]
+
+				if colorMatch(baseBuffer.Color, buffer.Color) {
+					baseBuffer.Rocks = append(baseBuffer.Rocks, buffer.Rocks...)
+					break
+				}
+			}
+
+			// Remove this transition buffer
+			r.TransitionBuffers = append(r.TransitionBuffers[:i], r.TransitionBuffers[i+1:]...)
+		}
+	}
+}
 
 // performs all rock updates, wall bouncing, and collision detection/response
 // diceCenters: X=centerX, Y=centerY, Z=speed (for velocity transfer to rocks)
@@ -891,95 +992,43 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCent
 	r.cursorCollisionBuffer = r.cursorCollisionBuffer[:0]
 
 	// PASS 1: BROAD PHASE - Update all rocks and collect collision candidates
-	for k := range r.RockBuffers {
-		if (k%2 == 0) != r.ActiveRockFlag {
-			continue
-		}
-		rockBuffer := &r.RockBuffers[k]
-		rockBuffer.FrameCounter++
-		for i := range rockBuffer.Rocks {
-			rock := &rockBuffer.Rocks[i]
-			rock.Update(rockBuffer.FrameCounter)
 
-			rockSize := rock.GetSize(r.RockTileSize)
-
-			// Wall bouncing
-			if rock.Position.X+rockSize >= GAME_BOUNDS_X {
-				rock.Position.X = GAME_BOUNDS_X - rockSize
-				rock.BounceX()
-			} else if rock.Position.X <= 0 {
-				rock.Position.X = 0
-				rock.BounceX()
-			}
-
-			if rock.Position.Y+rockSize >= GAME_BOUNDS_Y {
-				rock.Position.Y = GAME_BOUNDS_Y - rockSize
-				rock.BounceY()
-			} else if rock.Position.Y <= 0 {
-				rock.Position.Y = 0
-				rock.BounceY()
-			}
-
-			// BROAD PHASE: Collect rocks near cursor
-			if rock.IsNearPoint(rockSize, cursorX, cursorY, r.CursorCheckRadius) {
-				r.cursorCollisionBuffer = append(r.cursorCollisionBuffer, rock)
-			}
-
-			// BROAD PHASE: Collect rocks near any die center
-			for i := range diceCenters {
-				if rock.IsNearPoint(rockSize, diceCenters[i].X, diceCenters[i].Y, r.DieCheckRadius) {
-					r.diceCollisionBuffer = append(r.diceCollisionBuffer, rock)
-					break // Only add once even if near multiple dice
-				}
-			}
-		}
+	// Update base color buffers
+	for k := range r.BaseColorBuffers {
+		r.updateBufferRocks(&r.BaseColorBuffers[k], cursorX, cursorY, diceCenters)
 	}
 
-	// PASS 1: BROAD PHASE - Update all rocks and collect collision candidates
-	for k, rockBuffer := range r.HeldRockBuffers {
-		rockBuffer.FrameCounter++
-		for i := range rockBuffer.Rocks {
-			rock := &rockBuffer.Rocks[i]
-			rock.Update(rockBuffer.FrameCounter)
+	// Update held color buffers
+	for _, buffer := range r.HeldColorBuffers {
+		r.updateBufferRocks(buffer, cursorX, cursorY, diceCenters)
+	}
 
-			rockSize := rock.GetSize(r.RockTileSize)
-
-			// Wall bouncing
-			if rock.Position.X+rockSize >= GAME_BOUNDS_X {
-				rock.Position.X = GAME_BOUNDS_X - rockSize
-				rock.BounceX()
-			} else if rock.Position.X <= 0 {
-				rock.Position.X = 0
-				rock.BounceX()
-			}
-
-			if rock.Position.Y+rockSize >= GAME_BOUNDS_Y {
-				rock.Position.Y = GAME_BOUNDS_Y - rockSize
-				rock.BounceY()
-			} else if rock.Position.Y <= 0 {
-				rock.Position.Y = 0
-				rock.BounceY()
-			}
-
-			// BROAD PHASE: Collect rocks near cursor
-			if rock.IsNearPoint(rockSize, cursorX, cursorY, r.CursorCheckRadius) {
-				r.cursorCollisionBuffer = append(r.cursorCollisionBuffer, rock)
-			}
-
-			// BROAD PHASE: Collect rocks near any die center
-			for i := range diceCenters {
-				if rock.IsNearPoint(rockSize, diceCenters[i].X, diceCenters[i].Y, r.DieCheckRadius) {
-					r.diceCollisionBuffer = append(r.diceCollisionBuffer, rock)
-					break // Only add once even if near multiple dice
-				}
-			}
-		}
-		r.HeldRockBuffers[k] = rockBuffer
+	// Update transition buffers
+	for _, buffer := range r.TransitionBuffers {
+		r.updateBufferRocks(buffer, cursorX, cursorY, diceCenters)
 	}
 
 	// PASS 2: NARROW PHASE - Precise collision checks and responses
 	r.handleCursorCollisions(cursorX, cursorY)
 	r.handleDieCollisions(diceCenters)
+
+	// Update all buffer transitions and move completed transition buffers to base buffers
+	r.updateAllBufferTransitions()
+}
+
+// colorMatch checks if two colors are approximately equal
+func colorMatch(a, b Vec3) bool {
+	const epsilon = 0.01
+	return abs(a.X-b.X) < epsilon &&
+		abs(a.Y-b.Y) < epsilon &&
+		abs(a.Z-b.Z) < epsilon
+}
+
+func abs(x float32) float32 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 // handleCursorCollisions processes cursor-rock collision responses
@@ -1120,23 +1169,21 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []Vec3) {
 		// Corner case (xOverlap == yOverlap) defaults to Y-axis
 		if xOverlap < yOverlap {
 			// HORIZONTAL collision (rock hit left or right side of die)
+			// Reverse rock's X direction and add die's speed boost
+			absSlope := rock.SlopeX
+			if absSlope < 0 {
+				absSlope = -absSlope
+			}
+
 			if rockCenterX > dieCenter.X {
 				// Rock hit RIGHT side of die - push rock right
 				rock.Position.X = dieRight + 1
 				// Bounce right with speed boost (positive direction)
-				absSlope := rock.SlopeX
-				if absSlope < 0 {
-					absSlope = -absSlope
-				}
 				newSlopeX = absSlope + speedBoost
 			} else {
 				// Rock hit LEFT side of die - push rock left
 				rock.Position.X = dieLeft - rockSize - 1
 				// Bounce left with speed boost (negative direction)
-				absSlope := rock.SlopeX
-				if absSlope < 0 {
-					absSlope = -absSlope
-				}
 				newSlopeX = -(absSlope + speedBoost)
 			}
 			// Y axis unchanged - rock continues its Y trajectory
@@ -1144,23 +1191,21 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []Vec3) {
 
 		} else {
 			// VERTICAL collision (rock hit top or bottom side of die)
+			// Reverse rock's Y direction and add die's speed boost
+			absSlope := rock.SlopeY
+			if absSlope < 0 {
+				absSlope = -absSlope
+			}
+
 			if rockCenterY > dieCenter.Y {
 				// Rock hit BOTTOM side of die - push rock down
 				rock.Position.Y = dieBottom + 1
 				// Bounce down with speed boost (positive direction)
-				absSlope := rock.SlopeY
-				if absSlope < 0 {
-					absSlope = -absSlope
-				}
 				newSlopeY = absSlope + speedBoost
 			} else {
 				// Rock hit TOP side of die - push rock up
 				rock.Position.Y = dieTop - rockSize - 1
 				// Bounce up with speed boost (negative direction)
-				absSlope := rock.SlopeY
-				if absSlope < 0 {
-					absSlope = -absSlope
-				}
 				newSlopeY = -(absSlope + speedBoost)
 			}
 			// X axis unchanged - rock continues its X trajectory
@@ -1208,51 +1253,237 @@ func CalculateRockTileSize(baseTileSize float32, rockAmount int) float32 {
 	return baseTileSize * scaleFactor
 }
 
-func (r *RocksRenderer) SelectRocksColor(color Vec3, dieIdentity DieIdentity, numDie int) {
-	// var numRocksAvail int
-	// for _, buffer := range r.RockBuffers {
-	// 	numRocksAvail += len(buffer.Rocks)
-	// }
-	// for _, buffer := range r.HeldRockBuffers {
-	// 	numRocksAvail += len(buffer.Rocks)
-	// }
-	// rockNeedRatio := len(r.config.BaseColors) + numDie
-	// rocksNeeded := numRocksAvail / rockNeedRatio
-	// rocksPerBuffer := rocksNeeded / len(r.RockBuffers)
-
-	rocksPerBuffer := 10
-
-	// fmt.Printf("%2d rockNeedRatio\n%2d rocksNeeded\n%2d rocksPerBuffer\n", rockNeedRatio, rocksNeeded, rocksPerBuffer)
-
-	heldBuffer := RockBuffer{
-		Rocks:           make([]SimpleRock, 0),
-		TransitionColor: Grey,
-		Color:           color,
+// countAvailableRocks returns total rocks in base color buffers
+func (r *RocksRenderer) countAvailableRocks() int {
+	total := 0
+	for i := 0; i < len(r.config.BaseColors); i++ {
+		if i < len(r.BaseColorBuffers) {
+			total += len(r.BaseColorBuffers[i].Rocks)
+		}
 	}
-
-	for i := range r.RockBuffers {
-		buffer := &r.RockBuffers[i]
-		fmt.Printf("Currently have %d rocks in buffer we're taking from\n", len(buffer.Rocks))
-		heldBuffer.Rocks = append(
-			r.HeldRockBuffers[dieIdentity].Rocks,
-			buffer.Rocks[0:rocksPerBuffer]...,
-		)
-		fmt.Printf("This held buffer now has %d rocks\n", len(heldBuffer.Rocks))
-		buffer.Rocks = buffer.Rocks[rocksPerBuffer:]
-		fmt.Printf("The buffer we took from now has %d rocks\n\n", len(buffer.Rocks))
-	}
-
-	r.HeldRockBuffers[dieIdentity] = heldBuffer
+	return total
 }
 
-func (r *RocksRenderer) DeselectRocksColor(color Vec3, dieIdentity DieIdentity, numDie int) {
-	buffer := r.HeldRockBuffers[dieIdentity]
-	buffer.TransitionColor = buffer.Color
-	buffer.Color = color
+// takeRocksFromTransitionBuffers takes rocks from transition buffers when base buffers depleted
+// Prioritizes buffers with lowest Transition value (closest to completion)
+func (r *RocksRenderer) takeRocksFromTransitionBuffers(needed int) []SimpleRock {
+	if len(r.TransitionBuffers) == 0 || needed <= 0 {
+		return []SimpleRock{}
+	}
 
-	// rocks_ToDisperse
-	//TODO:FIXME: just get a better overall idea for this. this hwole thing sucks and is hard to reason with
+	// Sort transition buffers by Transition value (ascending - lowest first)
+	slices.SortFunc(r.TransitionBuffers, func(a, b *RockBuffer) int {
+		return a.Transition - b.Transition
+	})
 
-	r.RockBuffers = append(r.RockBuffers, buffer)
-	delete(r.HeldRockBuffers, dieIdentity)
+	// Take rocks from sorted buffers
+	collected := make([]SimpleRock, 0, needed)
+	for _, buf := range r.TransitionBuffers {
+		if needed <= 0 {
+			break
+		}
+
+		takeCount := needed
+		if takeCount > len(buf.Rocks) {
+			takeCount = len(buf.Rocks)
+		}
+
+		collected = append(collected, buf.Rocks[:takeCount]...)
+		buf.Rocks = buf.Rocks[takeCount:]
+		needed -= takeCount
+	}
+
+	// Clean up empty transition buffers
+	r.cleanEmptyTransitionBuffers()
+
+	return collected
+}
+
+// cleanEmptyTransitionBuffers removes transition buffers with no rocks
+func (r *RocksRenderer) cleanEmptyTransitionBuffers() {
+	filtered := make([]*RockBuffer, 0, len(r.TransitionBuffers))
+	for _, buf := range r.TransitionBuffers {
+		if len(buf.Rocks) > 0 {
+			filtered = append(filtered, buf)
+		}
+	}
+	r.TransitionBuffers = filtered
+}
+
+// countTransitionRocks returns total rocks in transition buffers
+func (r *RocksRenderer) countTransitionRocks() int {
+	total := 0
+	for _, buf := range r.TransitionBuffers {
+		total += len(buf.Rocks)
+	}
+	return total
+}
+
+func (r *RocksRenderer) SelectRocksColor(color Vec3, dieIdentity DieIdentity, numDice int) {
+	// Calculate how many dice are NOT currently holding rocks
+	numDiceNotHolding := numDice - len(r.HeldColorBuffers)
+	if numDiceNotHolding <= 0 {
+		return // All dice already holding rocks, nothing to do
+	}
+
+	// Calculate rocks needed - divide by dice that don't have rocks yet
+	availableInBase := r.countAvailableRocks()
+	rocksToTake := availableInBase / numDiceNotHolding
+
+	if rocksToTake <= 0 {
+		// Try taking from transition buffers if base is empty
+		rocksToTake = r.countTransitionRocks() / numDiceNotHolding
+		if rocksToTake <= 0 {
+			return // No rocks available at all
+		}
+	}
+
+	// Collect rocks evenly from base color buffers
+	numBaseBuffers := len(r.config.BaseColors)
+	if numBaseBuffers == 0 {
+		return // Safety check
+	}
+
+	rocksPerBuffer := rocksToTake / numBaseBuffers
+	remainder := rocksToTake % numBaseBuffers
+
+	collectedRocks := make([]SimpleRock, 0, rocksToTake)
+
+	// Track how many rocks taken from each base buffer for random transition color
+	rockCounts := make([]int, numBaseBuffers)
+
+	for i := 0; i < numBaseBuffers && i < len(r.BaseColorBuffers); i++ {
+		buffer := &r.BaseColorBuffers[i]
+
+		// Calculate how many to take from this buffer
+		numToTake := rocksPerBuffer
+		if i < remainder {
+			numToTake++ // Distribute remainder rocks
+		}
+
+		// Take what's available
+		actualTake := numToTake
+		if actualTake > len(buffer.Rocks) {
+			actualTake = len(buffer.Rocks)
+		}
+
+		if actualTake > 0 {
+			collectedRocks = append(collectedRocks, buffer.Rocks[:actualTake]...)
+			buffer.Rocks = buffer.Rocks[actualTake:]
+			rockCounts[i] = actualTake
+			numToTake -= actualTake
+		}
+
+		// If base buffer was insufficient, try transition buffers
+		if numToTake > 0 {
+			fromTransition := r.takeRocksFromTransitionBuffers(numToTake)
+			collectedRocks = append(collectedRocks, fromTransition...)
+		}
+	}
+
+	if len(collectedRocks) == 0 {
+		return // No rocks collected
+	}
+
+	// Random transition color from base colors, weighted by how many rocks taken
+	transitionColor := r.config.BaseColors[0] // Default to first base color
+	if len(r.config.BaseColors) > 1 {
+		// Build weighted list of colors
+		totalTaken := 0
+		for _, count := range rockCounts {
+			totalTaken += count
+		}
+
+		if totalTaken > 0 {
+			// Pick random rock index
+			randomIdx := rand.Intn(totalTaken)
+
+			// Find which buffer this rock came from
+			cumulative := 0
+			for i, count := range rockCounts {
+				cumulative += count
+				if randomIdx < cumulative {
+					transitionColor = r.config.BaseColors[i]
+					break
+				}
+			}
+		}
+	}
+
+	// Create held buffer
+	heldBuffer := &RockBuffer{
+		Rocks:           collectedRocks,
+		Color:           color,           // Die color (target)
+		TransitionColor: transitionColor, // Random base color
+		Transition:      r.config.ColorTransitionFrames,
+		FrameCounter:    0,
+	}
+
+	r.HeldColorBuffers[dieIdentity] = heldBuffer
+}
+
+func (r *RocksRenderer) Explode(num int, identity DieIdentity) {
+	// get num rocks
+}
+
+func (r *RocksRenderer) DeselectAll() {
+	for identity := range r.HeldColorBuffers {
+		r.DeselectRocks(identity)
+	}
+}
+
+func (r *RocksRenderer) DeselectRocks(dieIdentity DieIdentity) {
+	// Get held buffer
+	heldBuffer, exists := r.HeldColorBuffers[dieIdentity]
+	if !exists || len(heldBuffer.Rocks) == 0 {
+		return
+	}
+
+	numRocks := len(heldBuffer.Rocks)
+	numBaseBuffers := len(r.config.BaseColors)
+
+	if numBaseBuffers == 0 {
+		// Safety: no base buffers, can't return rocks
+		delete(r.HeldColorBuffers, dieIdentity)
+		return
+	}
+
+	// Calculate distribution across all base buffers
+	rocksPerBuffer := numRocks / numBaseBuffers
+	remainder := numRocks % numBaseBuffers
+
+	offset := 0
+
+	// Create one transition buffer per base color buffer
+	for i := 0; i < numBaseBuffers; i++ {
+		// Calculate how many rocks go to this buffer
+		numToReturn := rocksPerBuffer
+		if i < remainder {
+			numToReturn++ // Distribute remainder
+		}
+
+		if numToReturn == 0 {
+			continue // Skip if no rocks for this buffer
+		}
+
+		endIdx := offset + numToReturn
+		if endIdx > numRocks {
+			endIdx = numRocks // Safety clamp
+		}
+
+		// Create transition buffer for this portion
+		transitionBuffer := &RockBuffer{
+			Rocks:           append([]SimpleRock{}, heldBuffer.Rocks[offset:endIdx]...),
+			Color:           r.BaseColorBuffers[i].Color, // Target: this base color
+			TransitionColor: heldBuffer.Color,            // Source: die color
+			Transition:      r.config.ColorTransitionFrames,
+			FrameCounter:    0,
+		}
+
+		r.TransitionBuffers = append(r.TransitionBuffers, transitionBuffer)
+		offset = endIdx
+	}
+
+	// Remove held buffer
+	delete(r.HeldColorBuffers, dieIdentity)
 }

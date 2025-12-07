@@ -83,6 +83,15 @@ func (v Vec3) KageVec3() []float32 {
 	return []float32{v.X, v.Y, v.Z}
 }
 
+// Lerp linearly interpolates between two Vec3 colors
+func (v Vec3) Lerp(target Vec3, t float32) Vec3 {
+	return Vec3{
+		X: v.X + (target.X-v.X)*t,
+		Y: v.Y + (target.Y-v.Y)*t,
+		Z: v.Z + (target.Z-v.Z)*t,
+	}
+}
+
 // Returns a Vec2 representation of itself for a Kage uniform
 func (v Vec2) KageVec2() []float32 {
 	return []float32{float32(v.X), float32(v.Y)}
@@ -123,4 +132,64 @@ func (s *SpriteSheet) Rect(index int) image.Rectangle {
 	return image.Rect(
 		x, y, x+s.TileSize, y+s.TileSize,
 	)
+}
+
+// ImagePool manages a pool of reusable temporary images for rendering
+// Images are lazily allocated and automatically cleared when retrieved
+type ImagePool struct {
+	images [](*ebiten.Image)
+	index  int
+	width  int
+	height int
+}
+
+// NewImagePool creates a new empty image pool with the specified dimensions
+func NewImagePool(width, height int) *ImagePool {
+	return &ImagePool{
+		images: make([]*ebiten.Image, 0),
+		index:  0,
+		width:  width,
+		height: height,
+	}
+}
+
+// GetNext returns the next available image from the pool
+// Lazily allocates a new image if the pool is exhausted
+// The returned image is automatically cleared and ready to use
+func (p *ImagePool) GetNext() *ebiten.Image {
+	// Grow pool if needed
+	if p.index >= len(p.images) {
+		img := ebiten.NewImage(p.width, p.height)
+		p.images = append(p.images, img)
+	}
+
+	// Get image and increment counter
+	img := p.images[p.index]
+	p.index++
+
+	// Clear to ensure clean state
+	img.Clear()
+
+	return img
+}
+
+// Reset resets the pool index to 0 for the next frame
+// Call this at the start of each frame before using the pool
+func (p *ImagePool) Reset() {
+	p.index = 0
+}
+
+// Clear clears all images in the pool and resets the index to 0
+// This is more thorough than Reset() - use when you need to ensure
+// all images are in a clean state (e.g., after major state changes)
+func (p *ImagePool) Clear() {
+	for _, img := range p.images {
+		img.Clear()
+	}
+	p.index = 0
+}
+
+// Len returns the current size of the pool (number of allocated images)
+func (p *ImagePool) Len() int {
+	return len(p.images)
 }

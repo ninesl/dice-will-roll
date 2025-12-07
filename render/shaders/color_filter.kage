@@ -5,10 +5,16 @@
 package shaders
 
 // Color filter shader - applies color tint to grayscale sprites
-// Takes non-transparent pixels and multiplies by a Vec3 color
+// with support for smooth color transitions
 var (
-	// Color tint to apply (0.0-1.0 range for each channel)
-	TintColor vec3
+	// Starting color (0.0-1.0 range for each channel)
+	ColorFrom vec3
+	
+	// Target transition color (0.0-1.0 range for each channel)
+	ColorTo vec3
+	
+	// Transition amount: 0.0 = use ColorFrom only, 1.0 = fully ColorTo
+	TransitionAmount float
 )
 
 func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
@@ -23,9 +29,15 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	// Calculate grayscale intensity from source (average of RGB)
 	intensity := (srcColor.r + srcColor.g + srcColor.b) / 3.0
 	
+	// Calculate current color using mix (GLSL's built-in lerp)
+	// If TransitionAmount is 0, uses ColorFrom
+	// If TransitionAmount is 1, uses ColorTo
+	// Values in between smoothly interpolate
+	currentColor := mix(ColorFrom, ColorTo, TransitionAmount)
+	
 	// Apply color tint while preserving the grayscale intensity
 	// This maintains the lighting/shadow information from the base sprite
-	tintedColor := TintColor * intensity
+	tintedColor := currentColor * intensity
 	
 	// Return colored pixel with original alpha
 	return vec4(tintedColor.r, tintedColor.g, tintedColor.b, srcColor.a)

@@ -225,7 +225,7 @@ func (g *Game) Select() {
 			g.ResetHoldPoint()
 			die.Mode = ROLLING
 
-			g.RocksRenderer.DeselectRocksColor(render.Grey, die.Identifier, len(g.Dice))
+			g.RocksRenderer.DeselectRocks(die.Identifier)
 
 			//TODO:FIXME: when a rock is click and dragged it keeps rolling. it isn't in held dice anymore but it's still spinning
 			// likely needs a check when held or stm

@@ -20,6 +20,12 @@ notes
 			when garnet breaks (based off toughness) it will do a cool animation falling off
 
 		mine gems, determine which ones to sell/keep, use money to modify and buy things from rolland
+
+	leaderboard/high score (show the dice used for each, player can hover and be nostalgic)
+		lowest depth
+		lowest 4 depths (same run)
+		most rocks destroyed in a run
+		most rocks destroyed in one hand
 		
 LOOP
 	// keeping rolling and picking hands

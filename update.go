@@ -93,7 +93,7 @@ func (g *Game) UpdateDice() {
 	render.HandleDiceCollisions(moving)
 	render.BounceAndClamp(rolling)
 
-	g.ActiveLevel.HandleScoring(scoringDice)
+	g.ActiveLevel.HandleScoring(scoringDice, g.RocksRenderer)
 
 	// Populate dice data buffer after all dice physics are resolved
 	// X=centerX, Y=centerY, Z=speed (velocity magnitude / BaseVelocity for slope compatibility)
