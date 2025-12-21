@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -96,15 +95,13 @@ func (g *Game) UpdateDice() {
 	g.ActiveLevel.HandleScoring(scoringDice, g.RocksRenderer)
 
 	// Populate dice data buffer after all dice physics are resolved
-	// X=centerX, Y=centerY, Z=speed (velocity magnitude / BaseVelocity for slope compatibility)
+	// X=centerX, Y=centerY, Z=unused (reserved for future use)
 	g.diceDataBuffer = g.diceDataBuffer[:0]
 	for _, d := range g.Dice {
-		// Compute speed as average of absolute velocities, scaled to slope range
-		speed := (float32(math.Abs(float64(d.Velocity.X))) + float32(math.Abs(float64(d.Velocity.Y)))) / (2 * render.BaseVelocity)
 		g.diceDataBuffer = append(g.diceDataBuffer, render.Vec3{
 			X: d.Vec2.X + render.HalfDieTileSize,
 			Y: d.Vec2.Y + render.HalfDieTileSize,
-			Z: speed,
+			Z: 0, // Reserved for future use (previously was speed)
 		})
 	}
 }

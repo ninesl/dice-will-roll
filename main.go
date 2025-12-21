@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"log"
 	"time"
@@ -29,6 +30,11 @@ var (
 	ClickTime = time.Millisecond * 250
 
 	NUM_PLAYER_DICE int = 7
+)
+
+// Command-line flags
+var (
+	numRocks = flag.Int("rocks", 10000, "Number of rocks to generate")
 )
 
 func init() {
@@ -109,8 +115,7 @@ func LoadGame() *Game {
 
 	dice := SetupPlayerDice()
 
-	rockAmount := 10000
-
+	rockAmount := *numRocks
 	// Initialize rocks renderer with hybrid real-time 3D SDF system
 	rocksConfig := render.RocksConfig{
 		TotalRocks: rockAmount,
@@ -167,6 +172,9 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 }
 
 func main() {
+	// Parse command-line flags
+	flag.Parse()
+
 	ebiten.SetWindowSize(ResolutionX, ResolutionY)
 	ebiten.SetWindowTitle("Dice Will Roll")
 

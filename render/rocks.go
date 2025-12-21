@@ -317,11 +317,28 @@ func calculateShortestPath(current, target int8) (distance uint8) {
 // Updates the rock based on the current target transitions.
 //
 // will update it's state based on other params every Tick/time this is called
-func (r *SimpleRock) Update(frameCounter int) {
+// shouldSlowDown: if true, rock gradually slows down over time (for base/transition buffers)
+func (r *SimpleRock) Update(frameCounter int, shouldSlowDown bool) {
 	r.Position.Y += BaseVelocity * float32(r.SlopeY)
 	r.Position.X += BaseVelocity * float32(r.SlopeX)
 
 	r.UpdateTransition(frameCounter)
+
+	// Apply slowdown effect if enabled (base and transition buffers only)
+	if shouldSlowDown && frameCounter%15 == 0 { // Slow down every 15 frames (~0.25 seconds at 60fps)
+		// Gradually reduce slope toward zero
+		if r.SlopeX > 0 {
+			r.SlopeX--
+		} else if r.SlopeX < 0 {
+			r.SlopeX++
+		}
+
+		if r.SlopeY > 0 {
+			r.SlopeY--
+		} else if r.SlopeY < 0 {
+			r.SlopeY++
+		}
+	}
 }
 
 // if newY or newX is IDENTICAL to the the current value in the struct
@@ -396,6 +413,7 @@ func (r *SimpleRock) BounceY() {
 	r.setTransitionSteps(tumbleX, distY)
 }
 
+// TODO: need to have static rocks update rockTransition vs the sprite index
 // UpdateTransition handles the smooth sprite rotation during direction changes
 // Now includes full rotation on each bounce
 func (r *SimpleRock) UpdateTransition(frameCounter int) {
@@ -404,18 +422,35 @@ func (r *SimpleRock) UpdateTransition(frameCounter int) {
 		// Increment or decrement sprite index based on horizontal direction
 		// Moving right (positive SlopeX): increment (rotate clockwise)
 		// Moving left (negative SlopeX): decrement (rotate counter-clockwise)
-		if r.SlopeX >= 0 {
-			if r.SpriteIndex == 0 {
-				r.SpriteIndex = ROTATION_FRAMES - 1
+		if r.SlopeX != 0 && r.SlopeY != 0 {
+			if r.SlopeX >= 0 {
+				if r.SpriteIndex == 0 {
+					r.SpriteIndex = ROTATION_FRAMES - 1
+				} else {
+					r.SpriteIndex--
+				}
 			} else {
-				r.SpriteIndex--
-			}
-		} else {
-			r.SpriteIndex++
-			if r.SpriteIndex >= ROTATION_FRAMES {
-				r.SpriteIndex = 0
+				r.SpriteIndex++
+				if r.SpriteIndex >= ROTATION_FRAMES {
+					r.SpriteIndex = 0
+				}
 			}
 		}
+		//  else {
+		// Stationary rocks: cycle through transition slopes for visual variety
+		// r.SpriteSlopeX++
+		// if r.SpriteSlopeX >= DIRECTIONS_TO_SNAP {
+		// r.SpriteSlopeX = 0
+		// r.SpriteSlopeY++
+		// if r.SpriteSlopeY >= DIRECTIONS_TO_SNAP {
+		// r.SpriteSlopeY = 0
+		// }
+		// }
+		// }
+	}
+
+	if r.SlopeX == 0 && r.SlopeY == 0 {
+		return
 	}
 
 	// Update SpriteSlopeX/Y based on SPEED (for smooth transitions during bounces)
@@ -446,9 +481,15 @@ func (r *SimpleRock) UpdateTransition(frameCounter int) {
 		return
 	}
 
-	// Update X component with transition counter
+	// If rock is completely stopped, don't update sprite slopes
+	// Keep SpriteSlopeX/Y frozen at current values
+	if r.SlopeX == 0 && r.SlopeY == 0 {
+		return
+	}
+
+	// Always update sprite slopes by +1 (transitions always increment)
+	// X component
 	if r.getTransitionStepsX() > 0 {
-		// Always increment for smooth continuous rotation
 		r.SpriteSlopeX++
 		if r.SpriteSlopeX >= DIRECTIONS_TO_SNAP {
 			r.SpriteSlopeX = 0
@@ -456,9 +497,8 @@ func (r *SimpleRock) UpdateTransition(frameCounter int) {
 		r.decrementTransitionStepX()
 	}
 
-	// Update Y component with transition counter
+	// Y component
 	if r.getTransitionStepsY() > 0 {
-		// Always increment for smooth continuous rotation
 		r.SpriteSlopeY++
 		if r.SpriteSlopeY >= DIRECTIONS_TO_SNAP {
 			r.SpriteSlopeY = 0
@@ -565,10 +605,11 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 		colorShader:  shaderMap[shaders.ColorFilterShaderKey],
 		RockTileSize: config.RockTileSize,
 		totalRocks:   config.TotalRocks,
-		// Initialize collision check radii based on RockTileSize
+		// Initialize collision check radii - TIGHT buffers to reduce expensive collision calculations
+		// Accepts that some edge-case collisions at buffer boundaries may be missed
 
-		CursorCheckRadius: config.RockTileSize,
-		DieCheckRadius:    config.RockTileSize,
+		CursorCheckRadius: config.RockTileSize * 0.6, // Reduced from 1.0x to 0.6x
+		DieCheckRadius:    config.RockTileSize * 0.8, // Reduced from 1.0x to 0.8x
 		// Pre-allocate collision buffers with typical capacity to avoid allocations
 		// Capacity based on typical collision counts: ~50 dice collisions, ~20 cursor collisions
 		diceCollisionBuffer:   make([]*SimpleRock, 0, 128),
@@ -738,12 +779,14 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 		}
 
 		rock := SimpleRock{
-			Position:     pos,
-			SpriteIndex:  spriteIndex,
-			SlopeX:       slopeX,
-			SlopeY:       slopeY,
-			SpriteSlopeX: spriteSlopeX,
-			SpriteSlopeY: spriteSlopeY,
+			Position:    pos,
+			SpriteIndex: spriteIndex,
+			// SlopeX:       slopeX,
+			// SlopeY:       slopeY,
+			SlopeX:       0,
+			SlopeY:       0,
+			SpriteSlopeX: 0,
+			SpriteSlopeY: 0,
 			Score:        scoreType,
 		}
 
@@ -897,12 +940,13 @@ func (r *RocksRenderer) updateBufferRocks(
 	buffer *RockBuffer,
 	cursorX, cursorY float32,
 	diceCenters []Vec3,
+	shouldSlowDown bool,
 ) {
 	buffer.FrameCounter++
 
 	for i := range buffer.Rocks {
 		rock := &buffer.Rocks[i]
-		rock.Update(buffer.FrameCounter)
+		rock.Update(buffer.FrameCounter, shouldSlowDown)
 
 		rockSize := rock.GetSize(r.RockTileSize)
 
@@ -993,19 +1037,19 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCent
 
 	// PASS 1: BROAD PHASE - Update all rocks and collect collision candidates
 
-	// Update base color buffers
+	// Update base color buffers (with slowdown)
 	for k := range r.BaseColorBuffers {
-		r.updateBufferRocks(&r.BaseColorBuffers[k], cursorX, cursorY, diceCenters)
+		r.updateBufferRocks(&r.BaseColorBuffers[k], cursorX, cursorY, diceCenters, true)
 	}
 
-	// Update held color buffers
+	// Update held color buffers (no slowdown - maintain speed while held)
 	for _, buffer := range r.HeldColorBuffers {
-		r.updateBufferRocks(buffer, cursorX, cursorY, diceCenters)
+		r.updateBufferRocks(buffer, cursorX, cursorY, diceCenters, false)
 	}
 
-	// Update transition buffers
+	// Update transition buffers (with slowdown)
 	for _, buffer := range r.TransitionBuffers {
-		r.updateBufferRocks(buffer, cursorX, cursorY, diceCenters)
+		r.updateBufferRocks(buffer, cursorX, cursorY, diceCenters, true)
 	}
 
 	// PASS 2: NARROW PHASE - Precise collision checks and responses
@@ -1085,7 +1129,6 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []Vec3) {
 		// This prevents rocks from getting stuck between multiple dice
 		var maxOverlap float32 = -1
 		var bestDieIndex int = -1
-		var bestXOverlap, bestYOverlap float32
 		var bestDieCenter Vec3
 
 		// PASS 1: Find die with deepest penetration
@@ -1136,8 +1179,6 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []Vec3) {
 			if totalOverlap > maxOverlap {
 				maxOverlap = totalOverlap
 				bestDieIndex = dieIdx
-				bestXOverlap = xOverlap
-				bestYOverlap = yOverlap
 				bestDieCenter = dieCenter
 			}
 		}
@@ -1149,8 +1190,6 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []Vec3) {
 
 		// PASS 2: Process collision with the die that has deepest penetration
 		dieCenter := bestDieCenter
-		xOverlap := bestXOverlap
-		yOverlap := bestYOverlap
 
 		// Calculate die bounds for position correction
 		dieLeft := dieCenter.X - HalfEffectiveDie
@@ -1158,75 +1197,101 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []Vec3) {
 		dieTop := dieCenter.Y - HalfEffectiveDie
 		dieBottom := dieCenter.Y + HalfEffectiveDie
 
-		// Prepare speed boost and rock center
-		speedBoost := int8(math.Round(float64(dieCenter.Z)))
+		// Calculate rock center
 		rockCenterX := rock.Position.X + rockSize/2
 		rockCenterY := rock.Position.Y + rockSize/2
 
-		var newSlopeX, newSlopeY int8
+		// Calculate collision vector (from die center to rock center)
+		// This is the direction the rock should bounce
+		dx := rockCenterX - dieCenter.X
+		dy := rockCenterY - dieCenter.Y
 
-		// Determine primary collision axis (lesser overlap = collision direction)
-		// Corner case (xOverlap == yOverlap) defaults to Y-axis
-		if xOverlap < yOverlap {
-			// HORIZONTAL collision (rock hit left or right side of die)
-			// Reverse rock's X direction and add die's speed boost
-			absSlope := rock.SlopeX
-			if absSlope < 0 {
-				absSlope = -absSlope
-			}
+		// Calculate bounce angle using atan2 (result in radians)
+		bounceAngleRad := math.Atan2(float64(dy), float64(dx))
+		bounceAngleDeg := bounceAngleRad * 180.0 / math.Pi
 
-			if rockCenterX > dieCenter.X {
-				// Rock hit RIGHT side of die - push rock right
-				rock.Position.X = dieRight + 1
-				// Bounce right with speed boost (positive direction)
-				newSlopeX = absSlope + speedBoost
+		// Normalize to 0-360 range
+		if bounceAngleDeg < 0 {
+			bounceAngleDeg += 360
+		}
+
+		// Calculate size-based speed boost (smaller rocks = faster)
+		var sizeBoost int8
+		switch rock.Score.GetScore() {
+		case SmallScore: // 1 - smallest rocks
+			sizeBoost = 4
+		case MediumScore: // 3 - medium rocks
+			sizeBoost = 3
+		case BigScore: // 5 - big rocks
+			sizeBoost = 2
+		case HugeScore: // 10 - huge rocks
+			sizeBoost = 1
+		default:
+			sizeBoost = 1
+		}
+
+		// Use BounceTowardsAngle to set rock direction based on collision vector
+		rock.BounceTowardsAngle(int(bounceAngleDeg))
+
+		// Add perturbation to prevent infinite bouncing loops
+		// If one slope is 0, add ±1 to break symmetry
+		if rock.SlopeX == 0 && rock.SlopeY != 0 {
+			// Vertical bounce - add small horizontal component
+			if bounceAngleDeg < 180 {
+				rock.SlopeX = 1
 			} else {
-				// Rock hit LEFT side of die - push rock left
-				rock.Position.X = dieLeft - rockSize - 1
-				// Bounce left with speed boost (negative direction)
-				newSlopeX = -(absSlope + speedBoost)
+				rock.SlopeX = -1
 			}
-			// Y axis unchanged - rock continues its Y trajectory
-			newSlopeY = rock.SlopeY
-
-		} else {
-			// VERTICAL collision (rock hit top or bottom side of die)
-			// Reverse rock's Y direction and add die's speed boost
-			absSlope := rock.SlopeY
-			if absSlope < 0 {
-				absSlope = -absSlope
-			}
-
-			if rockCenterY > dieCenter.Y {
-				// Rock hit BOTTOM side of die - push rock down
-				rock.Position.Y = dieBottom + 1
-				// Bounce down with speed boost (positive direction)
-				newSlopeY = absSlope + speedBoost
+		} else if rock.SlopeY == 0 && rock.SlopeX != 0 {
+			// Horizontal bounce - add small vertical component
+			if bounceAngleDeg < 90 || bounceAngleDeg >= 270 {
+				rock.SlopeY = 1
 			} else {
-				// Rock hit TOP side of die - push rock up
-				rock.Position.Y = dieTop - rockSize - 1
-				// Bounce up with speed boost (negative direction)
-				newSlopeY = -(absSlope + speedBoost)
+				rock.SlopeY = -1
 			}
-			// X axis unchanged - rock continues its X trajectory
-			newSlopeX = rock.SlopeX
+		}
+
+		// Apply size boost to the calculated slopes
+		if rock.SlopeX > 0 {
+			rock.SlopeX += sizeBoost
+		} else if rock.SlopeX < 0 {
+			rock.SlopeX -= sizeBoost
+		}
+
+		if rock.SlopeY > 0 {
+			rock.SlopeY += sizeBoost
+		} else if rock.SlopeY < 0 {
+			rock.SlopeY -= sizeBoost
 		}
 
 		// Clamp slopes to valid range [MIN_SLOPE, MAX_SLOPE]
-		if newSlopeX > MAX_SLOPE {
-			newSlopeX = MAX_SLOPE
-		} else if newSlopeX < MIN_SLOPE {
-			newSlopeX = MIN_SLOPE
+		if rock.SlopeX > MAX_SLOPE {
+			rock.SlopeX = MAX_SLOPE
+		} else if rock.SlopeX < MIN_SLOPE {
+			rock.SlopeX = MIN_SLOPE
 		}
 
-		if newSlopeY > MAX_SLOPE {
-			newSlopeY = MAX_SLOPE
-		} else if newSlopeY < MIN_SLOPE {
-			newSlopeY = MIN_SLOPE
+		if rock.SlopeY > MAX_SLOPE {
+			rock.SlopeY = MAX_SLOPE
+		} else if rock.SlopeY < MIN_SLOPE {
+			rock.SlopeY = MIN_SLOPE
 		}
 
-		// Apply bounce with new slopes
-		rock.Bounce(newSlopeX, newSlopeY)
+		// Position correction: push rock outside die bounds
+		// Determine which side to push based on angle
+		if bounceAngleDeg >= 315 || bounceAngleDeg < 45 {
+			// Push right
+			rock.Position.X = dieRight + 1
+		} else if bounceAngleDeg >= 45 && bounceAngleDeg < 135 {
+			// Push down
+			rock.Position.Y = dieBottom + 1
+		} else if bounceAngleDeg >= 135 && bounceAngleDeg < 225 {
+			// Push left
+			rock.Position.X = dieLeft - rockSize - 1
+		} else {
+			// Push up
+			rock.Position.Y = dieTop - rockSize - 1
+		}
 	}
 }
 
@@ -1383,6 +1448,22 @@ func (r *RocksRenderer) SelectRocksColor(color Vec3, dieIdentity DieIdentity, nu
 
 	if len(collectedRocks) == 0 {
 		return // No rocks collected
+	}
+
+	// Give each collected rock movement/bounce based on index
+	for i := range collectedRocks {
+		rock := &collectedRocks[i]
+
+		// Convert SpriteSlopeX/Y (0..7) back to SlopeX/Y (-4..+4)
+		rock.SlopeX = rock.SpriteSlopeX + MIN_SLOPE
+		rock.SlopeY = rock.SpriteSlopeY + MIN_SLOPE
+
+		// Use index to determine bounce direction (much faster than random)
+		if i%2 == 0 {
+			rock.BounceY()
+		} else {
+			rock.BounceX()
+		}
 	}
 
 	// Random transition color from base colors, weighted by how many rocks taken
