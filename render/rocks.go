@@ -27,6 +27,11 @@ const (
 	// Higher value = finer mixing, more draw calls but better visual interleaving
 	// Lower value = coarser mixing, fewer draw calls but more color clumping
 	NUM_INTERLEAVE_LAYERS = 2
+
+	// Rock physics constants
+	MIN_SEPARATION           = 5 // Distance to push rocks away from dice after collision
+	ROCK_JITTER              = 2
+	ROCK_DAMPING_FRAME_CYCLE = 20 // How often rocks slow down (every N frames)
 )
 
 // Spritesheet layout variables - dynamically calculated from ROTATION_FRAMES
@@ -73,25 +78,21 @@ const (
 	SmallLargeSize  = 0.25
 	SmallMediumSize = 0.22
 	SmallTinySize   = 0.20
-	SmallMinSize    = SmallTinySize // For collision detection
 
 	// Medium rock size multipliers
 	MediumLargeSize  = 0.50
 	MediumMediumSize = 0.45
 	MediumSmallSize  = 0.40
-	MediumMinSize    = MediumSmallSize // For collision detection
 
 	// Big rock size multipliers
 	BigLargeSize  = 0.80
 	BigMediumSize = 0.75
 	BigSmallSize  = 0.70
-	BigMinSize    = BigSmallSize // For collision detection
 
 	// Huge rock size multipliers
 	HugeLargeSize  = 1.20
 	HugeMediumSize = 1.10
 	HugeSmallSize  = 1.00
-	HugeMinSize    = HugeSmallSize // For collision detection
 )
 
 // The underlying Score that the rock counts for. Also track rock size/size multiplier and animation rate
@@ -172,23 +173,6 @@ func (rst RockScoreType) SizeMultiplier() float32 {
 	case HugeSmall:
 		return HugeSmallSize
 
-	default:
-		return 1.0
-	}
-}
-
-// GetMinSizeForCategory returns the smallest size variant for collision detection
-// This allows using a single hitbox size per category for simplified collision
-func (rst RockScoreType) GetMinSizeForCategory() float32 {
-	switch rst {
-	case SmallLarge, SmallMedium, SmallTiny:
-		return SmallMinSize
-	case MediumLarge, MediumMedium, MediumSmall:
-		return MediumMinSize
-	case BigLarge, BigMedium, BigSmall:
-		return BigMinSize
-	case HugeLarge, HugeMedium, HugeSmall:
-		return HugeMinSize
 	default:
 		return 1.0
 	}
@@ -317,15 +301,31 @@ func calculateShortestPath(current, target int8) (distance uint8) {
 // Updates the rock based on the current target transitions.
 //
 // will update it's state based on other params every Tick/time this is called
-// shouldSlowDown: if true, rock gradually slows down over time (for base/transition buffers)
-func (r *SimpleRock) Update(frameCounter int, shouldSlowDown bool) {
+// NOTE: Damping is NOT applied here - it happens after all collisions in ApplyDamping()
+func (r *SimpleRock) Update(frameCounter int) {
 	r.Position.Y += BaseVelocity * float32(r.SlopeY)
 	r.Position.X += BaseVelocity * float32(r.SlopeX)
 
 	r.UpdateTransition(frameCounter)
+}
 
-	// Apply slowdown effect if enabled (base and transition buffers only)
-	if shouldSlowDown && frameCounter%15 == 0 { // Slow down every 15 frames (~0.25 seconds at 60fps)
+// ApplyDamping gradually reduces rock velocity over time
+// This is called AFTER all collision handling to ensure bounces get full velocity
+// Damping rate varies by rock size: smaller rocks slow down faster
+func (r *SimpleRock) ApplyDamping(frameCounter int) {
+	// Skip if rock is already stopped
+	if r.SlopeX == 0 && r.SlopeY == 0 {
+		return
+	}
+
+	// Damping rate based on rock size (smaller rocks = faster damping)
+	// Small rocks: every 14 frames, Medium: 16, Big: 18, Huge: 20
+	dampingCycle := ROCK_DAMPING_FRAME_CYCLE - int(r.Score.GetScore())/2
+	// if dampingCycle < 10 {
+	// 	dampingCycle = 10 // Minimum cycle to prevent too-fast damping
+	// }
+
+	if frameCounter%dampingCycle == 0 {
 		// Gradually reduce slope toward zero
 		if r.SlopeX > 0 {
 			r.SlopeX--
@@ -940,13 +940,12 @@ func (r *RocksRenderer) updateBufferRocks(
 	buffer *RockBuffer,
 	cursorX, cursorY float32,
 	diceCenters []Vec3,
-	shouldSlowDown bool,
 ) {
 	buffer.FrameCounter++
 
 	for i := range buffer.Rocks {
 		rock := &buffer.Rocks[i]
-		rock.Update(buffer.FrameCounter, shouldSlowDown)
+		rock.Update(buffer.FrameCounter)
 
 		rockSize := rock.GetSize(r.RockTileSize)
 
@@ -1037,24 +1036,42 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCent
 
 	// PASS 1: BROAD PHASE - Update all rocks and collect collision candidates
 
-	// Update base color buffers (with slowdown)
+	// Update base color buffers
 	for k := range r.BaseColorBuffers {
-		r.updateBufferRocks(&r.BaseColorBuffers[k], cursorX, cursorY, diceCenters, true)
+		r.updateBufferRocks(&r.BaseColorBuffers[k], cursorX, cursorY, diceCenters)
 	}
 
-	// Update held color buffers (no slowdown - maintain speed while held)
+	// Update held color buffers
 	for _, buffer := range r.HeldColorBuffers {
-		r.updateBufferRocks(buffer, cursorX, cursorY, diceCenters, false)
+		r.updateBufferRocks(buffer, cursorX, cursorY, diceCenters)
 	}
 
-	// Update transition buffers (with slowdown)
+	// Update transition buffers
 	for _, buffer := range r.TransitionBuffers {
-		r.updateBufferRocks(buffer, cursorX, cursorY, diceCenters, true)
+		r.updateBufferRocks(buffer, cursorX, cursorY, diceCenters)
 	}
 
 	// PASS 2: NARROW PHASE - Precise collision checks and responses
 	r.handleCursorCollisions(cursorX, cursorY)
 	r.handleDieCollisions(diceCenters)
+
+	// PASS 3: DAMPING - Apply velocity reduction AFTER all collisions
+	// Base color buffers get damping
+	for k := range r.BaseColorBuffers {
+		buffer := &r.BaseColorBuffers[k]
+		for i := range buffer.Rocks {
+			buffer.Rocks[i].ApplyDamping(buffer.FrameCounter)
+		}
+	}
+
+	// Held color buffers DO NOT get damping (maintain speed while held by dice)
+
+	// Transition buffers get damping
+	for _, buffer := range r.TransitionBuffers {
+		for i := range buffer.Rocks {
+			buffer.Rocks[i].ApplyDamping(buffer.FrameCounter)
+		}
+	}
 
 	// Update all buffer transitions and move completed transition buffers to base buffers
 	r.updateAllBufferTransitions()
@@ -1066,13 +1083,6 @@ func colorMatch(a, b Vec3) bool {
 	return abs(a.X-b.X) < epsilon &&
 		abs(a.Y-b.Y) < epsilon &&
 		abs(a.Z-b.Z) < epsilon
-}
-
-func abs(x float32) float32 {
-	if x < 0 {
-		return -x
-	}
-	return x
 }
 
 // handleCursorCollisions processes cursor-rock collision responses
@@ -1087,6 +1097,10 @@ func (r *RocksRenderer) handleCursorCollisions(cursorX, cursorY float32) {
 			dx := cursorX - rockCenterX
 			dy := cursorY - rockCenterY
 
+			// Calculate position cells BEFORE movement (for distance-based rotation)
+			oldCellX := int(rock.Position.X / float32(DEGREES_PER_FRAME))
+			oldCellY := int(rock.Position.Y / float32(DEGREES_PER_FRAME))
+
 			// Push rock away from cursor on the primary collision axis
 			if math.Abs(float64(dx)) > math.Abs(float64(dy)) {
 				// Horizontal collision
@@ -1097,7 +1111,24 @@ func (r *RocksRenderer) handleCursorCollisions(cursorX, cursorY float32) {
 					// Cursor is on left side, push rock right
 					rock.Position.X = cursorX + 1
 				}
-				rock.BounceX()
+
+				// Only update sprite rotation if rock moved to a different cell
+				newCellX := int(rock.Position.X / float32(DEGREES_PER_FRAME))
+				if newCellX != oldCellX {
+					if dx > 0 {
+						if rock.SpriteSlopeX == 0 {
+							rock.SpriteSlopeX = MAX_SLOPE*2 - 1
+						} else {
+							rock.SpriteSlopeX--
+						}
+					} else {
+						if rock.SpriteSlopeX == MAX_SLOPE*2-1 {
+							rock.SpriteSlopeX = 0
+						} else {
+							rock.SpriteSlopeX++
+						}
+					}
+				}
 			} else {
 				// Vertical collision
 				if dy > 0 {
@@ -1107,7 +1138,24 @@ func (r *RocksRenderer) handleCursorCollisions(cursorX, cursorY float32) {
 					// Cursor is above, push rock down
 					rock.Position.Y = cursorY + 1
 				}
-				rock.BounceY()
+
+				// Only update sprite rotation if rock moved to a different cell
+				newCellY := int(rock.Position.Y / float32(DEGREES_PER_FRAME))
+				if newCellY != oldCellY {
+					if dy > 0 {
+						if rock.SpriteSlopeY == 0 {
+							rock.SpriteSlopeY = MAX_SLOPE*2 - 1
+						} else {
+							rock.SpriteSlopeY--
+						}
+					} else {
+						if rock.SpriteSlopeY == MAX_SLOPE*2-1 {
+							rock.SpriteSlopeY = 0
+						} else {
+							rock.SpriteSlopeY++
+						}
+					}
+				}
 			}
 		}
 	}
@@ -1132,18 +1180,23 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []Vec3) {
 		var bestDieCenter Vec3
 
 		// PASS 1: Find die with deepest penetration
+		// Calculate rock AABB from center using radius (size multiplier / 2)
+		rockRadius := rockSize / 2
+		rockCenterX := rock.Position.X + rockRadius
+		rockCenterY := rock.Position.Y + rockRadius
+
 		for dieIdx, dieCenter := range diceCenters {
-			// Calculate die AABB bounds
+			// Calculate die AABB bounds from center
 			dieLeft := dieCenter.X - HalfEffectiveDie
 			dieRight := dieCenter.X + HalfEffectiveDie
 			dieTop := dieCenter.Y - HalfEffectiveDie
 			dieBottom := dieCenter.Y + HalfEffectiveDie
 
-			// Calculate rock AABB bounds
-			rockLeft := rock.Position.X
-			rockRight := rock.Position.X + rockSize
-			rockTop := rock.Position.Y
-			rockBottom := rock.Position.Y + rockSize
+			// Calculate rock AABB bounds from center using radius
+			rockLeft := rockCenterX - rockRadius
+			rockRight := rockCenterX + rockRadius
+			rockTop := rockCenterY - rockRadius
+			rockBottom := rockCenterY + rockRadius
 
 			// NARROW PHASE: Check for actual AABB overlap
 			if rockRight <= dieLeft || rockLeft >= dieRight ||
@@ -1190,16 +1243,11 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []Vec3) {
 
 		// PASS 2: Process collision with the die that has deepest penetration
 		dieCenter := bestDieCenter
+		// overlapDistance := maxOverlap // Save the overlap distance for position correction
 
-		// Calculate die bounds for position correction
-		dieLeft := dieCenter.X - HalfEffectiveDie
-		dieRight := dieCenter.X + HalfEffectiveDie
-		dieTop := dieCenter.Y - HalfEffectiveDie
-		dieBottom := dieCenter.Y + HalfEffectiveDie
-
-		// Calculate rock center
-		rockCenterX := rock.Position.X + rockSize/2
-		rockCenterY := rock.Position.Y + rockSize/2
+		// Reuse rock center from PASS 1
+		rockCenterX = rock.Position.X + rockSize/2
+		rockCenterY = rock.Position.Y + rockSize/2
 
 		// Calculate collision vector (from die center to rock center)
 		// This is the direction the rock should bounce
@@ -1230,25 +1278,30 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []Vec3) {
 			sizeBoost = 1
 		}
 
-		// Use BounceTowardsAngle to set rock direction based on collision vector
 		rock.BounceTowardsAngle(int(bounceAngleDeg))
 
-		// Add perturbation to prevent infinite bouncing loops
-		// If one slope is 0, add ±1 to break symmetry
+		// Generate fast pseudo-random jitter using rock position (range: -1 to +1)
+		jitterX, jitterY := RandomXORRockJitter(rock.Position.X, rock.Position.Y, ROCK_JITTER)
+
+		// Apply to ALL bounces to prevent infinite bouncing loops
 		if rock.SlopeX == 0 && rock.SlopeY != 0 {
-			// Vertical bounce - add small horizontal component
+			// Vertical bounce
 			if bounceAngleDeg < 180 {
-				rock.SlopeX = 1
+				rock.SlopeX = 1 + jitterX
 			} else {
-				rock.SlopeX = -1
+				rock.SlopeX = -1 + jitterX
 			}
 		} else if rock.SlopeY == 0 && rock.SlopeX != 0 {
-			// Horizontal bounce - add small vertical component
+			// Horizontal bounce
 			if bounceAngleDeg < 90 || bounceAngleDeg >= 270 {
-				rock.SlopeY = 1
+				rock.SlopeY = 1 + jitterY
 			} else {
-				rock.SlopeY = -1
+				rock.SlopeY = -1 + jitterY
 			}
+		} else {
+			// Both slopes non-zero
+			rock.SlopeX += jitterX
+			rock.SlopeY += jitterY
 		}
 
 		// Apply size boost to the calculated slopes
@@ -1277,21 +1330,13 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []Vec3) {
 			rock.SlopeY = MIN_SLOPE
 		}
 
-		// Position correction: push rock outside die bounds
-		// Determine which side to push based on angle
-		if bounceAngleDeg >= 315 || bounceAngleDeg < 45 {
-			// Push right
-			rock.Position.X = dieRight + 1
-		} else if bounceAngleDeg >= 45 && bounceAngleDeg < 135 {
-			// Push down
-			rock.Position.Y = dieBottom + 1
-		} else if bounceAngleDeg >= 135 && bounceAngleDeg < 225 {
-			// Push left
-			rock.Position.X = dieLeft - rockSize - 1
-		} else {
-			// Push up
-			rock.Position.Y = dieTop - rockSize - 1
-		}
+		// Position correction: push rock away from die along bounce vector
+		// Push the rock out by the overlap distance + separation gap
+		// separationDistance := overlapDistance //+ MIN_SEPARATION
+
+		// Push rock position along the bounce angle vector (reuse bounceAngleRad from above)
+		// rock.Position.X += float32(math.Cos(bounceAngleRad)) * separationDistance
+		// rock.Position.Y += float32(math.Sin(bounceAngleRad)) * separationDistance
 	}
 }
 
