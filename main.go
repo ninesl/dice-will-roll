@@ -15,6 +15,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
+	"github.com/ninesl/dice-will-roll/rocks"
 )
 
 // will need a way to update these in settings
@@ -58,15 +59,16 @@ func init() {
 }
 
 type Game struct {
-	Shaders        map[shaders.ShaderKey]*ebiten.Shader
-	RocksImage     *ebiten.Image
-	RocksRenderer  *render.RocksRenderer // New rocks rendering system, //TODO:FIXME: make a new one per level?, game renders the same but active level reassigns
-	Dice           []*Die                // Player's dice
-	diceDataBuffer []render.Vec3         // Pre-allocated die data buffer (X=centerX, Y=centerY, Z=speed)
-	startTime      time.Time
-	holdTime       time.Time
-	holdCx, holdCy float32
-	ActiveLevel    *Level // keeping track of rocks
+	Shaders            map[shaders.ShaderKey]*ebiten.Shader
+	RocksImage         *ebiten.Image
+	RocksRenderer      *rocks.RocksRenderer // New rocks rendering system, //TODO:FIXME: make a new one per level?, game renders the same but active level reassigns
+	Dice               []*Die               // Player's dice
+	diceDataBuffer     []render.Vec2        // Pre-allocated die center buffer (X=centerX, Y=centerY)
+	diceVelocityBuffer []render.Vec2        // Pre-allocated die velocity buffer (X=velocityX, Y=velocityY)
+	startTime          time.Time
+	holdTime           time.Time
+	holdCx, holdCy     float32
+	ActiveLevel        *Level // keeping track of rocks
 	// is updated with UpdateCursor() in update loop
 	cx, cy float32 // the x/y coordinates of the cursor
 	// holdCx, holdCy float32
@@ -117,7 +119,7 @@ func LoadGame() *Game {
 
 	rockAmount := *numRocks
 	// Initialize rocks renderer with hybrid real-time 3D SDF system
-	rocksConfig := render.RocksConfig{
+	rocksConfig := rocks.RocksConfig{
 		TotalRocks: rockAmount,
 		BaseColors: []render.Vec3{
 			render.Grey,
@@ -130,18 +132,19 @@ func LoadGame() *Game {
 			// render.RainbowColors[5],
 			// render.RainbowColors[6],
 		},
-		RockTileSize:          render.CalculateRockTileSize(TileSize, rockAmount), // Dynamically scaled based on rock amount
+		RockTileSize:          rocks.CalculateRockTileSize(TileSize, rockAmount), // Dynamically scaled based on rock amount
 		WorldBoundsX:          float32(render.GAME_BOUNDS_X),
 		WorldBoundsY:          float32(render.GAME_BOUNDS_Y),
 		ColorTransitionFrames: 30, // 30 frames (~0.5 seconds at 60fps)
 	}
 
 	g := &Game{
-		Dice:           dice,
-		Shaders:        shaders.LoadShaders(),
-		RocksRenderer:  render.NewRocksRenderer(rocksConfig),
-		diceDataBuffer: make([]render.Vec3, 0, NUM_PLAYER_DICE),
-		startTime:      time.Now(),
+		Dice:               dice,
+		Shaders:            shaders.LoadShaders(),
+		RocksRenderer:      rocks.NewRocksRenderer(rocksConfig),
+		diceDataBuffer:     make([]render.Vec2, 0, NUM_PLAYER_DICE),
+		diceVelocityBuffer: make([]render.Vec2, 0, NUM_PLAYER_DICE),
+		startTime:          time.Now(),
 		ActiveLevel: NewLevel(LevelOptions{
 			Rocks: rockAmount,
 			Hands: 3,

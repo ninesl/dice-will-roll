@@ -14,6 +14,13 @@ var (
 	MoveFactor    float32 = .2
 )
 
+// Pre-computed die collision constants (computed once at init time)
+var (
+	EffectiveDieTileSize float32
+	DieTileInset         float32
+	HalfEffectiveDie     float32 // EffectiveDieTileSize / 2, for computing bounds from center
+)
+
 // used to identify dice in indexing, etc.
 type DieIdentity uint8
 

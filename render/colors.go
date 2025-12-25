@@ -34,3 +34,11 @@ var (
 	WhiteMid    = KageColor(200, 200, 200) // Medium white for inner areas
 	WhiteDark   = KageColor(170, 170, 170) // Darker white for crater/depth
 )
+
+// IsCloseTo is used for colorMatch checks if two colors are approximately equal
+func IsCloseTo(a, b Vec3) bool {
+	const epsilon = 0.01
+	return abs(a.X-b.X) < epsilon &&
+		abs(a.Y-b.Y) < epsilon &&
+		abs(a.Z-b.Z) < epsilon
+}

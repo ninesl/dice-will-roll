@@ -7,6 +7,7 @@ import (
 
 	"github.com/ninesl/dice-will-roll/dice"
 	"github.com/ninesl/dice-will-roll/render"
+	"github.com/ninesl/dice-will-roll/rocks"
 )
 
 // ScoringState defines the states for the scoring animation sequence.
@@ -63,7 +64,7 @@ func NewLevel(ops LevelOptions) *Level {
 // handles scoring and render changes, used in g.ActiveLevel
 //
 // TODO: make this animation better/more fun
-func (l *Level) HandleScoring(heldDice []*Die, rockRenderer *render.RocksRenderer) {
+func (l *Level) HandleScoring(heldDice []*Die, rockRenderer *rocks.RocksRenderer) {
 	// If there are no dice to score, ensure we are idle.
 	if len(heldDice) == 0 {
 		l.scoringState = SCORING_IDLE
