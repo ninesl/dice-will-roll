@@ -16,6 +16,7 @@ type dieCollisionData struct {
 	speed                      float32 // Pre-computed velocity magnitude
 	bounceAngleRad             float64 // Pre-computed atan2 for bounce direction
 	isMoving                   bool    // Flag to skip expensive math for stationary dice
+	skipMe                     bool    // flag to use to skip colliding
 }
 
 // sqrt32 computes square root for float32 (avoids float64 conversion overhead)
@@ -29,6 +30,16 @@ func preprocessDiceCollisionData(diceCenters []render.Vec2, diceVelocities []ren
 	data := make([]dieCollisionData, len(diceCenters))
 
 	for i, center := range diceCenters {
+		// if dieData.centerX < render.SCOREZONE.MaxHeight && dieData.velocityX
+		if center.Y < render.SCOREZONE.MaxHeight &&
+			(diceVelocities[i].X != 0 || diceVelocities[i].Y != 0) {
+
+			data[i] = dieCollisionData{
+				skipMe: true,
+			}
+			continue
+		}
+
 		vel := diceVelocities[i]
 		isMoving := vel.X != 0 || vel.Y != 0
 
@@ -230,13 +241,13 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec2, diceVeloc
 	for _, rock := range r.diceCollisionBuffer {
 		sizeData := rock.SizeData()
 
-		// Track the die with maximum total overlap (deepest penetration)
+		// Track the die with maximum total overlap
 		// This prevents rocks from getting stuck between multiple dice
 		var maxOverlap float32 = -1
 		var bestDieIndex int = -1
 
-		// PASS 1: Find die with deepest penetration
-		// Calculate rock center using full size, then AABB using effective size (75%)
+		// PASS 1: Find die with maximum total overlap
+		// Calculate rock center using full size, then AABB using effective size
 		rockCenterX := rock.Position.X + sizeData.HalfSize
 		rockCenterY := rock.Position.Y + sizeData.HalfSize
 		rockLeft := rockCenterX - sizeData.HalfEffective
@@ -245,6 +256,10 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec2, diceVeloc
 		rockBottom := rockCenterY + sizeData.HalfEffective
 
 		for dieIdx, dieData := range diceData {
+			if dieData.skipMe {
+				continue
+			}
+
 			// NARROW PHASE: Check for actual AABB overlap using pre-computed die bounds
 			if rockRight <= dieData.left || rockLeft >= dieData.right ||
 				rockBottom <= dieData.top || rockTop >= dieData.bottom {
@@ -274,39 +289,16 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec2, diceVeloc
 		// Use pre-computed die data instead of recalculating
 		dieData := diceData[bestDieIndex]
 
-		// Calculate bounce direction based on die's velocity (use pre-computed values!)
 		var bounceAngleRad float64
-		var pushDirX, pushDirY float32
-
 		if dieData.isMoving {
-			// Die is moving - use pre-computed velocity data (NO sqrt/atan2 needed!)
+			// Die is moving - use pre-computed velocity data (NO sqrt/atan2 needed)
 			bounceAngleRad = dieData.bounceAngleRad
-			pushDirX = dieData.normalizedVX
-			pushDirY = dieData.normalizedVY
 		} else {
 			// Die is stationary - fall back to position-based bounce (from die center to rock center)
-			dx := rockCenterX - dieData.centerX
-			dy := rockCenterY - dieData.centerY
-			bounceAngleRad = math.Atan2(float64(dy), float64(dx))
-
-			// Inline abs instead of math.Abs(float64())
-			absDx := dx
-			if absDx < 0 {
-				absDx = -absDx
-			}
-			absDy := dy
-			if absDy < 0 {
-				absDy = -absDy
-			}
-			distance := absDx + absDy // Manhattan distance (fast approximation)
-
-			if distance > 0 {
-				pushDirX = dx / distance
-				pushDirY = dy / distance
-			} else {
-				pushDirX = 1
-				pushDirY = 0
-			}
+			bounceAngleRad = math.Atan2(
+				float64(rockCenterY-dieData.centerY),
+				float64(rockCenterX-dieData.centerX),
+			)
 		}
 
 		bounceAngleDeg := bounceAngleRad * 180.0 / math.Pi
@@ -317,58 +309,59 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec2, diceVeloc
 		}
 
 		// Calculate size-based speed boost (smaller rocks = faster)
-		var sizeBoost int8
-		switch rock.Score.GetScore() {
-		case SmallScore: // 1 - smallest rocks
-			sizeBoost = 4
-		case MediumScore: // 3 - medium rocks
-			sizeBoost = 3
-		case BigScore: // 5 - big rocks
-			sizeBoost = 2
-		case HugeScore: // 10 - huge rocks
-			sizeBoost = 1
-		default:
-			sizeBoost = 1
-		}
+		// // var sizeBoost int8
+		// switch rock.Score.GetScore() {
+		// case SmallScore: // 1 - smallest rocks
+		// 	sizeBoost = 4
+		// case MediumScore: // 3 - medium rocks
+		// 	sizeBoost = 3
+		// case BigScore: // 5 - big rocks
+		// 	sizeBoost = 2
+		// case HugeScore: // 10 - huge rocks
+		// 	sizeBoost = 1
+		// default:
+		// 	sizeBoost = 1
+		// }
 
 		rock.BounceTowardsAngle(int(bounceAngleDeg))
 
 		// Generate fast pseudo-random jitter using rock position (range: -1 to +1)
-		jitterX, jitterY := RandomXORRockJitter(rock.Position.X, rock.Position.Y, ROCK_JITTER)
 
 		// Apply to ALL bounces to prevent infinite bouncing loops
-		if rock.SlopeX == 0 && rock.SlopeY != 0 {
-			// Vertical bounce
-			if bounceAngleDeg < 180 {
-				rock.SlopeX = 1 + jitterX
-			} else {
-				rock.SlopeX = -1 + jitterX
-			}
-		} else if rock.SlopeY == 0 && rock.SlopeX != 0 {
-			// Horizontal bounce
-			if bounceAngleDeg < 90 || bounceAngleDeg >= 270 {
-				rock.SlopeY = 1 + jitterY
-			} else {
-				rock.SlopeY = -1 + jitterY
-			}
-		} else {
-			// Both slopes non-zero
-			rock.SlopeX += jitterX
-			rock.SlopeY += jitterY
-		}
+		// if rock.SlopeX == 0 && rock.SlopeY != 0 {
+		// 	// Vertical bounce
+		// 	if bounceAngleDeg < 180 {
+		// 		rock.SlopeX = 1 // + jitterX
+		// 	} else {
+		// 		rock.SlopeX = -1 // + jitterX
+		// 	}
+		// } else if rock.SlopeY == 0 && rock.SlopeX != 0 {
+		// 	// Horizontal bounce
+		// 	if bounceAngleDeg < 90 || bounceAngleDeg >= 270 {
+		// 		rock.SlopeY = 1 // + jitterY
+		// 	} else {
+		// 		rock.SlopeY = -1 // + jitterY
+		// 	}
+		// } //else {
+		// Both slopes non-zero
+		// jitterX, jitterY := RandomXORRockJitter(rock.Position.X, rock.Position.Y, ROCK_JITTER)
+
+		// rock.SlopeX += jitterX
+		// rock.SlopeY += jitterY
+		// }
 
 		// Apply size boost to the calculated slopes
-		if rock.SlopeX > 0 {
-			rock.SlopeX += sizeBoost
-		} else if rock.SlopeX < 0 {
-			rock.SlopeX -= sizeBoost
-		}
+		// if rock.SlopeX > 0 {
+		// 	rock.SlopeX += sizeBoost
+		// } else if rock.SlopeX < 0 {
+		// 	rock.SlopeX -= sizeBoost
+		// }
 
-		if rock.SlopeY > 0 {
-			rock.SlopeY += sizeBoost
-		} else if rock.SlopeY < 0 {
-			rock.SlopeY -= sizeBoost
-		}
+		// if rock.SlopeY > 0 {
+		// 	rock.SlopeY += sizeBoost
+		// } else if rock.SlopeY < 0 {
+		// 	rock.SlopeY -= sizeBoost
+		// }
 
 		// Clamp slopes to valid range [MIN_SLOPE, MAX_SLOPE]
 		if rock.SlopeX > MAX_SLOPE {
@@ -387,9 +380,35 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec2, diceVeloc
 		// This creates a "forceful push" effect instead of gentle nudging
 		// ONLY apply if die is moving (not stationary)
 		if dieData.isMoving && (rock.SlopeX != 0 || rock.SlopeY != 0) {
+			// var dx, dy float32
+			// dx := rockCenterX - dieData.centerX
+			// dy := rockCenterY - dieData.centerY
+
+			// Inline abs instead of math.Abs(float64())
+			// absDx := dx
+			// if absDx < 0 {
+			// 	absDx = -absDx
+			// }
+			// absDy := dy
+			// if absDy < 0 {
+			// 	absDy = -absDy
+			// }
+			// distance := absDx + absDy // Manhattan distance (fast approximation)
+
+			// if distance > 0 {
+			// 	pushDirX = dx / distance
+			// 	pushDirY = dy / distance
+			// } else {
+			// 	pushDirX = 1
+			// 	pushDirY = 0
+			// }
 			// Normalize rock's current velocity for dot product
 			rockSpeed := float32(math.Sqrt(float64(rock.SlopeX*rock.SlopeX + rock.SlopeY*rock.SlopeY)))
 			if rockSpeed > 0 {
+				// var pushDirX, pushDirY float32
+				pushDirX := dieData.normalizedVX
+				pushDirY := dieData.normalizedVY
+
 				rockDirX := float32(rock.SlopeX) / rockSpeed
 				rockDirY := float32(rock.SlopeY) / rockSpeed
 
@@ -404,6 +423,10 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec2, diceVeloc
 					pushDistance := maxOverlap * 0.5
 					rock.Position.X += pushDirX * pushDistance
 					rock.Position.Y += pushDirY * pushDistance
+
+					jitterX, jitterY := RandomXORRockJitter(rock.Position.X, rock.Position.Y, ROCK_JITTER)
+					rock.Position.X += float32(jitterX)
+					rock.Position.Y += float32(jitterY)
 				}
 			}
 		}

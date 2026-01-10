@@ -45,6 +45,7 @@ func (r *RocksRenderer) updateBufferRocks(
 			r.cursorCollisionBuffer = append(r.cursorCollisionBuffer, rock)
 		}
 
+		//TODO:FIXME: check rock if in die quadrants instead of EVERY rock on EVERY die
 		// BROAD PHASE: Collect rocks near any die center
 		for j := range diceCenters {
 			if rock.IsNearPoint(sizeData.Size, diceCenters[j].X, diceCenters[j].Y, r.DieCheckRadius) {
@@ -78,7 +79,6 @@ func (r *RocksRenderer) updateAllBufferTransitions() {
 			// Find matching base buffer by color
 			for j := range r.BaseColorBuffers {
 				baseBuffer := &r.BaseColorBuffers[j]
-
 				if render.IsCloseTo(baseBuffer.Color, buffer.Color) {
 					baseBuffer.Rocks = append(baseBuffer.Rocks, buffer.Rocks...)
 					break
@@ -97,7 +97,7 @@ func (r *RocksRenderer) updateAllBufferTransitions() {
 func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCenters []render.Vec2, diceVelocities []render.Vec2) {
 	r.ActiveRockFlag = !r.ActiveRockFlag
 
-	// Reset collision buffers to length 0 (keeps capacity - no allocation!)
+	// Reset collision buffers to length 0 (keeps capacity - no allocation)
 	r.diceCollisionBuffer = r.diceCollisionBuffer[:0]
 	r.cursorCollisionBuffer = r.cursorCollisionBuffer[:0]
 

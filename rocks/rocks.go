@@ -388,12 +388,6 @@ func (r *RocksRenderer) generateSprites() {
 				ActiveFrame: 0,
 			}
 
-			if XSnapIdx >= DIRECTIONS_TO_SNAP {
-				continue
-			} else if YSnapIdx >= DIRECTIONS_TO_SNAP {
-				continue
-			}
-
 			genSprites[XSnapIdx][YSnapIdx] = &sprite
 		}
 	}
@@ -511,32 +505,33 @@ func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
 	opts := &ebiten.DrawImageOptions{}
 
 	// Render base color buffers with interleaving
-	for layer := 0; layer < NUM_INTERLEAVE_LAYERS; layer++ {
-		for rockType := range len(r.BaseColorBuffers) {
-			buffer := &r.BaseColorBuffers[rockType]
+	// for layer := 0; layer < NUM_INTERLEAVE_LAYERS; layer++ {
+	for rockType := range len(r.BaseColorBuffers) {
+		buffer := &r.BaseColorBuffers[rockType]
 
-			// Get next temp image from pool (already cleared)
-			tempImg := r.imagePool.GetNext()
+		// Get next temp image from pool (already cleared)
+		tempImg := r.imagePool.GetNext()
 
-			// Draw rocks with interleaving
-			for i := layer; i < len(buffer.Rocks); i += NUM_INTERLEAVE_LAYERS {
-				rock := buffer.Rocks[i]
-				sprite := r.sprites[rock.SpriteSlopeX][rock.SpriteSlopeY]
-				frameImage := sprite.Image.SubImage(
-					sprite.SpriteSheet.Rect(int(rock.SpriteIndex)),
-				).(*ebiten.Image)
+		// Draw rocks with interleaving
+		// for i := 0; i < len(buffer.Rocks); i += NUM_INTERLEAVE_LAYERS {
+		for i := range len(buffer.Rocks) {
+			rock := buffer.Rocks[i]
+			sprite := r.sprites[rock.SpriteSlopeX][rock.SpriteSlopeY]
+			frameImage := sprite.Image.SubImage(
+				sprite.SpriteSheet.Rect(int(rock.SpriteIndex)),
+			).(*ebiten.Image)
 
-				opts.GeoM.Reset()
-				scale := rock.Score.SizeMultiplier()
-				opts.GeoM.Scale(float64(scale), float64(scale))
-				opts.GeoM.Translate(float64(rock.Position.X), float64(rock.Position.Y))
-				tempImg.DrawImage(frameImage, opts)
-			}
-
-			// Apply color shader (base buffers should have Transition = 0, so just use base color)
-			r.drawWithColorShader(buffer, tempImg, screen)
+			opts.GeoM.Reset()
+			scale := rock.Score.SizeMultiplier()
+			opts.GeoM.Scale(float64(scale), float64(scale))
+			opts.GeoM.Translate(float64(rock.Position.X), float64(rock.Position.Y))
+			tempImg.DrawImage(frameImage, opts)
 		}
+
+		// Apply color shader (base buffers should have Transition = 0, so just use base color)
+		r.drawWithColorShader(buffer, tempImg, screen)
 	}
+	// }
 
 	// Render held color buffers
 	for i := range len(render.RainbowColors) {
