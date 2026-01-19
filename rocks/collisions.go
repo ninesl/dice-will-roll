@@ -15,8 +15,116 @@ type dieCollisionData struct {
 	normalizedVX, normalizedVY float32 // Pre-normalized velocity
 	speed                      float32 // Pre-computed velocity magnitude
 	bounceAngleRad             float64 // Pre-computed atan2 for bounce direction
+	rotationZ                  float64 // Die's visual rotation (0.0-1.0 = 0°-360°) in radians
 	isMoving                   bool    // Flag to skip expensive math for stationary dice
 	skipMe                     bool    // flag to use to skip colliding
+}
+
+// Precomputed cell offset patterns based on die center quadrant within its cell
+// Die center position determines which 2x2 quadrant it's in, then we add the + arms
+//
+// Cell quadrants:
+// ┌─────────┬─────────┐
+// │ Q0      │ Q1      │
+// │top-left │top-right│
+// ├─────────┼─────────┤
+// │ Q2      │ Q3      │
+// │bot-left │bot-right│
+// └─────────┴─────────┘
+//
+// Each pattern = 2x2 quadrant (4 cells) + opposite 2 cells from + pattern = 6 cells total
+var quadrantCellPatterns = [4][6][2]int{
+	// Q0 top-left: 2x2(top-left, top, left, center) + right, bottom
+	{{-1, -1}, {0, -1}, {-1, 0}, {0, 0}, {1, 0}, {0, 1}},
+	// Q1 top-right: 2x2(top, top-right, center, right) + left, bottom
+	{{0, -1}, {1, -1}, {-1, 0}, {0, 0}, {1, 0}, {0, 1}},
+	// Q2 bottom-left: 2x2(left, center, bottom-left, bottom) + top, right
+	{{0, -1}, {-1, 0}, {0, 0}, {1, 0}, {-1, 1}, {0, 1}},
+	// Q3 bottom-right: 2x2(center, right, bottom, bottom-right) + top, left
+	{{0, -1}, {-1, 0}, {0, 0}, {1, 0}, {0, 1}, {1, 1}},
+}
+
+// collectCollisionCandidatesFromGrid uses spatial grid to find rocks near dice/cursor
+// O(numDice * 5cells * rocksPerCell) instead of O(numRocks * numDice)
+// Uses die rotation to determine which 5 cells to check (instead of all 9)
+func (r *RocksRenderer) collectCollisionCandidatesFromGrid(
+	cursorX, cursorY float32,
+	diceCenters []render.Vec3,
+) {
+	invCellSize := 1.0 / r.gridCellSize
+
+	// Collect rocks near cursor (single cell check)
+	cursorCellX := int(cursorX * invCellSize)
+	cursorCellY := int(cursorY * invCellSize)
+
+	if cursorCellX >= 0 && cursorCellX < r.gridCols && cursorCellY >= 0 && cursorCellY < r.gridRows {
+		cellIdx := cursorCellY*r.gridCols + cursorCellX
+		offset := r.gridOffsets[cellIdx]
+		count := r.gridCounts[cellIdx]
+
+		for i := uint16(0); i < uint16(count); i++ {
+			rockIdx := r.gridRocks[offset+i]
+			rock := r.getRockByGlobalIndex(rockIdx)
+			if rock != nil {
+				r.cursorCollisionBuffer = append(r.cursorCollisionBuffer, rock)
+			}
+		}
+	}
+
+	// Collect rocks near each die using quadrant-based cell lookup
+	// Instead of 3x3 (9 cells), we check 6 cells based on die center position
+	for _, dieCenter := range diceCenters {
+		dieCellX := int(dieCenter.X * invCellSize)
+		dieCellY := int(dieCenter.Y * invCellSize)
+
+		// Determine which quadrant of the cell the die center is in
+		// localX/Y = position within cell (0.0 to 1.0)
+		localX := (dieCenter.X * invCellSize) - float32(dieCellX)
+		localY := (dieCenter.Y * invCellSize) - float32(dieCellY)
+
+		// Calculate quadrant index: 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right
+		var quadrant int
+		if localX < 0.5 {
+			if localY < 0.5 {
+				quadrant = 0 // top-left
+			} else {
+				quadrant = 2 // bottom-left
+			}
+		} else {
+			if localY < 0.5 {
+				quadrant = 1 // top-right
+			} else {
+				quadrant = 3 // bottom-right
+			}
+		}
+
+		// Get precomputed cell offsets for this quadrant (6 cells)
+		cellPattern := quadrantCellPatterns[quadrant]
+
+		// Check the 6 cells (2x2 quadrant + 2 opposite + arms)
+		for _, offset := range cellPattern {
+			checkX := dieCellX + offset[0]
+			checkY := dieCellY + offset[1]
+
+			// Skip out of bounds
+			if checkX < 0 || checkX >= r.gridCols || checkY < 0 || checkY >= r.gridRows {
+				continue
+			}
+
+			cellIdx := checkY*r.gridCols + checkX
+			gridOffset := r.gridOffsets[cellIdx]
+			count := r.gridCounts[cellIdx]
+
+			// Sequential iteration through contiguous memory (L1 cache friendly)
+			for i := uint16(0); i < uint16(count); i++ {
+				rockIdx := r.gridRocks[gridOffset+i]
+				rock := r.getRockByGlobalIndex(rockIdx)
+				if rock != nil {
+					r.diceCollisionBuffer = append(r.diceCollisionBuffer, rock)
+				}
+			}
+		}
+	}
 }
 
 // sqrt32 computes square root for float32 (avoids float64 conversion overhead)
@@ -24,48 +132,119 @@ func sqrt32(x float32) float32 {
 	return float32(math.Sqrt(float64(x)))
 }
 
+// UpdateRocksAndCollide performs all rock updates, wall bouncing, and collision detection/response
+// diceCenters: die center positions (X=centerX, Y=centerY, Z=rotationZ)
+// diceVelocities: die velocity vectors (X=velocityX, Y=velocityY) for bounce direction
+func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCenters []render.Vec3, diceVelocities []render.Vec2) {
+	// Reset collision buffers to length 0 (keeps capacity - no allocation)
+	r.diceCollisionBuffer = r.diceCollisionBuffer[:0]
+	r.cursorCollisionBuffer = r.cursorCollisionBuffer[:0]
+
+	// PASS 1: PHYSICS - Update all rock positions and wall bouncing
+	// for k := range r.ActiveBaseBuffer.Rocks {
+	// r.updateBufferPhysics(&r.BaseColorBuffers[k])
+	// }
+	r.updateBufferPhysics(r.ActiveBaseBuffer)
+
+	for _, buffer := range r.HeldColorBuffers {
+		r.updateBufferPhysics(buffer)
+	}
+	for _, buffer := range r.TransitionBuffers {
+		r.updateBufferPhysics(buffer)
+	}
+
+	// PASS 2: REBUILD GRID - Update spatial partitioning after positions changed
+	r.rebuildGrid()
+
+	// PASS 3: BROAD PHASE - Collect collision candidates using spatial grid
+	// O(numDice * 9cells * avgRocksPerCell) instead of O(numRocks * numDice)
+	r.collectCollisionCandidatesFromGrid(cursorX, cursorY, diceCenters)
+
+	// PASS 4: NARROW PHASE - Precise collision checks and responses
+	r.handleCursorCollisions(cursorX, cursorY)
+	r.handleDieCollisions(diceCenters, diceVelocities)
+
+	// PASS 5: DAMPING - Apply velocity reduction AFTER all collisions
+	// Base color buffers get damping
+	for k := range r.BaseColorBuffers {
+		buffer := &r.BaseColorBuffers[k]
+		for i := range buffer.Rocks {
+			buffer.Rocks[i].ApplyDamping(buffer.FrameCounter)
+		}
+	}
+
+	// Held color buffers DO NOT get damping (maintain speed while held by dice)
+
+	// Transition buffers get damping
+	for _, buffer := range r.TransitionBuffers {
+		for i := range buffer.Rocks {
+			buffer.Rocks[i].ApplyDamping(buffer.FrameCounter)
+		}
+	}
+
+	// Update all buffer transitions and move completed transition buffers to base buffers
+	r.updateAllBufferTransitions()
+}
+
 // preprocessDiceCollisionData pre-computes all die-related collision data ONCE per frame
 // This is called before processing rocks to avoid recalculating die bounds/velocities for each rock
-func preprocessDiceCollisionData(diceCenters []render.Vec2, diceVelocities []render.Vec2) []dieCollisionData {
-	data := make([]dieCollisionData, len(diceCenters))
+// diceCenters: Vec3 where X=centerX, Y=centerY, Z=ZRotation (0.0-1.0)
+// Uses pre-allocated buffer to avoid per-frame heap allocations
+func (r *RocksRenderer) preprocessDiceCollisionData(diceCenters []render.Vec3, diceVelocities []render.Vec2) []dieCollisionData {
+	// Reuse buffer, grow only if needed
+	// if cap(r.diceCollisionDataBuffer) < len(diceCenters) {
+	// 	r.diceCollisionDataBuffer = make([]dieCollisionData, len(diceCenters))
+	// }
+	r.diceCollisionDataBuffer = r.diceCollisionDataBuffer[:len(diceCenters)]
 
 	for i, center := range diceCenters {
-		// if dieData.centerX < render.SCOREZONE.MaxHeight && dieData.velocityX
-		if center.Y < render.SCOREZONE.MaxHeight &&
-			(diceVelocities[i].X != 0 || diceVelocities[i].Y != 0) {
+		// Skip dice in score zone that are moving
+		// if center.Y < render.SCOREZONE.MaxHeight &&
+		// 	(diceVelocities[i].X != 0 || diceVelocities[i].Y != 0) {
 
-			data[i] = dieCollisionData{
-				skipMe: true,
-			}
-			continue
-		}
+		// 	r.diceCollisionDataBuffer[i] = dieCollisionData{
+		// 		skipMe: true,
+		// 	}
+		// 	continue
+		// }
 
 		vel := diceVelocities[i]
 		isMoving := vel.X != 0 || vel.Y != 0
 
-		data[i] = dieCollisionData{
-			left:      center.X - render.HalfEffectiveDie,
-			right:     center.X + render.HalfEffectiveDie,
-			top:       center.Y - render.HalfEffectiveDie,
-			bottom:    center.Y + render.HalfEffectiveDie,
+		// Convert ZRotation (0.0-1.0) to radians (0 to 2π)
+		rotationRad := float64(center.Z) * 2 * math.Pi
+
+		// Calculate rotated AABB half-extent: h × (|cos θ| + |sin θ|)
+		// At 0°: halfExtent = h (axis-aligned square)
+		// At 45°: halfExtent = h × √2 (corners extend further)
+		cosR := math.Abs(math.Cos(rotationRad))
+		sinR := math.Abs(math.Sin(rotationRad))
+		halfExtent := float32(float64(render.HalfEffectiveDie) * (cosR + sinR))
+
+		r.diceCollisionDataBuffer[i] = dieCollisionData{
+			left:      center.X - halfExtent,
+			right:     center.X + halfExtent,
+			top:       center.Y - halfExtent,
+			bottom:    center.Y + halfExtent,
 			centerX:   center.X,
 			centerY:   center.Y,
 			velocityX: vel.X,
 			velocityY: vel.Y,
+			rotationZ: rotationRad,
 			isMoving:  isMoving,
 		}
 
 		// Only compute expensive trig/sqrt if die is actually moving
 		if isMoving {
 			speed := sqrt32(vel.X*vel.X + vel.Y*vel.Y)
-			data[i].speed = speed
-			data[i].normalizedVX = vel.X / speed
-			data[i].normalizedVY = vel.Y / speed
-			data[i].bounceAngleRad = math.Atan2(float64(vel.Y), float64(vel.X))
+			r.diceCollisionDataBuffer[i].speed = speed
+			r.diceCollisionDataBuffer[i].normalizedVX = vel.X / speed
+			r.diceCollisionDataBuffer[i].normalizedVY = vel.Y / speed
+			r.diceCollisionDataBuffer[i].bounceAngleRad = math.Atan2(float64(vel.Y), float64(vel.X))
 		}
 	}
 
-	return data
+	return r.diceCollisionDataBuffer
 }
 
 // RockWithinDie checks if a rock collides with a die using AABB collision detection
@@ -229,13 +408,13 @@ func RandomXORRockJitter(xSeed, ySeed float32, jitterRange int8) (int8, int8) {
 // diceCenters: die center positions (X=centerX, Y=centerY)
 // diceVelocities: die velocity vectors (X=velocityX, Y=velocityY) - determines bounce direction
 // Each rock collides with at most one die per frame (first collision wins)
-func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec2, diceVelocities []render.Vec2) {
+func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec3, diceVelocities []render.Vec2) {
 	if len(r.diceCollisionBuffer) == 0 {
 		return
 	}
 
 	// Pre-compute all die collision data ONCE (instead of per-rock)
-	diceData := preprocessDiceCollisionData(diceCenters, diceVelocities)
+	diceData := r.preprocessDiceCollisionData(diceCenters, diceVelocities)
 
 	// OUTER LOOP: Each rock (allows break to work correctly)
 	for _, rock := range r.diceCollisionBuffer {
@@ -289,18 +468,61 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec2, diceVeloc
 		// Use pre-computed die data instead of recalculating
 		dieData := diceData[bestDieIndex]
 
-		var bounceAngleRad float64
-		if dieData.isMoving {
-			// Die is moving - use pre-computed velocity data (NO sqrt/atan2 needed)
-			bounceAngleRad = dieData.bounceAngleRad
-		} else {
-			// Die is stationary - fall back to position-based bounce (from die center to rock center)
-			bounceAngleRad = math.Atan2(
-				float64(rockCenterY-dieData.centerY),
-				float64(rockCenterX-dieData.centerX),
-			)
+		// Calculate angle from die center to rock center (world space)
+		angleToRock := math.Atan2(
+			float64(rockCenterY-dieData.centerY),
+			float64(rockCenterX-dieData.centerX),
+		)
+
+		// Calculate angle relative to die's rotated frame
+		// This tells us which edge of the rotated die the rock is hitting
+		relativeAngle := angleToRock - dieData.rotationZ
+
+		// Normalize to 0-2π range
+		for relativeAngle < 0 {
+			relativeAngle += 2 * math.Pi
+		}
+		for relativeAngle >= 2*math.Pi {
+			relativeAngle -= 2 * math.Pi
 		}
 
+		// Calculate distance from die center to edge of rotated square at this angle
+		// For a square: edgeDistance = halfSize / max(|cos(θ)|, |sin(θ)|)
+		halfSize := float64(render.HalfEffectiveDie)
+		cosA := math.Abs(math.Cos(relativeAngle))
+		sinA := math.Abs(math.Sin(relativeAngle))
+		edgeDistance := halfSize / math.Max(cosA, sinA)
+
+		// TRUE NARROW PHASE: Verify rock is actually colliding with rotated square
+		// (AABB is an over-approximation, this catches false positives in corner regions)
+		dx := float64(rockCenterX - dieData.centerX)
+		dy := float64(rockCenterY - dieData.centerY)
+		rockDistFromDie := math.Sqrt(dx*dx + dy*dy)
+
+		// Collision threshold: die edge + rock's effective radius
+		collisionThreshold := edgeDistance + float64(sizeData.HalfEffective)
+		if rockDistFromDie >= collisionThreshold {
+			continue // Rock is in AABB but outside actual rotated square - no collision
+		}
+
+		// Rock CENTER should be at: dieEdge + rockHalfEffective + 2px buffer
+		rockCenterDistance := edgeDistance + float64(sizeData.EffectiveSize) + 2
+
+		// Snap rock center to that distance along the angle
+		newCenterX := dieData.centerX + float32(math.Cos(angleToRock)*rockCenterDistance)
+		newCenterY := dieData.centerY + float32(math.Sin(angleToRock)*rockCenterDistance)
+
+		// Rock position is top-left corner, so subtract half size
+		rock.Position.X = newCenterX - sizeData.HalfSize
+		rock.Position.Y = newCenterY - sizeData.HalfSize
+
+		// Calculate bounce direction based on the edge normal of the rotated die
+		// The edge normal depends on which side of the rotated square we hit
+		var bounceAngleRad float64
+
+		// The outward normal at the contact point is simply the angle from center to rock
+		// (since we're pushing the rock directly away from the die center along the edge)
+		bounceAngleRad = angleToRock
 		bounceAngleDeg := bounceAngleRad * 180.0 / math.Pi
 
 		// Normalize to 0-360 range
@@ -308,127 +530,11 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec2, diceVeloc
 			bounceAngleDeg += 360
 		}
 
-		// Calculate size-based speed boost (smaller rocks = faster)
-		// // var sizeBoost int8
-		// switch rock.Score.GetScore() {
-		// case SmallScore: // 1 - smallest rocks
-		// 	sizeBoost = 4
-		// case MediumScore: // 3 - medium rocks
-		// 	sizeBoost = 3
-		// case BigScore: // 5 - big rocks
-		// 	sizeBoost = 2
-		// case HugeScore: // 10 - huge rocks
-		// 	sizeBoost = 1
-		// default:
-		// 	sizeBoost = 1
-		// }
-
 		rock.BounceTowardsAngle(int(bounceAngleDeg))
 
-		// Generate fast pseudo-random jitter using rock position (range: -1 to +1)
+		xJitter, yJitter := RandomXORRockJitter(rock.Position.X, rock.Position.Y, 1)
 
-		// Apply to ALL bounces to prevent infinite bouncing loops
-		// if rock.SlopeX == 0 && rock.SlopeY != 0 {
-		// 	// Vertical bounce
-		// 	if bounceAngleDeg < 180 {
-		// 		rock.SlopeX = 1 // + jitterX
-		// 	} else {
-		// 		rock.SlopeX = -1 // + jitterX
-		// 	}
-		// } else if rock.SlopeY == 0 && rock.SlopeX != 0 {
-		// 	// Horizontal bounce
-		// 	if bounceAngleDeg < 90 || bounceAngleDeg >= 270 {
-		// 		rock.SlopeY = 1 // + jitterY
-		// 	} else {
-		// 		rock.SlopeY = -1 // + jitterY
-		// 	}
-		// } //else {
-		// Both slopes non-zero
-		// jitterX, jitterY := RandomXORRockJitter(rock.Position.X, rock.Position.Y, ROCK_JITTER)
-
-		// rock.SlopeX += jitterX
-		// rock.SlopeY += jitterY
-		// }
-
-		// Apply size boost to the calculated slopes
-		// if rock.SlopeX > 0 {
-		// 	rock.SlopeX += sizeBoost
-		// } else if rock.SlopeX < 0 {
-		// 	rock.SlopeX -= sizeBoost
-		// }
-
-		// if rock.SlopeY > 0 {
-		// 	rock.SlopeY += sizeBoost
-		// } else if rock.SlopeY < 0 {
-		// 	rock.SlopeY -= sizeBoost
-		// }
-
-		// Clamp slopes to valid range [MIN_SLOPE, MAX_SLOPE]
-		if rock.SlopeX > MAX_SLOPE {
-			rock.SlopeX = MAX_SLOPE
-		} else if rock.SlopeX < MIN_SLOPE {
-			rock.SlopeX = MIN_SLOPE
-		}
-
-		if rock.SlopeY > MAX_SLOPE {
-			rock.SlopeY = MAX_SLOPE
-		} else if rock.SlopeY < MIN_SLOPE {
-			rock.SlopeY = MIN_SLOPE
-		}
-
-		// Position snap for rocks moving in same direction as die's push
-		// This creates a "forceful push" effect instead of gentle nudging
-		// ONLY apply if die is moving (not stationary)
-		if dieData.isMoving && (rock.SlopeX != 0 || rock.SlopeY != 0) {
-			// var dx, dy float32
-			// dx := rockCenterX - dieData.centerX
-			// dy := rockCenterY - dieData.centerY
-
-			// Inline abs instead of math.Abs(float64())
-			// absDx := dx
-			// if absDx < 0 {
-			// 	absDx = -absDx
-			// }
-			// absDy := dy
-			// if absDy < 0 {
-			// 	absDy = -absDy
-			// }
-			// distance := absDx + absDy // Manhattan distance (fast approximation)
-
-			// if distance > 0 {
-			// 	pushDirX = dx / distance
-			// 	pushDirY = dy / distance
-			// } else {
-			// 	pushDirX = 1
-			// 	pushDirY = 0
-			// }
-			// Normalize rock's current velocity for dot product
-			rockSpeed := float32(math.Sqrt(float64(rock.SlopeX*rock.SlopeX + rock.SlopeY*rock.SlopeY)))
-			if rockSpeed > 0 {
-				// var pushDirX, pushDirY float32
-				pushDirX := dieData.normalizedVX
-				pushDirY := dieData.normalizedVY
-
-				rockDirX := float32(rock.SlopeX) / rockSpeed
-				rockDirY := float32(rock.SlopeY) / rockSpeed
-
-				// Dot product: tells us if rock is moving in same direction as die's push
-				// Result: 1.0 = same direction, -1.0 = opposite, 0 = perpendicular
-				dotProduct := rockDirX*pushDirX + rockDirY*pushDirY
-
-				// If rock is moving in same direction (within 45° = dot product > 0.707)
-				// cos(45°) ≈ 0.707
-				if dotProduct > 0.707 {
-					// SNAP position to push rock forcefully out of the way
-					pushDistance := maxOverlap * 0.5
-					rock.Position.X += pushDirX * pushDistance
-					rock.Position.Y += pushDirY * pushDistance
-
-					jitterX, jitterY := RandomXORRockJitter(rock.Position.X, rock.Position.Y, ROCK_JITTER)
-					rock.Position.X += float32(jitterX)
-					rock.Position.Y += float32(jitterY)
-				}
-			}
-		}
+		rock.SlopeX += xJitter
+		rock.SlopeY += yJitter
 	}
 }

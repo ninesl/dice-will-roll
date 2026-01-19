@@ -1,6 +1,7 @@
 package rocks
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 
@@ -205,9 +206,8 @@ type SimpleRock struct {
 	Score        RockScoreType //  how many 'rocks' this rock counts for during scoring. also determines size, etc
 
 	transitionSteps uint8 // Bit-packed: lower 4 bits = X remaining steps, upper 4 bits = Y remaining steps
+	Explode         bool  // marked for exploding when decrementing transition
 }
-
-// const BaseVelocity = 1.0
 
 const BaseVelocity = 1.0
 
@@ -231,33 +231,42 @@ type RocksRenderer struct {
 	sprites [DIRECTIONS_TO_SNAP][DIRECTIONS_TO_SNAP]*render.Sprite
 
 	// Three-tier buffer system for rock color management
-	BaseColorBuffers  []RockBuffer                       // Source rocks (Grey, Brown, etc.)
+	BaseColorBuffers    []RockBuffer // Source rocks (Grey, Brown, etc.)
+	ActiveBaseBufferIdx int          // which index of rock buffer/associated active base buffer
+
+	ActiveBaseBuffer  *RockBuffer                        // active depth level
 	HeldColorBuffers  map[render.DieIdentity]*RockBuffer // Rocks owned by held dice
 	TransitionBuffers []*RockBuffer                      // Rocks transitioning back to base colors
+	selectionOrder    []render.DieIdentity               // Tracks order dice were selected (for draw order)
 
-	totalRocks int
-
-	ActiveRockFlag bool // true/false to update BaseColorBuffers[even] or BaseColorBuffers[odd]
+	totalRocks []int // rock depth nums 0 is activeBaseBuffer
 
 	RockTileSize float32 // Base tile size for rock rendering and collision calculations
-
-	// Collision check radii for this rock renderer
-	CursorCheckRadius float32 // Distance from cursor to check for rock collisions
-	DieCheckRadius    float32 // Distance from die center to check for rock collisions
 
 	// Internal collision buffers - reused each frame to avoid allocations
 	diceCollisionBuffer   []*SimpleRock
 	cursorCollisionBuffer []*SimpleRock
 
+	diceCollisionDataBuffer []dieCollisionData
+
 	// Image pool for temporary rendering buffers (lazily allocated and reused every frame)
 	imagePool *render.ImagePool
+
+	// Spatial grid for L1-cache-friendly collision detection (hybrid offset+count)
+	// All rock indices packed contiguously, grouped by cell
+	gridCellSize float32  // Size of each grid cell (DieTileSize)
+	gridCols     int      // Number of grid columns
+	gridRows     int      // Number of grid rows
+	gridRocks    []uint16 // Flat array of rock indices in grid order
+	gridOffsets  []uint16 // Start index in gridRocks for each cell
+	gridCounts   []uint16 // Number of rocks in each cell
 
 	config RocksConfig
 }
 
 // RocksConfig holds configuration for rock system
 type RocksConfig struct {
-	TotalRocks            int
+	TotalRocks            []int         // 0-x index of depth. 0 is first base layer that is active
 	BaseColors            []render.Vec3 // the colors that rock render applies
 	RockTileSize          float32       // Base tile size for rock rendering and collision calculations
 	WorldBoundsX          float32
@@ -265,19 +274,16 @@ type RocksConfig struct {
 	ColorTransitionFrames int // frames for color transitions (default: 30)
 }
 
-// func (r *RocksRenderer) SetActiveBuffers() {
-// 	//clear buffer
-// 	r.ActiveBuffers = r.ActiveBuffers[:0]
+// helper func for active buffers, wrapper allows us to stack trace and reuse in the future
+func (r *RocksRenderer) AssignActiveBuffer(specificIdx int) {
+	if specificIdx > len(r.BaseColorBuffers) { // forced error fallback
+		panic(fmt.Errorf("%d is not legal for the base colors that are left", specificIdx))
+	}
+	r.ActiveBaseBufferIdx = specificIdx
+	r.ActiveBaseBuffer = &r.BaseColorBuffers[r.ActiveBaseBufferIdx]
+}
 
-// 	for _, buffer := range r.RockBuffers {
-// 		r.ActiveBuffers = append(r.ActiveBuffers, &buffer)
-// 	}
-// 	for _, buffer := range r.HeldRockBuffers {
-// 		r.ActiveBuffers = append(r.ActiveBuffers, &buffer)
-// 	}
-// }
-
-// NewRocksRenderer creates a new ultra-fast sprite rendering system
+// NewRocksRenderer creates a sprite rendering system for
 func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 	shaderMap := shaders.LoadShaders()
 
@@ -289,14 +295,13 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 		// Initialize collision check radii - TIGHT buffers to reduce expensive collision calculations
 		// Accepts that some edge-case collisions at buffer boundaries may be missed
 
-		CursorCheckRadius: config.RockTileSize * 0.6, // Reduced from 1.0x to 0.6x
-		DieCheckRadius:    config.RockTileSize * 0.8, // Reduced from 1.0x to 0.8x
 		// Pre-allocate collision buffers with typical capacity to avoid allocations
 		// Capacity based on typical collision counts: ~50 dice collisions, ~20 cursor collisions
 		diceCollisionBuffer:   make([]*SimpleRock, 0, 128),
 		cursorCollisionBuffer: make([]*SimpleRock, 0, 128),
 
-		config: config,
+		diceCollisionDataBuffer: make([]dieCollisionData, 0, 7), //TODO:constant
+		config:                  config,
 		// ActiveBuffers: make([]*RockBuffer, 0, 16),
 		// Define colors for each rock type (applied via shader at draw time)
 	}
@@ -305,6 +310,7 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 	r.BaseColorBuffers = make([]RockBuffer, 0, len(config.BaseColors))
 	r.HeldColorBuffers = make(map[render.DieIdentity]*RockBuffer)
 	r.TransitionBuffers = make([]*RockBuffer, 0, 10)
+	r.selectionOrder = make([]render.DieIdentity, 0, 7) // Track selection order for draw order
 
 	// Initialize rock size lookup table (pre-compute all size calculations)
 	r.initRockSizeLookup()
@@ -315,8 +321,14 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 	// Generate rock instances
 	r.generateRocks(config)
 
+	//TODO:FIXME: still need to figure out smart way to do other layers
+	r.AssignActiveBuffer(0)
+
 	// Initialize image pool for temporary rendering (lazy allocation)
 	r.imagePool = render.NewImagePool(int(config.WorldBoundsX), int(config.WorldBoundsY))
+
+	// Initialize spatial grid for L1-cache-friendly collision detection
+	r.initSpatialGrid(config)
 
 	return r
 }
@@ -398,8 +410,7 @@ func (r *RocksRenderer) generateSprites() {
 
 // generateRocks creates rock instances with random RockScoreTypes that accumulate to target score
 func (r *RocksRenderer) generateRocks(config RocksConfig) {
-	targetScore := config.TotalRocks // e.g., 500
-	currentScore := 0
+	// targetScore := config.TotalRocks // e.g., 500
 
 	// Track rocks by type
 	var allRocks = make([][]SimpleRock, 0, len(config.BaseColors))
@@ -409,71 +420,76 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 
 	var curRockTypeIndex int
 
-	// Generate rocks until we reach target score
-	for currentScore < targetScore {
-		remaining := targetScore - currentScore
+	// make each layer using base Colors
+	for _, targetScore := range config.TotalRocks {
+		currentScore := 0
+		// Generate rocks until we reach target score
 
-		// Pick a random RockScoreType variant that doesn't exceed remaining
+		for currentScore < targetScore {
+			remaining := targetScore - currentScore
 
-		//TODO: get a good distribution of rock sizes instead of % chance
-		// could be based on rock config?
-		var scoreType RockScoreType
-		switch {
-		case remaining >= HugeScore && rand.Float32() < 0.15: // 15% chance for Huge
-			// Pick random Huge variant (10, 11, or 12)
-			scoreType = HugeLarge + RockScoreType(rand.Intn(rockScoreVariants))
-		case remaining >= BigScore && rand.Float32() < 0.25: // 25% chance for Big
-			// Pick random Big variant (7, 8, or 9)
-			scoreType = BigLarge + RockScoreType(rand.Intn(rockScoreVariants))
-		case remaining >= MediumScore && rand.Float32() < 0.35: // 35% chance for Medium
-			// Pick random Medium variant (4, 5, or 6)
-			scoreType = MediumLarge + RockScoreType(rand.Intn(rockScoreVariants))
-		default: // Otherwise Small
-			// Pick random Small variant (1, 2, or 3)
-			scoreType = SmallLarge + RockScoreType(rand.Intn(rockScoreVariants))
-		}
+			// Pick a random RockScoreType variant that doesn't exceed remaining
 
-		// Random position
-		pos := render.Vec2{
-			X: rand.Float32() * config.WorldBoundsX,
-			Y: rand.Float32() * config.WorldBoundsY,
-		}
+			//TODO: get a good distribution of rock sizes instead of % chance
+			// could be based on rock config?
+			var scoreType RockScoreType
+			switch {
+			case remaining >= HugeScore && rand.Float32() < 0.15: // 15% chance for Huge
+				// Pick random Huge variant (10, 11, or 12)
+				scoreType = HugeLarge + RockScoreType(rand.Intn(rockScoreVariants))
+			case remaining >= BigScore && rand.Float32() < 0.25: // 25% chance for Big
+				// Pick random Big variant (7, 8, or 9)
+				scoreType = BigLarge + RockScoreType(rand.Intn(rockScoreVariants))
+			case remaining >= MediumScore && rand.Float32() < 0.35: // 35% chance for Medium
+				// Pick random Medium variant (4, 5, or 6)
+				scoreType = MediumLarge + RockScoreType(rand.Intn(rockScoreVariants))
+			default: // Otherwise Small
+				// Pick random Small variant (1, 2, or 3)
+				scoreType = SmallLarge + RockScoreType(rand.Intn(rockScoreVariants))
+			}
 
-		// Pick random rotation frame
-		spriteIndex := uint8(rand.Intn(ROTATION_FRAMES))
+			// Random position
+			pos := render.Vec2{
+				X: rand.Float32() * config.WorldBoundsX,
+				Y: rand.Float32() * config.WorldBoundsY,
+			}
 
-		// Generate slope values
-		slopeX := int8(rand.Intn(int(DIRECTIONS_TO_SNAP)+1)) - MAX_SLOPE
-		slopeY := int8(rand.Intn(int(DIRECTIONS_TO_SNAP)+1)) - MAX_SLOPE
+			// Pick random rotation frame
+			spriteIndex := uint8(rand.Intn(ROTATION_FRAMES))
 
-		// Convert slopes to sprite indices
-		spriteSlopeX := slopeX + MAX_SLOPE
-		if spriteSlopeX == DIRECTIONS_TO_SNAP {
-			spriteSlopeX = 0
-		}
-		spriteSlopeY := slopeY + MAX_SLOPE
-		if spriteSlopeY == DIRECTIONS_TO_SNAP {
-			spriteSlopeY = 0
-		}
+			// Generate slope values
+			slopeX := int8(rand.Intn(int(DIRECTIONS_TO_SNAP)+1)) - MAX_SLOPE
+			slopeY := int8(rand.Intn(int(DIRECTIONS_TO_SNAP)+1)) - MAX_SLOPE
 
-		rock := SimpleRock{
-			Position:    pos,
-			SpriteIndex: spriteIndex,
-			// SlopeX:       slopeX,
-			// SlopeY:       slopeY,
-			SlopeX:       0,
-			SlopeY:       0,
-			SpriteSlopeX: 0,
-			SpriteSlopeY: 0,
-			Score:        scoreType,
-		}
+			// Convert slopes to sprite indices
+			spriteSlopeX := slopeX + MAX_SLOPE
+			if spriteSlopeX == DIRECTIONS_TO_SNAP {
+				spriteSlopeX = 0
+			}
+			spriteSlopeY := slopeY + MAX_SLOPE
+			if spriteSlopeY == DIRECTIONS_TO_SNAP {
+				spriteSlopeY = 0
+			}
 
-		allRocks[curRockTypeIndex] = append(allRocks[curRockTypeIndex], rock)
-		currentScore += scoreType.GetScore()
+			rock := SimpleRock{
+				Position:    pos,
+				SpriteIndex: spriteIndex,
+				// SlopeX:       slopeX,
+				// SlopeY:       slopeY,
+				SlopeX:       0,
+				SlopeY:       0,
+				SpriteSlopeX: 0,
+				SpriteSlopeY: 0,
+				Score:        scoreType,
+			}
 
-		curRockTypeIndex++
-		if curRockTypeIndex >= len(config.BaseColors) {
-			curRockTypeIndex = 0
+			allRocks[curRockTypeIndex] = append(allRocks[curRockTypeIndex], rock)
+			currentScore += scoreType.GetScore()
+
+			curRockTypeIndex++
+			if curRockTypeIndex >= len(config.BaseColors) {
+				curRockTypeIndex = 0
+			}
 		}
 	}
 
@@ -533,28 +549,25 @@ func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
 	}
 	// }
 
-	// Render held color buffers
-	for i := range len(render.RainbowColors) {
-		buffer, ok := r.HeldColorBuffers[render.DieIdentity(i)]
-		if !ok {
-			continue
-		}
-
-		tempImg := r.imagePool.GetNext()
-		r.drawBufferToImage(buffer, tempImg, opts)
-		r.drawWithColorShader(buffer, tempImg, screen)
-	}
-
 	// Render transition buffers
 	for _, buffer := range r.TransitionBuffers {
 		tempImg := r.imagePool.GetNext()
 		r.drawBufferToImage(buffer, tempImg, opts)
 		r.drawWithColorShader(buffer, tempImg, screen)
 	}
+	// Render held color buffers in SELECTION ORDER (most recent = on top)
+	for _, dieIdentity := range r.selectionOrder {
+		buffer := r.HeldColorBuffers[dieIdentity]
+		tempImg := r.imagePool.GetNext()
+		r.drawBufferToImage(buffer, tempImg, opts)
+		r.drawWithColorShader(buffer, tempImg, screen)
+	}
+
+	// TODO:render explosion buffers???
 }
 
 func (r *RocksRenderer) GetStats() (visible, total int) {
-	return r.totalRocks, r.totalRocks
+	return len(r.ActiveBaseBuffer.Rocks), r.config.TotalRocks[r.ActiveBaseBufferIdx]
 }
 
 // CalculateRockTileSize dynamically calculates rock tile size based on the number of rocks
@@ -566,6 +579,8 @@ func (r *RocksRenderer) GetStats() (visible, total int) {
 //	> 10000 rocks  → 0.5× base tile size (tiny)
 func CalculateRockTileSize(baseTileSize float32, rockAmount int) float32 {
 	var scaleFactor float32
+
+	//TODO:FIXME:
 
 	if rockAmount <= 100 {
 		scaleFactor = 2.0
@@ -595,6 +610,199 @@ func (r *RocksRenderer) initRockSizeLookup() {
 			Inset:         (size - effectiveSize) / 2,
 		}
 	}
+}
+
+// initSpatialGrid initializes the hybrid offset+count spatial grid
+// Cell size is render.DieTileSize for optimal collision detection with dice
+func (r *RocksRenderer) initSpatialGrid(config RocksConfig) {
+	r.gridCellSize = render.DieTileSize
+	r.gridCols = int(math.Ceil(float64(config.WorldBoundsX) / float64(r.gridCellSize)))
+	r.gridRows = int(math.Ceil(float64(config.WorldBoundsY) / float64(r.gridCellSize)))
+
+	totalCells := r.gridCols * r.gridRows
+
+	// Pre-allocate arrays
+	r.gridOffsets = make([]uint16, totalCells)
+	r.gridCounts = make([]uint16, totalCells)
+	r.gridRocks = make([]uint16, config.TotalRocks[r.ActiveBaseBufferIdx])
+}
+
+// rebuildGrid rebuilds the spatial grid from current rock positions
+// Called once per frame before collision detection
+// Uses 2-pass algorithm: count rocks per cell, then place indices
+// Includes ALL buffers: base, held, and transition
+// IMPORTANT: Uses rock CENTER for grid cell assignment (not top-left corner)
+func (r *RocksRenderer) rebuildGrid() {
+	// Reset counts to 0
+	for i := range r.gridCounts {
+		r.gridCounts[i] = 0
+	}
+
+	// Inverse cell size for fast division (multiply instead of divide)
+	invCellSize := 1.0 / r.gridCellSize
+
+	// Helper to clamp cell coordinates
+	clampCell := func(cellX, cellY int) int {
+		if cellX < 0 {
+			cellX = 0
+		} else if cellX >= r.gridCols {
+			cellX = r.gridCols - 1
+		}
+		if cellY < 0 {
+			cellY = 0
+		} else if cellY >= r.gridRows {
+			cellY = r.gridRows - 1
+		}
+		return cellY*r.gridCols + cellX
+	}
+
+	// Phase 1: Count rocks per cell (all buffers)
+	// Use rock CENTER for cell assignment to ensure consistent collision detection
+	var totalRocks uint16 = 0
+
+	// Count base buffer rocks
+	for bufIdx := range r.BaseColorBuffers {
+		buffer := &r.BaseColorBuffers[bufIdx]
+		for i := range buffer.Rocks {
+			rock := &buffer.Rocks[i]
+			sizeData := rock.SizeData()
+			centerX := rock.Position.X + sizeData.HalfSize
+			centerY := rock.Position.Y + sizeData.HalfSize
+			cellIdx := clampCell(int(centerX*invCellSize), int(centerY*invCellSize))
+			r.gridCounts[cellIdx]++
+			totalRocks++
+		}
+	}
+
+	// Count held buffer rocks
+	for _, buffer := range r.HeldColorBuffers {
+		for i := range buffer.Rocks {
+			rock := &buffer.Rocks[i]
+			sizeData := rock.SizeData()
+			centerX := rock.Position.X + sizeData.HalfSize
+			centerY := rock.Position.Y + sizeData.HalfSize
+			cellIdx := clampCell(int(centerX*invCellSize), int(centerY*invCellSize))
+			r.gridCounts[cellIdx]++
+			totalRocks++
+		}
+	}
+
+	// Count transition buffer rocks
+	for _, buffer := range r.TransitionBuffers {
+		for i := range buffer.Rocks {
+			rock := &buffer.Rocks[i]
+			sizeData := rock.SizeData()
+			centerX := rock.Position.X + sizeData.HalfSize
+			centerY := rock.Position.Y + sizeData.HalfSize
+			cellIdx := clampCell(int(centerX*invCellSize), int(centerY*invCellSize))
+			r.gridCounts[cellIdx]++
+			totalRocks++
+		}
+	}
+
+	// Grow gridRocks if needed (rocks can move between buffers)
+	if int(totalRocks) > len(r.gridRocks) {
+		r.gridRocks = make([]uint16, totalRocks)
+	}
+
+	// Phase 2: Calculate offsets (prefix sum)
+	var currentOffset uint16 = 0
+	for i := range r.gridCounts {
+		r.gridOffsets[i] = currentOffset
+		currentOffset += uint16(r.gridCounts[i])
+	}
+
+	// Reset counts to use as placement indices
+	for i := range r.gridCounts {
+		r.gridCounts[i] = 0
+	}
+
+	// Phase 3: Place rock indices into gridRocks (all buffers)
+	// Use rock CENTER for cell assignment (must match Phase 1)
+	var globalIdx uint16 = 0
+
+	// Place base buffer rocks
+	for bufIdx := range r.BaseColorBuffers {
+		buffer := &r.BaseColorBuffers[bufIdx]
+		for i := range buffer.Rocks {
+			rock := &buffer.Rocks[i]
+			sizeData := rock.SizeData()
+			centerX := rock.Position.X + sizeData.HalfSize
+			centerY := rock.Position.Y + sizeData.HalfSize
+			cellIdx := clampCell(int(centerX*invCellSize), int(centerY*invCellSize))
+			insertPos := r.gridOffsets[cellIdx] + uint16(r.gridCounts[cellIdx])
+			r.gridRocks[insertPos] = globalIdx
+			r.gridCounts[cellIdx]++
+			globalIdx++
+		}
+	}
+
+	// Place held buffer rocks
+	for _, buffer := range r.HeldColorBuffers {
+		for i := range buffer.Rocks {
+			rock := &buffer.Rocks[i]
+			sizeData := rock.SizeData()
+			centerX := rock.Position.X + sizeData.HalfSize
+			centerY := rock.Position.Y + sizeData.HalfSize
+			cellIdx := clampCell(int(centerX*invCellSize), int(centerY*invCellSize))
+			insertPos := r.gridOffsets[cellIdx] + uint16(r.gridCounts[cellIdx])
+			r.gridRocks[insertPos] = globalIdx
+			r.gridCounts[cellIdx]++
+			globalIdx++
+		}
+	}
+
+	// Place transition buffer rocks
+	for _, buffer := range r.TransitionBuffers {
+		for i := range buffer.Rocks {
+			rock := &buffer.Rocks[i]
+			sizeData := rock.SizeData()
+			centerX := rock.Position.X + sizeData.HalfSize
+			centerY := rock.Position.Y + sizeData.HalfSize
+			cellIdx := clampCell(int(centerX*invCellSize), int(centerY*invCellSize))
+			insertPos := r.gridOffsets[cellIdx] + uint16(r.gridCounts[cellIdx])
+			r.gridRocks[insertPos] = globalIdx
+			r.gridCounts[cellIdx]++
+			globalIdx++
+		}
+	}
+}
+
+// getRockByGlobalIndex returns a rock pointer from global index
+// Global index maps: BaseColorBuffers → HeldColorBuffers → TransitionBuffers
+func (r *RocksRenderer) getRockByGlobalIndex(globalIdx uint16) *SimpleRock {
+	idx := int(globalIdx)
+
+	// Check base buffers
+	for bufIdx := range r.BaseColorBuffers {
+		buffer := &r.BaseColorBuffers[bufIdx]
+		if idx < len(buffer.Rocks) {
+			return &buffer.Rocks[idx]
+		}
+		idx -= len(buffer.Rocks)
+	}
+
+	// Check held buffers (iterate in consistent order)
+	for i := range len(render.RainbowColors) {
+		buffer, ok := r.HeldColorBuffers[render.DieIdentity(i)]
+		if !ok {
+			continue
+		}
+		if idx < len(buffer.Rocks) {
+			return &buffer.Rocks[idx]
+		}
+		idx -= len(buffer.Rocks)
+	}
+
+	// Check transition buffers
+	for _, buffer := range r.TransitionBuffers {
+		if idx < len(buffer.Rocks) {
+			return &buffer.Rocks[idx]
+		}
+		idx -= len(buffer.Rocks)
+	}
+
+	return nil // Should never happen
 }
 
 func (r *RocksRenderer) Explode(num int, identity render.DieIdentity) {
