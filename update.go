@@ -95,13 +95,14 @@ func (g *Game) UpdateDice() {
 	g.ActiveLevel.HandleScoring(scoringDice, g.RocksRenderer)
 
 	// Populate dice center and velocity buffers after all dice physics are resolved
-	g.diceDataBuffer = g.diceDataBuffer[:0]
+	g.diceCenterBuffer = g.diceCenterBuffer[:0]
 	g.diceVelocityBuffer = g.diceVelocityBuffer[:0]
 	for _, d := range g.Dice {
 		// Die center positions
-		g.diceDataBuffer = append(g.diceDataBuffer, render.Vec2{
+		g.diceCenterBuffer = append(g.diceCenterBuffer, render.Vec3{
 			X: d.Vec2.X + render.HalfDieTileSize,
 			Y: d.Vec2.Y + render.HalfDieTileSize,
+			Z: d.ZRotation,
 		})
 
 		// Die velocities (for determining bounce direction)
@@ -114,7 +115,7 @@ func (g *Game) UpdateDice() {
 
 func (g *Game) UpdateRocks() {
 	// Pass pre-computed dice collision data to renderer
-	g.RocksRenderer.UpdateRocksAndCollide(g.cx, g.cy, g.diceDataBuffer, g.diceVelocityBuffer)
+	g.RocksRenderer.UpdateRocksAndCollide(g.cx, g.cy, g.diceCenterBuffer, g.diceVelocityBuffer)
 }
 
 // always is called at the beginning of the update loop

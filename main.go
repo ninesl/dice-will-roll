@@ -59,12 +59,13 @@ func init() {
 }
 
 type Game struct {
-	Shaders            map[shaders.ShaderKey]*ebiten.Shader
-	RocksImage         *ebiten.Image
-	RocksRenderer      *rocks.RocksRenderer // New rocks rendering system, //TODO:FIXME: make a new one per level?, game renders the same but active level reassigns
-	Dice               []*Die               // Player's dice
-	diceDataBuffer     []render.Vec2        // Pre-allocated die center buffer (X=centerX, Y=centerY)
-	diceVelocityBuffer []render.Vec2        // Pre-allocated die velocity buffer (X=velocityX, Y=velocityY)
+	Shaders       map[shaders.ShaderKey]*ebiten.Shader
+	RocksImage    *ebiten.Image
+	RocksRenderer *rocks.RocksRenderer // New rocks rendering system,
+	// //TODO:FIXME: make a new one per level?, game renders the same but active level reassigns
+	Dice               []*Die        // Player's dice
+	diceCenterBuffer   []render.Vec3 // Pre-allocated die center buffer (X=centerX, Y=centerY, Z=360rotation axis)
+	diceVelocityBuffer []render.Vec2 // Pre-allocated die velocity buffer (X=velocityX, Y=velocityY)
 	startTime          time.Time
 	holdTime           time.Time
 	holdCx, holdCy     float32
@@ -120,7 +121,7 @@ func LoadGame() *Game {
 	rockAmount := *numRocks
 	// Initialize rocks renderer with hybrid real-time 3D SDF system
 	rocksConfig := rocks.RocksConfig{
-		TotalRocks: rockAmount,
+		TotalRocks: []int{rockAmount},
 		BaseColors: []render.Vec3{
 			render.Grey,
 			// render.Brown,
@@ -142,7 +143,7 @@ func LoadGame() *Game {
 		Dice:               dice,
 		Shaders:            shaders.LoadShaders(),
 		RocksRenderer:      rocks.NewRocksRenderer(rocksConfig),
-		diceDataBuffer:     make([]render.Vec2, 0, NUM_PLAYER_DICE),
+		diceCenterBuffer:   make([]render.Vec3, 0, NUM_PLAYER_DICE),
 		diceVelocityBuffer: make([]render.Vec2, 0, NUM_PLAYER_DICE),
 		startTime:          time.Now(),
 		ActiveLevel: NewLevel(LevelOptions{
