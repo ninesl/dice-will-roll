@@ -163,12 +163,20 @@ func (g *Game) SetToScore() {
 			die.Fixed.Y = 0
 			die.Height = 0
 			// Set velocity straight down to bounce into rollzone
-			die.Velocity.X = 0
 			die.Velocity.Y = render.DieTileSize * 2 // downward velocity
+
+			if die.Vec2.X < render.GAME_BOUNDS_X/2 {
+				die.Velocity.X = render.DieTileSize * 2 // push right
+			} else {
+				die.Velocity.X = render.DieTileSize * -2 // push left
+			}
+
 			die.Direction = render.DirectionArr[render.DOWN]
 			die.ZRotation = rand.Float32()
 			// Roll the die face value
 			die.Die.Roll()
+			// deselect rocks, no color for rocks that aren't in scoring hand
+			g.RocksRenderer.DeselectRocks(die.Identifier)
 		}
 	}
 }
@@ -238,6 +246,12 @@ func (g *Game) Select() {
 		g.RocksRenderer.SelectRocksColor(die.Color, die.Identifier, len(g.Dice))
 
 		return
+	}
+
+	if die.Mode == DRAG {
+		die.Fixed.X = 0
+		die.Fixed.Y = 0
+		g.RocksRenderer.DeselectRocks(die.Identifier)
 	}
 
 	// let go of die
