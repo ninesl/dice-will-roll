@@ -8,13 +8,8 @@ import (
 	"github.com/ninesl/dice-will-roll/render"
 )
 
-// updateBufferRocks updates all rocks in a buffer: physics, wall bouncing, and collision detection
-func (r *RocksRenderer) updateBufferRocks(
-	buffer *RockBuffer,
-	cursorX, cursorY float32,
-	diceCenters []render.Vec2,
-	diceVelocities []render.Vec2,
-) {
+// updateBufferPhysics updates rock positions and wall bouncing (no collision detection)
+func (r *RocksRenderer) updateBufferPhysics(buffer *RockBuffer) {
 	buffer.FrameCounter++
 
 	for i := range buffer.Rocks {
@@ -38,20 +33,6 @@ func (r *RocksRenderer) updateBufferRocks(
 		} else if rock.Position.Y <= 0 {
 			rock.Position.Y = 0
 			rock.BounceY()
-		}
-
-		// BROAD PHASE: Collect rocks near cursor
-		if rock.IsNearPoint(sizeData.Size, cursorX, cursorY, r.CursorCheckRadius) {
-			r.cursorCollisionBuffer = append(r.cursorCollisionBuffer, rock)
-		}
-
-		//TODO:FIXME: check rock if in die quadrants instead of EVERY rock on EVERY die
-		// BROAD PHASE: Collect rocks near any die center
-		for j := range diceCenters {
-			if rock.IsNearPoint(sizeData.Size, diceCenters[j].X, diceCenters[j].Y, r.DieCheckRadius) {
-				r.diceCollisionBuffer = append(r.diceCollisionBuffer, rock)
-				break // Only add once even if near multiple dice
-			}
 		}
 	}
 }
@@ -89,59 +70,6 @@ func (r *RocksRenderer) updateAllBufferTransitions() {
 			r.TransitionBuffers = append(r.TransitionBuffers[:i], r.TransitionBuffers[i+1:]...)
 		}
 	}
-}
-
-// UpdateRocksAndCollide performs all rock updates, wall bouncing, and collision detection/response
-// diceCenters: die center positions (X=centerX, Y=centerY)
-// diceVelocities: die velocity vectors (X=velocityX, Y=velocityY) for bounce direction
-func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCenters []render.Vec2, diceVelocities []render.Vec2) {
-	r.ActiveRockFlag = !r.ActiveRockFlag
-
-	// Reset collision buffers to length 0 (keeps capacity - no allocation)
-	r.diceCollisionBuffer = r.diceCollisionBuffer[:0]
-	r.cursorCollisionBuffer = r.cursorCollisionBuffer[:0]
-
-	// PASS 1: BROAD PHASE - Update all rocks and collect collision candidates
-
-	// Update base color buffers
-	for k := range r.BaseColorBuffers {
-		r.updateBufferRocks(&r.BaseColorBuffers[k], cursorX, cursorY, diceCenters, diceVelocities)
-	}
-
-	// Update held color buffers
-	for _, buffer := range r.HeldColorBuffers {
-		r.updateBufferRocks(buffer, cursorX, cursorY, diceCenters, diceVelocities)
-	}
-
-	// Update transition buffers
-	for _, buffer := range r.TransitionBuffers {
-		r.updateBufferRocks(buffer, cursorX, cursorY, diceCenters, diceVelocities)
-	}
-
-	// PASS 2: NARROW PHASE - Precise collision checks and responses
-	r.handleCursorCollisions(cursorX, cursorY)
-	r.handleDieCollisions(diceCenters, diceVelocities)
-
-	// PASS 3: DAMPING - Apply velocity reduction AFTER all collisions
-	// Base color buffers get damping
-	for k := range r.BaseColorBuffers {
-		buffer := &r.BaseColorBuffers[k]
-		for i := range buffer.Rocks {
-			buffer.Rocks[i].ApplyDamping(buffer.FrameCounter)
-		}
-	}
-
-	// Held color buffers DO NOT get damping (maintain speed while held by dice)
-
-	// Transition buffers get damping
-	for _, buffer := range r.TransitionBuffers {
-		for i := range buffer.Rocks {
-			buffer.Rocks[i].ApplyDamping(buffer.FrameCounter)
-		}
-	}
-
-	// Update all buffer transitions and move completed transition buffers to base buffers
-	r.updateAllBufferTransitions()
 }
 
 // countAvailableRocks returns total rocks in base color buffers
@@ -260,8 +188,10 @@ func (r *RocksRenderer) SelectRocksColor(color render.Vec3, dieIdentity render.D
 		}
 
 		if actualTake > 0 {
-			collectedRocks = append(collectedRocks, buffer.Rocks[:actualTake]...)
-			buffer.Rocks = buffer.Rocks[actualTake:]
+			// Take from END of slice (top rocks visually) instead of front
+			startIdx := len(buffer.Rocks) - actualTake
+			collectedRocks = append(collectedRocks, buffer.Rocks[startIdx:]...)
+			buffer.Rocks = buffer.Rocks[:startIdx]
 			rockCounts[i] = actualTake
 			numToTake -= actualTake
 		}
@@ -328,6 +258,7 @@ func (r *RocksRenderer) SelectRocksColor(color render.Vec3, dieIdentity render.D
 	}
 
 	r.HeldColorBuffers[dieIdentity] = heldBuffer
+	r.selectionOrder = append(r.selectionOrder, dieIdentity) // Track selection order for draw order
 }
 
 // DeselectAll returns all held rocks back to base buffers
@@ -392,6 +323,14 @@ func (r *RocksRenderer) DeselectRocks(dieIdentity render.DieIdentity) {
 
 	// Remove held buffer
 	delete(r.HeldColorBuffers, dieIdentity)
+
+	// Remove from selection order
+	for i, id := range r.selectionOrder {
+		if id == dieIdentity {
+			r.selectionOrder = append(r.selectionOrder[:i], r.selectionOrder[i+1:]...)
+			break
+		}
+	}
 }
 
 // drawBufferToImage draws all rocks from a buffer to a temporary image
