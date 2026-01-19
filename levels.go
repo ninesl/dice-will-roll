@@ -105,11 +105,9 @@ func (l *Level) HandleScoring(heldDice []*Die, rockRenderer *rocks.RocksRenderer
 		l.CurrentScore = 0
 		for _, die := range heldDice {
 			die.Mode = ROLLING
-			die.Roll() // set diff die value
-
+			die.Roll()                              // set diff die value
 			die.Velocity.Y = render.DieTileSize * 2 // downward velocity
 			die.Direction = render.DirectionArr[render.DOWN]
-
 		}
 
 		rockRenderer.DeselectAll()
@@ -160,7 +158,6 @@ func (l *Level) HandleScoring(heldDice []*Die, rockRenderer *rocks.RocksRenderer
 
 			// TODO: rocks blow up
 			// rockRenderer.Explode(die.ActiveFace().Value())
-			rockRenderer.DeselectRocks(die.Identifier)
 
 			if l.scoringIndex == len(heldDice)-1 {
 				l.scoringTimer *= 2
