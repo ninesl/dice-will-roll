@@ -1,0 +1,99 @@
+//go:build ignore
+
+//kage:unit pixels
+
+package shaders
+
+var (
+	Time float
+)
+
+func rand(p float) float {
+	p = fract(p * .1031)
+	p *= p + 33.33
+	p *= p + p
+	return fract(p)
+}
+
+func rand2(co vec2) float {
+	return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453)
+}
+
+func glow(p, lpos vec2) vec3 {
+	q := p - lpos
+	atten := 1.0 / dot(q, q)
+	return vec3(1.0) * atten
+}
+
+func lastExplosion(time float) vec3 {
+	t := mod(time, 10.0)
+	interval := floor(time / 10.0)
+	t0max := 0.0
+	imax := -1.0
+	t0next := 10.0
+	
+	for i := 0; i < 10; i++ {
+		fi := float(i)
+		t0 := rand2(vec2(interval, fi)) * 10.0
+		if t > t0 && t0 > t0max {
+			t0max = t0
+			imax = fi
+		}
+		if t < t0 && t0 < t0next {
+			t0next = t0
+		}
+	}
+	
+	return vec3(t-t0max, 10.0*interval+imax, t0next-t)
+}
+
+func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+	// Normalized coordinates: y in [-1, 1], x scaled by aspect ratio
+	p := (srcPos*2.0 - imageDstSize().xy) / imageDstSize().y
+	
+	col := vec3(0)
+	lastExpl := lastExplosion(Time)
+	
+	t := lastExpl.x
+	explNum := lastExpl.y
+	tFadeout := lastExpl.z
+	
+	// Fireworks base color
+	baseCol := vec3(0.5, 0.5, 0.5) + 0.4*sin(vec3(1.0)*explNum+vec3(0.0, 2.1, -2.1))
+	
+	// Number of particles
+	const N_LIGHTS = 100
+	for i := 0; i < N_LIGHTS; i++ {
+		fi := float(i)
+		// Generate points uniformly on hemisphere
+		f := fi / float(N_LIGHTS)
+		r := sqrt(1.0 - f*f)
+		th := 2.0 * 0.618033 * 3.14159 * fi
+		hash := sin(explNum + fi*85412.243)
+		weight := (1.0 - 0.2*hash)
+		th += hash * 3.0 * 6.28 / float(N_LIGHTS)
+		
+		// Position on unit circle
+		lpos := vec2(cos(th), sin(th)) * r
+		
+		// Add physics - explosion expansion with gravity
+		lpos = lpos * (1.0 - exp(-3.0*t/weight)) * weight
+		lpos.y = lpos.y + t*0.3*weight - t*(1.0-exp(-t*weight))*0.6*weight
+		
+		// MUCH higher intensity so particles are visible
+		intensity := 0.01  // Was 2e-4, increased 50x
+		intensity *= exp(-2.0*t)
+		intensity *= (1.0 - 0.5*hash)
+		intensity *= (1.0 + 10.0*exp(-20.0*t))
+		intensity *= clamp(3.0*tFadeout, 0.0, 1.0)
+		
+		col += glow(p, lpos) * intensity * baseCol
+	}
+	
+	col = max(col, 0.0)
+	// Tone mapping
+	col = (col*(2.51*col+0.03))/(col*(2.43*col+0.59)+0.14)
+	col = sqrt(col)
+	
+	return vec4(col, 1.0)
+}

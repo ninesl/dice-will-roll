@@ -39,6 +39,12 @@ var (
 
 	//go:embed background.kage
 	backgroundKage []byte
+
+	//go:embed explosion.kage
+	explosionKage []byte
+
+	//go:embed color.kage
+	colorKage []byte
 )
 
 func loadShader(kageShader []byte) *ebiten.Shader {
@@ -56,17 +62,21 @@ const (
 	RocksShaderKey
 	ColorFilterShaderKey
 	FXAAShaderKey
+	ExplosionShaderKey
 	BackgroundShaderKey
+	ColorShaderKey
 )
 
 func LoadShaders() map[ShaderKey]*ebiten.Shader {
 	var shaders = map[ShaderKey]*ebiten.Shader{}
 
+	shaders[ExplosionShaderKey] = loadShader(explosionKage)
 	shaders[DieShaderKey] = loadShader(dieKage)
 	shaders[RocksShaderKey] = loadShader(rocksKage)
 	shaders[ColorFilterShaderKey] = loadShader(colorFilterKage)
 	shaders[FXAAShaderKey] = loadShader(fxaaKage)
 	shaders[BackgroundShaderKey] = loadShader(backgroundKage)
+	shaders[ColorShaderKey] = loadShader(colorKage)
 
 	return shaders
 }

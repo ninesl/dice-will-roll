@@ -1,0 +1,13 @@
+//go:build ignore
+
+//kage:unit pixels
+
+package shaders
+
+var (
+	Color vec3
+)
+
+func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
+	return vec4(Color, .5)
+}
