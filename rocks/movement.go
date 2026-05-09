@@ -146,9 +146,3 @@ func (r *SimpleRock) BounceTowardsAngle(angle int) {
 func (r *SimpleRock) SizeData() RockSizeData {
 	return rockSizeLookup[r.Score]
 }
-
-// GetSize returns the pixel size of this rock based on its RockScoreType
-// DEPRECATED: Use SizeData().Size for better performance
-func (r *SimpleRock) GetSize(baseSpriteSize float32) float32 {
-	return baseSpriteSize * r.Score.SizeMultiplier()
-}

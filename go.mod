@@ -1,6 +1,6 @@
 module github.com/ninesl/dice-will-roll
 
-go 1.25.4
+go 1.25.6
 
 require (
 	github.com/hajimehoshi/ebiten v1.12.13
