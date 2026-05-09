@@ -1,0 +1,12 @@
+//go:build ignore
+
+//kage:unit pixels
+
+package shaders
+
+// Simple background shader that returns transparent black
+// Used as the base background layer before drawing rocks and dice
+
+func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+    return vec4(0.5, 0.5, 0.5, 0.0)
+}
