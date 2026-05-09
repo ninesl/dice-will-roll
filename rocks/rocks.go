@@ -221,8 +221,9 @@ type RockBuffer struct {
 
 // RocksRenderer manages pre-extracted sprite rendering with ultra-fast array indexing
 type RocksRenderer struct {
-	shader      *ebiten.Shader
-	colorShader *ebiten.Shader // Color filter shader for applying colors to grayscale sprites
+	shader          *ebiten.Shader
+	colorShader     *ebiten.Shader // Color filter shader for applying colors to grayscale sprites
+	explosionShader *ebiten.Shader
 
 	// 2D array of grayscale sprite sheets (shared by all rock types)
 	// [speedX_index][speedY_index] -> Sprite struct containing spritesheet
@@ -237,6 +238,7 @@ type RocksRenderer struct {
 	ActiveBaseBuffer  *RockBuffer                        // active depth level
 	HeldColorBuffers  map[render.DieIdentity]*RockBuffer // Rocks owned by held dice
 	TransitionBuffers []*RockBuffer                      // Rocks transitioning back to base colors
+	ExplosionBuffers  map[render.DieIdentity]*RockBuffer // Rocks currently exploding
 	selectionOrder    []render.DieIdentity               // Tracks order dice were selected (for draw order)
 
 	totalRocks []int // rock depth nums 0 is activeBaseBuffer
@@ -288,10 +290,11 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 	shaderMap := shaders.LoadShaders()
 
 	r := &RocksRenderer{
-		shader:       shaderMap[shaders.RocksShaderKey],
-		colorShader:  shaderMap[shaders.ColorFilterShaderKey],
-		RockTileSize: config.RockTileSize,
-		totalRocks:   config.TotalRocks,
+		shader:          shaderMap[shaders.RocksShaderKey],
+		colorShader:     shaderMap[shaders.ColorFilterShaderKey],
+		explosionShader: shaderMap[shaders.ColorShaderKey],
+		RockTileSize:    config.RockTileSize,
+		totalRocks:      config.TotalRocks,
 		// Initialize collision check radii - TIGHT buffers to reduce expensive collision calculations
 		// Accepts that some edge-case collisions at buffer boundaries may be missed
 
@@ -309,6 +312,7 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 	// Initialize empty rock buffers slice (will grow dynamically)
 	r.BaseColorBuffers = make([]RockBuffer, 0, len(config.BaseColors))
 	r.HeldColorBuffers = make(map[render.DieIdentity]*RockBuffer)
+	r.ExplosionBuffers = make(map[render.DieIdentity]*RockBuffer)
 	r.TransitionBuffers = make([]*RockBuffer, 0, 10)
 	r.selectionOrder = make([]render.DieIdentity, 0, 7) // Track selection order for draw order
 
@@ -510,7 +514,7 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 	// }
 }
 
-// DrawRocks renders all rocks with ultra-fast direct array access
+// DrawRocks renders all rocks with fast direct array access
 // Uses grayscale sprites with color filter shader applied per rock type
 // Implements index-based interleaving to prevent one color from always appearing on top
 func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
@@ -558,12 +562,263 @@ func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
 	// Render held color buffers in SELECTION ORDER (most recent = on top)
 	for _, dieIdentity := range r.selectionOrder {
 		buffer := r.HeldColorBuffers[dieIdentity]
+		if buffer == nil || len(buffer.Rocks) == 0 {
+			continue
+		}
+
 		tempImg := r.imagePool.GetNext()
 		r.drawBufferToImage(buffer, tempImg, opts)
 		r.drawWithColorShader(buffer, tempImg, screen)
 	}
 
-	// TODO:render explosion buffers???
+	// Draw explosions on top of everything
+	r.DrawExplosions(screen)
+}
+
+// SplitRock converts one exploding rock into smaller child rocks.
+// The children start centered on the parent, then bounce outward in a radial pattern.
+// Rocks that are already SmallScore do not split further and return a nil slice
+func (r *RocksRenderer) SplitRock(rock SimpleRock) []SimpleRock {
+	childScores := splitRockScores(rock.Score.GetScore())
+	if len(childScores) == 0 {
+		return nil
+	}
+
+	parentSize := rock.SizeData()
+	center := render.Vec2{
+		X: rock.Position.X + parentSize.HalfSize,
+		Y: rock.Position.Y + parentSize.HalfSize,
+	}
+
+	children := make([]SimpleRock, 0, len(childScores))
+	for i, score := range childScores {
+		childType := randomRockTypeForScore(score)
+		childSize := rockSizeLookup[childType]
+		child := SimpleRock{
+			Position: render.Vec2{
+				X: center.X - childSize.HalfSize,
+				Y: center.Y - childSize.HalfSize,
+			},
+			SpriteIndex:  rock.SpriteIndex,
+			SpriteSlopeX: rock.SpriteSlopeX,
+			SpriteSlopeY: rock.SpriteSlopeY,
+			Score:        childType,
+		}
+
+		angle := i * 360 / len(childScores)
+		child.BounceTowardsAngle(angle)
+		children = append(children, child)
+	}
+
+	return children
+}
+
+// splitRockScores defines the gameplay value breakdown for exploded rocks.
+// Each returned score becomes one child rock; nil means this rock is too small to split.
+func splitRockScores(score int) []int {
+	switch score {
+	case HugeScore:
+		return []int{BigScore, MediumScore, SmallScore, SmallScore}
+	case BigScore:
+		return []int{MediumScore, SmallScore, SmallScore}
+	case MediumScore:
+		return []int{SmallScore, SmallScore, SmallScore}
+	default:
+		return nil
+	}
+}
+
+// randomRockTypeForScore chooses a visual size variant for a logical score value.
+// The score controls gameplay value, while the returned RockScoreType adds size variety.
+func randomRockTypeForScore(score int) RockScoreType {
+	switch score {
+	case SmallScore:
+		return SmallLarge + RockScoreType(rand.Intn(rockScoreVariants))
+	case MediumScore:
+		return MediumLarge + RockScoreType(rand.Intn(rockScoreVariants))
+	case BigScore:
+		return BigLarge + RockScoreType(rand.Intn(rockScoreVariants))
+	case HugeScore:
+		return HugeLarge + RockScoreType(rand.Intn(rockScoreVariants))
+	default:
+		panic(fmt.Errorf("invalid rock score %d", score))
+	}
+}
+
+// NOTE: the recreation of rock buffers here is likely not performant
+// it would be better to clear the buffer and then reassign our heldBuffer
+// to a blank RockBuffer instead of creating a &RockBuffer{}?
+
+// ExplodeRocks explodes up to numRocks rocks into the initiating die's color.
+// Selection order is intentional:
+// 1. consume rocks already held by the initiating die,
+// 2. consume active base rocks if the die runs out,
+// 3. consume rocks from other held buffers as a final fallback.
+//
+// Regardless of where a rock is taken from, it is returned as ownerIdentity == dieIdentity.
+// That makes fallback rocks visually explode into the initiating color and makes split
+// children re-enter that same held buffer, producing a confetti-like color conversion.
+func (r *RocksRenderer) ExplodeRocks(dieIdentity render.DieIdentity, numRocks int) {
+	if numRocks <= 0 {
+		return
+	}
+
+	touched := make(map[render.DieIdentity]struct{})
+	for explodedCount := 0; explodedCount < numRocks; explodedCount++ {
+		rock, ownerIdentity, ok := r.popRockForExplosion(dieIdentity)
+		if !ok {
+			break
+		}
+
+		touched[ownerIdentity] = struct{}{}
+		r.addExplosionRock(ownerIdentity, rock)
+
+		if newRocks := r.SplitRock(rock); len(newRocks) > 0 {
+			ownerBuffer, exists := r.HeldColorBuffers[ownerIdentity]
+			if !exists {
+				ownerBuffer = &RockBuffer{
+					Rocks: []SimpleRock{},
+					Color: render.RainbowColors[ownerIdentity],
+				}
+				r.HeldColorBuffers[ownerIdentity] = ownerBuffer
+			}
+			ownerBuffer.Rocks = append(ownerBuffer.Rocks, newRocks...)
+		}
+	}
+
+	for identity := range touched {
+		r.cleanupHeldBuffer(identity)
+	}
+}
+
+// popRockForExplosion removes the next rock that should explode.
+// It prefers the initiating identity's held rocks, then the active base layer, then any
+// other held color. The returned identity is always preferredIdentity so stolen/base rocks
+// convert into the color that started the explosion.
+func (r *RocksRenderer) popRockForExplosion(preferredIdentity render.DieIdentity) (SimpleRock, render.DieIdentity, bool) {
+	if buffer := r.HeldColorBuffers[preferredIdentity]; buffer != nil && len(buffer.Rocks) > 0 {
+		rock := buffer.Rocks[0]
+		buffer.Rocks = buffer.Rocks[1:]
+		return rock, preferredIdentity, true
+	}
+
+	if buffer := r.ActiveBaseBuffer; buffer != nil && len(buffer.Rocks) > 0 {
+		rock := buffer.Rocks[0]
+		buffer.Rocks = buffer.Rocks[1:]
+		return rock, preferredIdentity, true
+	}
+
+	for otherIdentity, buffer := range r.HeldColorBuffers {
+		if otherIdentity == preferredIdentity || buffer == nil || len(buffer.Rocks) == 0 {
+			continue
+		}
+
+		rock := buffer.Rocks[0]
+		buffer.Rocks = buffer.Rocks[1:]
+		return rock, preferredIdentity, true
+	}
+
+	return SimpleRock{}, 0, false
+}
+
+// cleanupHeldBuffer removes empty held buffers and their draw-order entry.
+// Split children may refill the buffer during ExplodeRocks, so cleanup happens after the
+// explosion loop has finished touching an identity.
+func (r *RocksRenderer) cleanupHeldBuffer(dieIdentity render.DieIdentity) {
+	buffer := r.HeldColorBuffers[dieIdentity]
+	if buffer != nil && len(buffer.Rocks) > 0 {
+		return
+	}
+
+	delete(r.HeldColorBuffers, dieIdentity)
+	r.removeSelectionOrder(dieIdentity)
+}
+
+// addExplosionRock moves a rock into the transient explosion buffer for a die identity.
+// Explosion buffers are separate from held buffers so the disappearing parent rock can
+// animate while any split children immediately continue moving in the held color buffer.
+func (r *RocksRenderer) addExplosionRock(dieIdentity render.DieIdentity, rock SimpleRock) {
+	explosionBuffer, exists := r.ExplosionBuffers[dieIdentity]
+	if !exists {
+		explosionBuffer = &RockBuffer{
+			Rocks: []SimpleRock{},
+			Color: render.RainbowColors[dieIdentity],
+		}
+		if heldBuffer := r.HeldColorBuffers[dieIdentity]; heldBuffer != nil {
+			explosionBuffer.Color = heldBuffer.Color
+		}
+		r.ExplosionBuffers[dieIdentity] = explosionBuffer
+	}
+
+	rock.SpriteIndex = 60 // TODO: constant or modify based on what explode anim shader is going to be applied
+	explosionBuffer.Rocks = append(explosionBuffer.Rocks, rock)
+}
+
+// UpdateExplosions updates all exploding rocks, decrementing their frame counters
+func (r *RocksRenderer) UpdateExplosions() {
+	for dieIdentity, buffer := range r.ExplosionBuffers {
+		// Process rocks in reverse order for safe removal
+		for i := len(buffer.Rocks) - 1; i >= 0; i-- {
+			rock := &buffer.Rocks[i]
+
+			// Decrement explosion frame (stored in SpriteIndex)
+			if rock.SpriteIndex > 0 {
+				rock.SpriteIndex--
+			}
+
+			// Remove finished explosions
+			if rock.SpriteIndex == 0 {
+				buffer.Rocks[i] = buffer.Rocks[len(buffer.Rocks)-1]
+				buffer.Rocks = buffer.Rocks[:len(buffer.Rocks)-1]
+			}
+		}
+
+		if len(buffer.Rocks) == 0 {
+			delete(r.ExplosionBuffers, dieIdentity)
+		}
+	}
+}
+
+// DrawExplosions renders all exploding rocks with the explosion shader
+func (r *RocksRenderer) DrawExplosions(screen *ebiten.Image) {
+	for _, buffer := range r.ExplosionBuffers {
+		if len(buffer.Rocks) == 0 {
+			continue
+		}
+
+		// Draw each exploding rock
+		for _, rock := range buffer.Rocks {
+			// Get size from rock score for shader
+			sizeData := rock.SizeData()
+
+			// Get temp image from pool for this explosion
+			tempImg := r.imagePool.GetNext()
+
+			// TODO: Draw rectangle with explosion shader
+			// shaderOpts := &ebiten.DrawRectShaderOptions{
+			//     Uniforms: map[string]interface{}{
+			//         "Color": buffer.Color.KageVec3(),
+			//         "Time": float32(30-rock.SpriteIndex) / 30.0,
+			//         "Resolution": []float32{float32(sizeData.Size), float32(sizeData.Size)},
+			//     },
+			// }
+			// tempImg.DrawRectShader(int(sizeData.Size), int(sizeData.Size), r.explosionShader, shaderOpts)
+
+			// Test: Draw explosion shader with color uniform to verify effect triggers
+			// fmt.Printf("Explosion color: RGB(%.3f, %.3f, %.3f)\n", colorVec[0], colorVec[1], colorVec[2])
+			shaderOpts := &ebiten.DrawRectShaderOptions{
+				Uniforms: map[string]interface{}{
+					"Color": buffer.Color.KageVec3(),
+				},
+			}
+			tempImg.DrawRectShader(int(sizeData.Size), int(sizeData.Size), r.explosionShader, shaderOpts)
+
+			// Draw temp image to screen at rock position
+			opts := &ebiten.DrawImageOptions{}
+			opts.GeoM.Translate(float64(rock.Position.X), float64(rock.Position.Y))
+			screen.DrawImage(tempImg, opts)
+		}
+	}
 }
 
 func (r *RocksRenderer) GetStats() (visible, total int) {

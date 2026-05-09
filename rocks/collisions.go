@@ -184,6 +184,9 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCent
 
 	// Update all buffer transitions and move completed transition buffers to base buffers
 	r.updateAllBufferTransitions()
+
+	// Update explosion animations
+	r.UpdateExplosions()
 }
 
 // preprocessDiceCollisionData pre-computes all die-related collision data ONCE per frame

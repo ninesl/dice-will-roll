@@ -273,15 +273,17 @@ func (r *RocksRenderer) DeselectRocks(dieIdentity render.DieIdentity) {
 	// Get held buffer
 	heldBuffer, exists := r.HeldColorBuffers[dieIdentity]
 	if !exists || len(heldBuffer.Rocks) == 0 {
+		r.cleanupHeldBuffer(dieIdentity)
 		return
 	}
 
+	//TODO: this is a temp check, not part of game logic
 	numRocks := len(heldBuffer.Rocks)
 	numBaseBuffers := len(r.config.BaseColors)
 
 	if numBaseBuffers == 0 {
 		// Safety: no base buffers, can't return rocks
-		delete(r.HeldColorBuffers, dieIdentity)
+		r.cleanupHeldBuffer(dieIdentity)
 		return
 	}
 
@@ -323,8 +325,10 @@ func (r *RocksRenderer) DeselectRocks(dieIdentity render.DieIdentity) {
 
 	// Remove held buffer
 	delete(r.HeldColorBuffers, dieIdentity)
+	r.removeSelectionOrder(dieIdentity)
+}
 
-	// Remove from selection order
+func (r *RocksRenderer) removeSelectionOrder(dieIdentity render.DieIdentity) {
 	for i, id := range r.selectionOrder {
 		if id == dieIdentity {
 			r.selectionOrder = append(r.selectionOrder[:i], r.selectionOrder[i+1:]...)

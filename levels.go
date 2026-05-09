@@ -102,6 +102,33 @@ func (l *Level) HandleScoring(heldDice []*Die, rockRenderer *rocks.RocksRenderer
 
 		l.Rocks -= l.CurrentScore
 
+		// Calculate and distribute remaining score explosions (from multiplier)
+		sumOfNumPips := 0
+		for _, d := range heldDice {
+			sumOfNumPips += d.ActiveFace().NumPips()
+		}
+		remainingScore := l.CurrentScore - sumOfNumPips
+
+		if remainingScore > 0 {
+			numDice := len(heldDice)
+			rocksPerDie := remainingScore / numDice
+			remainder := remainingScore % numDice
+
+			// Distribute base amount to all dice
+			for _, d := range heldDice {
+				if rocksPerDie > 0 {
+					rockRenderer.ExplodeRocks(d.Identifier, rocksPerDie)
+				}
+			}
+
+			// Distribute remainder round-robin
+			for i := 0; remainder > 0; i++ {
+				die := heldDice[i%numDice]
+				rockRenderer.ExplodeRocks(die.Identifier, 1)
+				remainder--
+			}
+		}
+
 		l.CurrentScore = 0
 		for _, die := range heldDice {
 			die.Mode = ROLLING
@@ -156,8 +183,8 @@ func (l *Level) HandleScoring(heldDice []*Die, rockRenderer *rocks.RocksRenderer
 			l.scoringState = SCORING_PAUSING
 			l.scoringTimer = scoringDelay // Start the timer
 
-			// TODO: rocks blow up
-			// rockRenderer.Explode(die.ActiveFace().Value())
+			// Explode rocks from this die's held buffer
+			rockRenderer.ExplodeRocks(die.Identifier, die.ActiveFace().NumPips())
 
 			if l.scoringIndex == len(heldDice)-1 {
 				l.scoringTimer *= 2
