@@ -243,7 +243,7 @@ func (g *Game) Select() {
 		g.ResetHoldPoint()
 		die.Mode = HELD
 
-		g.RocksRenderer.SelectRocksColor(die.Color, die.Identifier, len(g.Dice))
+		g.RocksRenderer.SelectRocksColor(die.Color, die.Identifier, len(g.Dice), die.ActiveFace().NumPips())
 
 		return
 	}

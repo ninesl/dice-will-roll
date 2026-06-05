@@ -614,15 +614,15 @@ func (r *RocksRenderer) SplitRock(rock SimpleRock) []SimpleRock {
 }
 
 // splitRockScores defines the gameplay value breakdown for exploded rocks.
-// Each returned score becomes one child rock; nil means this rock is too small to split.
+// Each explosion consumes one score; the remaining score becomes child rocks.
 func splitRockScores(score int) []int {
 	switch score {
 	case HugeScore:
-		return []int{BigScore, MediumScore, SmallScore, SmallScore}
+		return []int{BigScore, MediumScore, SmallScore}
 	case BigScore:
-		return []int{MediumScore, SmallScore, SmallScore}
+		return []int{MediumScore, SmallScore}
 	case MediumScore:
-		return []int{SmallScore, SmallScore, SmallScore}
+		return []int{SmallScore, SmallScore}
 	default:
 		return nil
 	}
@@ -650,6 +650,28 @@ func randomRockTypeForScore(score int) RockScoreType {
 // to a blank RockBuffer instead of creating a &RockBuffer{}?
 
 // ExplodeRocks explodes up to numRocks rocks into the initiating die's color.
+func (r *RocksRenderer) ExplodeRocks(dieIdentity render.DieIdentity, numRocks int) {
+	if numRocks <= 0 {
+		return
+	}
+
+	for explodedCount := 0; explodedCount < numRocks; explodedCount++ {
+		rock, ownerIdentity, ok := r.popRockForExplosion(dieIdentity)
+		if !ok {
+			break
+		}
+
+		r.addExplosionRock(ownerIdentity, rock)
+
+		if newRocks := r.SplitRock(rock); len(newRocks) > 0 {
+			ownerBuffer := r.ensureHeldBuffer(ownerIdentity)
+			ownerBuffer.Rocks = append(ownerBuffer.Rocks, newRocks...)
+		}
+	}
+}
+
+// popRockForExplosion removes the next rock that should explode from the from of the rockBuffer.
+//
 // Selection order is intentional:
 // 1. consume rocks already held by the initiating die,
 // 2. consume active base rocks if the die runs out,
@@ -658,43 +680,8 @@ func randomRockTypeForScore(score int) RockScoreType {
 // Regardless of where a rock is taken from, it is returned as ownerIdentity == dieIdentity.
 // That makes fallback rocks visually explode into the initiating color and makes split
 // children re-enter that same held buffer, producing a confetti-like color conversion.
-func (r *RocksRenderer) ExplodeRocks(dieIdentity render.DieIdentity, numRocks int) {
-	if numRocks <= 0 {
-		return
-	}
-
-	touched := make(map[render.DieIdentity]struct{})
-	for explodedCount := 0; explodedCount < numRocks; explodedCount++ {
-		rock, ownerIdentity, ok := r.popRockForExplosion(dieIdentity)
-		if !ok {
-			break
-		}
-
-		touched[ownerIdentity] = struct{}{}
-		r.addExplosionRock(ownerIdentity, rock)
-
-		if newRocks := r.SplitRock(rock); len(newRocks) > 0 {
-			ownerBuffer, exists := r.HeldColorBuffers[ownerIdentity]
-			if !exists {
-				ownerBuffer = &RockBuffer{
-					Rocks: []SimpleRock{},
-					Color: render.RainbowColors[ownerIdentity],
-				}
-				r.HeldColorBuffers[ownerIdentity] = ownerBuffer
-			}
-			ownerBuffer.Rocks = append(ownerBuffer.Rocks, newRocks...)
-		}
-	}
-
-	for identity := range touched {
-		r.cleanupHeldBuffer(identity)
-	}
-}
-
-// popRockForExplosion removes the next rock that should explode.
-// It prefers the initiating identity's held rocks, then the active base layer, then any
-// other held color. The returned identity is always preferredIdentity so stolen/base rocks
-// convert into the color that started the explosion.
+//
+// NOTE: we have the render.DieIdentity for additional functionality later if we want
 func (r *RocksRenderer) popRockForExplosion(preferredIdentity render.DieIdentity) (SimpleRock, render.DieIdentity, bool) {
 	if buffer := r.HeldColorBuffers[preferredIdentity]; buffer != nil && len(buffer.Rocks) > 0 {
 		rock := buffer.Rocks[0]
@@ -708,6 +695,16 @@ func (r *RocksRenderer) popRockForExplosion(preferredIdentity render.DieIdentity
 		return rock, preferredIdentity, true
 	}
 
+	for _, buffer := range r.TransitionBuffers {
+		if buffer == nil || len(buffer.Rocks) == 0 {
+			continue
+		}
+
+		rock := buffer.Rocks[0]
+		buffer.Rocks = buffer.Rocks[1:]
+		return rock, preferredIdentity, true
+
+	}
 	for otherIdentity, buffer := range r.HeldColorBuffers {
 		if otherIdentity == preferredIdentity || buffer == nil || len(buffer.Rocks) == 0 {
 			continue
@@ -721,17 +718,21 @@ func (r *RocksRenderer) popRockForExplosion(preferredIdentity render.DieIdentity
 	return SimpleRock{}, 0, false
 }
 
-// cleanupHeldBuffer removes empty held buffers and their draw-order entry.
-// Split children may refill the buffer during ExplodeRocks, so cleanup happens after the
-// explosion loop has finished touching an identity.
-func (r *RocksRenderer) cleanupHeldBuffer(dieIdentity render.DieIdentity) {
+func (r *RocksRenderer) ensureHeldBuffer(dieIdentity render.DieIdentity) *RockBuffer {
 	buffer := r.HeldColorBuffers[dieIdentity]
-	if buffer != nil && len(buffer.Rocks) > 0 {
-		return
+	if buffer == nil {
+		buffer = &RockBuffer{
+			Rocks: []SimpleRock{},
+			Color: render.RainbowColors[dieIdentity],
+		}
+		r.HeldColorBuffers[dieIdentity] = buffer
 	}
+	return buffer
+}
 
-	delete(r.HeldColorBuffers, dieIdentity)
-	r.removeSelectionOrder(dieIdentity)
+func (r *RocksRenderer) clearHeldBuffer(dieIdentity render.DieIdentity) {
+	buffer := r.ensureHeldBuffer(dieIdentity)
+	buffer.Rocks = buffer.Rocks[:0]
 }
 
 // addExplosionRock moves a rock into the transient explosion buffer for a die identity.
@@ -757,6 +758,7 @@ func (r *RocksRenderer) addExplosionRock(dieIdentity render.DieIdentity, rock Si
 // UpdateExplosions updates all exploding rocks, decrementing their frame counters
 func (r *RocksRenderer) UpdateExplosions() {
 	for dieIdentity, buffer := range r.ExplosionBuffers {
+		_ = dieIdentity
 		// Process rocks in reverse order for safe removal
 		for i := len(buffer.Rocks) - 1; i >= 0; i-- {
 			rock := &buffer.Rocks[i]
@@ -773,9 +775,9 @@ func (r *RocksRenderer) UpdateExplosions() {
 			}
 		}
 
-		if len(buffer.Rocks) == 0 {
+		/*if len(buffer.Rocks) == 0 {
 			delete(r.ExplosionBuffers, dieIdentity)
-		}
+		}*/
 	}
 }
 
