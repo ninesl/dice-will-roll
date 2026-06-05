@@ -549,7 +549,7 @@ func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
 		}
 
 		// Apply color shader (base buffers should have Transition = 0, so just use base color)
-		r.drawWithColorShader(buffer, tempImg, screen)
+		r.drawBufferWithColorShader(buffer, tempImg, screen)
 	}
 	// }
 
@@ -557,7 +557,7 @@ func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
 	for _, buffer := range r.TransitionBuffers {
 		tempImg := r.imagePool.GetNext()
 		r.drawBufferToImage(buffer, tempImg, opts)
-		r.drawWithColorShader(buffer, tempImg, screen)
+		r.drawBufferWithColorShader(buffer, tempImg, screen)
 	}
 	// Render held color buffers in SELECTION ORDER (most recent = on top)
 	for _, dieIdentity := range r.selectionOrder {
@@ -568,7 +568,7 @@ func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
 
 		tempImg := r.imagePool.GetNext()
 		r.drawBufferToImage(buffer, tempImg, opts)
-		r.drawWithColorShader(buffer, tempImg, screen)
+		r.drawBufferWithColorShader(buffer, tempImg, screen)
 	}
 
 	// Draw explosions on top of everything

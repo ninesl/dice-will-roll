@@ -1,7 +1,6 @@
 package rocks
 
 import (
-	"fmt"
 	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -168,8 +167,6 @@ var (
 
 // SelectRocksColor assigns rocks from base/transition buffers to a die's held buffer
 func (r *RocksRenderer) SelectRocksColor(color render.Vec3, dieIdentity render.DieIdentity, numDice int, diePips int) {
-	fmt.Println(diePips)
-
 	rocksBeingSelected = append(rocksBeingSelected,
 		r.takeRocksFromTransitionBuffers(diePips)...)
 
@@ -179,20 +176,6 @@ func (r *RocksRenderer) SelectRocksColor(color render.Vec3, dieIdentity render.D
 		rocksBeingSelected = append(rocksBeingSelected,
 			r.takeRocksFromActiveBaseBuffer(left)...)
 	}
-	// else {
-	// 	rocksBeingSelected = append(rocksBeingSelected,
-	// 		r.takeRocksFromActiveBaseBuffer(diePips)...)
-	// }
-	//
-
-	// baseRocksAvail := len(r.ActiveBaseBuffer.Rocks)
-	//
-	// // Take from END of slice (top rocks visually) instead of front
-	// collectedRocks = append(collectedRocks, buffer.Rocks[startIdx:]...)
-	// buffer.Rocks = buffer.Rocks[:startIdx]
-	// rockCounts[i] = actualTake
-	// numToTake -= actualTake
-	//
 
 	// Give each collected rock movement/bounce based on index for psuedo-random
 	for i := range rocksBeingSelected {
@@ -209,31 +192,6 @@ func (r *RocksRenderer) SelectRocksColor(color render.Vec3, dieIdentity render.D
 			rock.BounceX()
 		}
 	}
-
-	// Random transition color from base colors, weighted by how many rocks taken
-	// if len(r.config.BaseColors) > 1 {
-	// 	// Build weighted list of colors
-	// 	totalTaken := 0
-	// 	for _, count := range rockCounts {
-	// 		totalTaken += count
-	// 	}
-	//
-	// 	if totalTaken > 0 {
-	// 		// Pick random rock index
-	// 		randomIdx := rand.Intn(totalTaken)
-	//
-	// 		// Find which buffer this rock came from
-	// 		cumulative := 0
-	// 		for i, count := range rockCounts {
-	// 			cumulative += count
-	// 			if randomIdx < cumulative {
-	// 				transitionColor = r.config.BaseColors[i]
-	// 				break
-	// 			}
-	// 		}
-	// 	}
-	// }
-	//
 
 	heldBuffer := r.ensureHeldBuffer(dieIdentity)
 	heldBuffer.Rocks = append(heldBuffer.Rocks[:0], rocksBeingSelected...)
@@ -258,49 +216,18 @@ func (r *RocksRenderer) DeselectAll() {
 
 // DeselectRocks returns rocks from a die's held buffer back to base buffers via transition buffers
 func (r *RocksRenderer) DeselectRocks(dieIdentity render.DieIdentity) {
-	// Get held buffer
-	// heldBuffer, exists := r.HeldColorBuffers[dieIdentity]
-	// if !exists || len(heldBuffer.Rocks) == 0 {
-
-	heldBuffer := r.HeldColorBuffers[dieIdentity]
-	if heldBuffer == nil || len(heldBuffer.Rocks) == 0 {
+	heldBuffer := r.ensureHeldBuffer(dieIdentity)
+	if len(heldBuffer.Rocks) == 0 {
 		return
 	}
 
 	// TODO: this is a temp check, not part of game logic
 	numBaseBuffers := len(r.config.BaseColors)
 	if numBaseBuffers == 0 {
-		fmt.Println("No Base Buffers to Deselect to")
-		// Safety: no base buffers, can't return rocks
+		// no base buffers, can't return rocks
 		return
 	}
 
-	//numRocks := len(heldBuffer.Rocks)
-
-	// Calculate distribution across all base buffers
-	// rocksPerBuffer := numRocks / numBaseBuffers
-	// remainder := numRocks % numBaseBuffers
-	//
-	// offset := 0
-	//
-	// // Create one transition buffer per base color buffer
-	// for i := 0; i < numBaseBuffers; i++ {
-	// Calculate how many rocks go to this buffer
-	// numToReturn := rocksPerBuffer
-	// if i < remainder {
-	// 	numToReturn++ // Distribute remainder
-	// }
-	//
-	// if numToReturn == 0 {
-	// 	continue // Skip if no rocks for this buffer
-	// }
-	//
-	// endIdx := offset + numToReturn
-	// if endIdx > numRocks {
-	// 	endIdx = numRocks // Safety clamp
-	// }
-	//
-	// Create transition buffer for this portion
 	transitionBuffer := &RockBuffer{
 		Rocks:           append([]SimpleRock{}, heldBuffer.Rocks...),
 		Color:           r.ActiveBaseBuffer.Color, // Target: this base color
@@ -329,7 +256,6 @@ func (r *RocksRenderer) drawBufferToImage(
 	opts *ebiten.DrawImageOptions,
 ) {
 	// Note: tempImage is already cleared by imagePool.GetNext()
-
 	for _, rock := range buffer.Rocks {
 		sprite := r.sprites[rock.SpriteSlopeX][rock.SpriteSlopeY]
 		frameRect := sprite.SpriteSheet.Rect(int(rock.SpriteIndex))
@@ -343,9 +269,9 @@ func (r *RocksRenderer) drawBufferToImage(
 	}
 }
 
-// drawWithColorShader applies color tint shader to a temp image and draws to screen
+// drawBufferWithColorShader applies color tint shader to a temp image and draws to screen
 // Handles color transitions via shader uniforms (GPU-side mixing)
-func (r *RocksRenderer) drawWithColorShader(
+func (r *RocksRenderer) drawBufferWithColorShader(
 	buffer *RockBuffer,
 	tempImage *ebiten.Image,
 	screen *ebiten.Image,
