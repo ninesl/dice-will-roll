@@ -55,9 +55,16 @@ func calculateShortestPath(current, target int8) (distance uint8) {
 
 // UpdateTransition handles the smooth sprite rotation during direction changes
 // Now includes full rotation on each bounce
-func (r *SimpleRock) UpdateTransition(frameCounter int) {
+// Modifies the Transition
+func (r *SimpleRock) UpdateTransition() {
+	if r.SlopeX != 0 || r.SlopeY != 0 {
+		r.frameCount++
+	}
+
+	// FIXME: we need to have framecount adjusted here somehow
+
 	// Update SpriteIndex based on rock SIZE (smaller rocks rotate faster)
-	if frameCounter%r.Score.GetScore() == 0 {
+	if int(r.frameCount)%r.Score.GetScore() == 0 {
 		// Increment or decrement sprite index based on horizontal direction
 		// Moving right (positive SlopeX): increment (rotate clockwise)
 		// Moving left (negative SlopeX): decrement (rotate counter-clockwise)
@@ -116,7 +123,7 @@ func (r *SimpleRock) UpdateTransition(frameCounter int) {
 		n = 2
 	}
 
-	if frameCounter%n != 0 {
+	if int(r.frameCount)%n != 0 {
 		return
 	}
 

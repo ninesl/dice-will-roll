@@ -206,7 +206,7 @@ type SimpleRock struct {
 	Score        RockScoreType //  how many 'rocks' this rock counts for during scoring. also determines size, etc
 
 	transitionSteps uint8 // Bit-packed: lower 4 bits = X remaining steps, upper 4 bits = Y remaining steps
-	Explode         bool  // marked for exploding when decrementing transition
+	frameCount      uint8 // this could be used for the timer? independent animations
 }
 
 const BaseVelocity = 1.0
@@ -216,7 +216,7 @@ type RockBuffer struct {
 	TransitionColor render.Vec3
 	Color           render.Vec3
 	Transition      int
-	FrameCounter    int
+	//FrameCounter    int
 }
 
 // RocksRenderer manages pre-extracted sprite rendering with ultra-fast array indexing
@@ -755,8 +755,8 @@ func (r *RocksRenderer) addExplosionRock(dieIdentity render.DieIdentity, rock Si
 	explosionBuffer.Rocks = append(explosionBuffer.Rocks, rock)
 }
 
-// UpdateExplosions updates all exploding rocks, decrementing their frame counters
-func (r *RocksRenderer) UpdateExplosions() {
+// updateExplosions updates all exploding rocks, decrementing their frame counters
+func (r *RocksRenderer) updateExplosions() {
 	for dieIdentity, buffer := range r.ExplosionBuffers {
 		_ = dieIdentity
 		// Process rocks in reverse order for safe removal

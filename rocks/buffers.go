@@ -7,14 +7,22 @@ import (
 	"github.com/ninesl/dice-will-roll/render"
 )
 
-// updateBufferPhysics updates rock positions and wall bouncing (no collision detection)
-func (r *RocksRenderer) updateBufferPhysics(buffer *RockBuffer) {
-	buffer.FrameCounter++
+var (
+	derefRocks = make([]*SimpleRock, 0)
+)
 
-	for i := range buffer.Rocks {
-		rock := &buffer.Rocks[i]
-		rock.Update(buffer.FrameCounter)
+func (r *RocksRenderer) ptrOfRocksOfRockBuffers(buffers ...*RockBuffer) []*SimpleRock {
+	derefRocks = derefRocks[:0]
+	for _, buffer := range buffers {
+		for i := range buffer.Rocks {
+			derefRocks = append(derefRocks, &buffer.Rocks[i])
+		}
+	}
+	return derefRocks
+}
 
+func (r *RocksRenderer) updateRocks(rocks ...*SimpleRock) {
+	for _, rock := range rocks {
 		sizeData := rock.SizeData()
 
 		// Wall bouncing
@@ -33,6 +41,11 @@ func (r *RocksRenderer) updateBufferPhysics(buffer *RockBuffer) {
 			rock.Position.Y = 0
 			rock.BounceY()
 		}
+
+		rock.Position.Y += BaseVelocity * float32(rock.SlopeY)
+		rock.Position.X += BaseVelocity * float32(rock.SlopeX)
+
+		rock.UpdateTransition()
 	}
 }
 
@@ -198,7 +211,6 @@ func (r *RocksRenderer) SelectRocksColor(color render.Vec3, dieIdentity render.D
 	heldBuffer.Color = color                              // Die color (target)
 	heldBuffer.TransitionColor = r.ActiveBaseBuffer.Color // Random base color? or sequential
 	heldBuffer.Transition = r.config.ColorTransitionFrames
-	heldBuffer.FrameCounter = 0
 
 	if !r.selectionOrderContains(dieIdentity) {
 		r.selectionOrder = append(r.selectionOrder, dieIdentity) // Track selection order for draw order
@@ -233,7 +245,6 @@ func (r *RocksRenderer) DeselectRocks(dieIdentity render.DieIdentity) {
 		Color:           r.ActiveBaseBuffer.Color, // Target: this base color
 		TransitionColor: heldBuffer.Color,         // Source: die color
 		Transition:      r.config.ColorTransitionFrames,
-		FrameCounter:    0,
 	}
 
 	r.TransitionBuffers = append(r.TransitionBuffers, transitionBuffer)

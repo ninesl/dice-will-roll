@@ -4,20 +4,10 @@ import (
 	"math"
 )
 
-// Update updates the rock based on the current target transitions.
-// Will update it's state based on other params every Tick/time this is called
-// NOTE: Damping is NOT applied here - it happens after all collisions in ApplyDamping()
-func (r *SimpleRock) Update(frameCounter int) {
-	r.Position.Y += BaseVelocity * float32(r.SlopeY)
-	r.Position.X += BaseVelocity * float32(r.SlopeX)
-
-	r.UpdateTransition(frameCounter)
-}
-
 // ApplyDamping gradually reduces rock velocity over time
 // This is called AFTER all collision handling to ensure bounces get full velocity
 // Damping rate varies by rock size: smaller rocks slow down faster
-func (r *SimpleRock) ApplyDamping(frameCounter int) {
+func (r *SimpleRock) ApplyDamping() {
 	// Skip if rock is already stopped
 	if r.SlopeX == 0 && r.SlopeY == 0 {
 		return
@@ -30,7 +20,7 @@ func (r *SimpleRock) ApplyDamping(frameCounter int) {
 	// 	dampingCycle = 10 // Minimum cycle to prevent too-fast damping
 	// }
 
-	if frameCounter%dampingCycle == 0 {
+	if int(r.frameCount)%dampingCycle == 0 {
 		// Gradually reduce slope toward zero
 		if r.SlopeX > 0 {
 			r.SlopeX--

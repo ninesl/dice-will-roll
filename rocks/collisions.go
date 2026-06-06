@@ -132,6 +132,10 @@ func sqrt32(x float32) float32 {
 	return float32(math.Sqrt(float64(x)))
 }
 
+var (
+	updatingBuffers = make([]*RockBuffer, 0)
+)
+
 // UpdateRocksAndCollide performs all rock updates, wall bouncing, and collision detection/response
 // diceCenters: die center positions (X=centerX, Y=centerY, Z=rotationZ)
 // diceVelocities: die velocity vectors (X=velocityX, Y=velocityY) for bounce direction
@@ -140,18 +144,29 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCent
 	r.diceCollisionBuffer = r.diceCollisionBuffer[:0]
 	r.cursorCollisionBuffer = r.cursorCollisionBuffer[:0]
 
-	// PASS 1: PHYSICS - Update all rock positions and wall bouncing
+	// // PASS 1: PHYSICS - Update all rock positions and wall bouncing
 	// for k := range r.ActiveBaseBuffer.Rocks {
-	// r.updateBufferPhysics(&r.BaseColorBuffers[k])
+	// 	r.updateBufferPhysics(&r.BaseColorBuffers[k])
 	// }
-	r.updateBufferPhysics(r.ActiveBaseBuffer)
+	// r.updateBufferPhysics(r.ActiveBaseBuffer)
+	//
+	// for _, buffer := range r.HeldColorBuffers {
+	// 	//TODO: this needs to know what rocks
+	// 	r.updateBufferPhysics(buffer)
+	// }
+	// for _, buffer := range r.TransitionBuffers {
+	// 	r.updateBufferPhysics(buffer)
+	// }
+	//
+	// FIXME: Is derefercing everything good here, or should we store pointers, or is reassignment faster?
 
+	updatingBuffers = append(updatingBuffers[:0], r.ActiveBaseBuffer)
 	for _, buffer := range r.HeldColorBuffers {
-		r.updateBufferPhysics(buffer)
+		updatingBuffers = append(updatingBuffers, buffer)
 	}
-	for _, buffer := range r.TransitionBuffers {
-		r.updateBufferPhysics(buffer)
-	}
+	updatingBuffers = append(updatingBuffers, r.TransitionBuffers...)
+	r.updateRocks(
+		r.ptrOfRocksOfRockBuffers(updatingBuffers...)...)
 
 	// PASS 2: REBUILD GRID - Update spatial partitioning after positions changed
 	r.rebuildGrid()
@@ -169,7 +184,7 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCent
 	for k := range r.BaseColorBuffers {
 		buffer := &r.BaseColorBuffers[k]
 		for i := range buffer.Rocks {
-			buffer.Rocks[i].ApplyDamping(buffer.FrameCounter)
+			buffer.Rocks[i].ApplyDamping()
 		}
 	}
 
@@ -178,7 +193,7 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCent
 	// Transition buffers get damping
 	for _, buffer := range r.TransitionBuffers {
 		for i := range buffer.Rocks {
-			buffer.Rocks[i].ApplyDamping(buffer.FrameCounter)
+			buffer.Rocks[i].ApplyDamping()
 		}
 	}
 
@@ -186,7 +201,7 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCent
 	r.updateAllBufferTransitions()
 
 	// Update explosion animations
-	r.UpdateExplosions()
+	r.updateExplosions()
 }
 
 // preprocessDiceCollisionData pre-computes all die-related collision data ONCE per frame
