@@ -165,8 +165,12 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCent
 		updatingBuffers = append(updatingBuffers, buffer)
 	}
 	updatingBuffers = append(updatingBuffers, r.TransitionBuffers...)
-	r.updateRocks(
-		r.ptrOfRocksOfRockBuffers(updatingBuffers...)...)
+	for _, buffer := range updatingBuffers {
+		for i := range buffer.Rocks {
+			rock := &buffer.Rocks[i]
+			rock.Update()
+		}
+	}
 
 	// PASS 2: REBUILD GRID - Update spatial partitioning after positions changed
 	r.rebuildGrid()
@@ -180,20 +184,15 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCent
 	r.handleDieCollisions(diceCenters, diceVelocities)
 
 	// PASS 5: DAMPING - Apply velocity reduction AFTER all collisions
-	// Base color buffers get damping
-	for k := range r.BaseColorBuffers {
-		buffer := &r.BaseColorBuffers[k]
-		for i := range buffer.Rocks {
-			buffer.Rocks[i].ApplyDamping()
-		}
-	}
-
 	// Held color buffers DO NOT get damping (maintain speed while held by dice)
-
-	// Transition buffers get damping
+	updatingBuffers = append(updatingBuffers[:0], r.ActiveBaseBuffer)
 	for _, buffer := range r.TransitionBuffers {
+		updatingBuffers = append(updatingBuffers, buffer)
+	}
+	for _, buffer := range updatingBuffers {
 		for i := range buffer.Rocks {
-			buffer.Rocks[i].ApplyDamping()
+			rock := &buffer.Rocks[i]
+			rock.ApplyDamping()
 		}
 	}
 

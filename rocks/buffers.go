@@ -7,46 +7,30 @@ import (
 	"github.com/ninesl/dice-will-roll/render"
 )
 
-var (
-	derefRocks = make([]*SimpleRock, 0)
-)
+func (r *SimpleRock) Update() {
+	sizeData := r.SizeData()
 
-func (r *RocksRenderer) ptrOfRocksOfRockBuffers(buffers ...*RockBuffer) []*SimpleRock {
-	derefRocks = derefRocks[:0]
-	for _, buffer := range buffers {
-		for i := range buffer.Rocks {
-			derefRocks = append(derefRocks, &buffer.Rocks[i])
-		}
+	// Wall bouncing
+	if r.Position.X+sizeData.Size >= render.GAME_BOUNDS_X {
+		r.Position.X = render.GAME_BOUNDS_X - sizeData.Size
+		r.BounceX()
+	} else if r.Position.X <= 0 {
+		r.Position.X = 0
+		r.BounceX()
 	}
-	return derefRocks
-}
 
-func (r *RocksRenderer) updateRocks(rocks ...*SimpleRock) {
-	for _, rock := range rocks {
-		sizeData := rock.SizeData()
-
-		// Wall bouncing
-		if rock.Position.X+sizeData.Size >= render.GAME_BOUNDS_X {
-			rock.Position.X = render.GAME_BOUNDS_X - sizeData.Size
-			rock.BounceX()
-		} else if rock.Position.X <= 0 {
-			rock.Position.X = 0
-			rock.BounceX()
-		}
-
-		if rock.Position.Y+sizeData.Size >= render.GAME_BOUNDS_Y {
-			rock.Position.Y = render.GAME_BOUNDS_Y - sizeData.Size
-			rock.BounceY()
-		} else if rock.Position.Y <= 0 {
-			rock.Position.Y = 0
-			rock.BounceY()
-		}
-
-		rock.Position.Y += BaseVelocity * float32(rock.SlopeY)
-		rock.Position.X += BaseVelocity * float32(rock.SlopeX)
-
-		rock.UpdateTransition()
+	if r.Position.Y+sizeData.Size >= render.GAME_BOUNDS_Y {
+		r.Position.Y = render.GAME_BOUNDS_Y - sizeData.Size
+		r.BounceY()
+	} else if r.Position.Y <= 0 {
+		r.Position.Y = 0
+		r.BounceY()
 	}
+
+	r.Position.Y += BaseVelocity * float32(r.SlopeY)
+	r.Position.X += BaseVelocity * float32(r.SlopeX)
+
+	r.UpdateTransition()
 }
 
 // updateAllBufferTransitions decrements transition counters for all buffer types
@@ -58,7 +42,7 @@ func (r *RocksRenderer) updateAllBufferTransitions() {
 		}
 	}
 
-	// Update TransitionBuffers transitions and move completed ones to base buffers
+	// Update TransitionBuffers transitions and move completed ones to the active base buffer
 	for i := len(r.TransitionBuffers) - 1; i >= 0; i-- {
 		buffer := r.TransitionBuffers[i]
 
@@ -67,16 +51,10 @@ func (r *RocksRenderer) updateAllBufferTransitions() {
 			buffer.Transition--
 		}
 
-		// If transition complete, move rocks to base buffer
+		// If transition complete, move rocks to the active base buffer
 		if buffer.Transition <= 0 {
-			// Find matching base buffer by color
-			for j := range r.BaseColorBuffers {
-				baseBuffer := &r.BaseColorBuffers[j]
-				if render.IsCloseTo(baseBuffer.Color, buffer.Color) {
-					baseBuffer.Rocks = append(baseBuffer.Rocks, buffer.Rocks...)
-					break
-				}
-			}
+			r.ActiveBaseBuffer.Rocks = append(r.ActiveBaseBuffer.Rocks, buffer.Rocks...)
+
 			// Remove this transition buffer
 			r.TransitionBuffers = append(r.TransitionBuffers[:i], r.TransitionBuffers[i+1:]...)
 		}
