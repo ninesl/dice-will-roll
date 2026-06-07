@@ -30,7 +30,7 @@ func (r *SimpleRock) Update() {
 	r.Position.Y += BaseVelocity * float32(r.SlopeY)
 	r.Position.X += BaseVelocity * float32(r.SlopeX)
 
-	r.UpdateTransition()
+	r.UpdateAnimation()
 }
 
 // updateAllBufferTransitions decrements transition counters for all buffer types

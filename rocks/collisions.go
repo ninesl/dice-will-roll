@@ -132,10 +132,6 @@ func sqrt32(x float32) float32 {
 	return float32(math.Sqrt(float64(x)))
 }
 
-var (
-	updatingBuffers = make([]*RockBuffer, 0)
-)
-
 // UpdateRocksAndCollide performs all rock updates, wall bouncing, and collision detection/response
 // diceCenters: die center positions (X=centerX, Y=centerY, Z=rotationZ)
 // diceVelocities: die velocity vectors (X=velocityX, Y=velocityY) for bounce direction
@@ -143,29 +139,13 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCent
 	// Reset collision buffers to length 0 (keeps capacity - no allocation)
 	r.diceCollisionBuffer = r.diceCollisionBuffer[:0]
 	r.cursorCollisionBuffer = r.cursorCollisionBuffer[:0]
+	r.updatingBuffers = append(r.updatingBuffers[:0], r.ActiveBaseBuffer)
 
-	// // PASS 1: PHYSICS - Update all rock positions and wall bouncing
-	// for k := range r.ActiveBaseBuffer.Rocks {
-	// 	r.updateBufferPhysics(&r.BaseColorBuffers[k])
-	// }
-	// r.updateBufferPhysics(r.ActiveBaseBuffer)
-	//
-	// for _, buffer := range r.HeldColorBuffers {
-	// 	//TODO: this needs to know what rocks
-	// 	r.updateBufferPhysics(buffer)
-	// }
-	// for _, buffer := range r.TransitionBuffers {
-	// 	r.updateBufferPhysics(buffer)
-	// }
-	//
-	// FIXME: Is derefercing everything good here, or should we store pointers, or is reassignment faster?
-
-	updatingBuffers = append(updatingBuffers[:0], r.ActiveBaseBuffer)
 	for _, buffer := range r.HeldColorBuffers {
-		updatingBuffers = append(updatingBuffers, buffer)
+		r.updatingBuffers = append(r.updatingBuffers, buffer)
 	}
-	updatingBuffers = append(updatingBuffers, r.TransitionBuffers...)
-	for _, buffer := range updatingBuffers {
+	r.updatingBuffers = append(r.updatingBuffers, r.TransitionBuffers...)
+	for _, buffer := range r.updatingBuffers {
 		for i := range buffer.Rocks {
 			rock := &buffer.Rocks[i]
 			rock.Update()
@@ -185,11 +165,11 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCent
 
 	// PASS 5: DAMPING - Apply velocity reduction AFTER all collisions
 	// Held color buffers DO NOT get damping (maintain speed while held by dice)
-	updatingBuffers = append(updatingBuffers[:0], r.ActiveBaseBuffer)
+	r.updatingBuffers = append(r.updatingBuffers[:0], r.ActiveBaseBuffer)
 	for _, buffer := range r.TransitionBuffers {
-		updatingBuffers = append(updatingBuffers, buffer)
+		r.updatingBuffers = append(r.updatingBuffers, buffer)
 	}
-	for _, buffer := range updatingBuffers {
+	for _, buffer := range r.updatingBuffers {
 		for i := range buffer.Rocks {
 			rock := &buffer.Rocks[i]
 			rock.ApplyDamping()
@@ -233,7 +213,7 @@ func (r *RocksRenderer) preprocessDiceCollisionData(diceCenters []render.Vec3, d
 
 		// Calculate rotated AABB half-extent: h × (|cos θ| + |sin θ|)
 		// At 0°: halfExtent = h (axis-aligned square)
-		// At 45°: halfExtent = h × √2 (corners extend further)
+		// At 45°: halfExtent = h × √2 (corners extend further) FIXME: this isn't good here at all, not accurate enough
 		cosR := math.Abs(math.Cos(rotationRad))
 		sinR := math.Abs(math.Sin(rotationRad))
 		halfExtent := float32(float64(render.HalfEffectiveDie) * (cosR + sinR))
@@ -275,8 +255,10 @@ func (r *SimpleRock) RockWithinDie(die *render.DieRenderable, rockSize float32) 
 	dieInset := (render.DieTileSize - effectiveDieTileSize) / 2
 	rockInset := (rockSize - effectiveRockSize) / 2
 
-	return (r.Position.X+rockInset+effectiveRockSize > die.Vec2.X+dieInset && r.Position.X+rockInset < die.Vec2.X+dieInset+effectiveDieTileSize) &&
-		(r.Position.Y+rockInset+effectiveRockSize > die.Vec2.Y+dieInset && r.Position.Y+rockInset < die.Vec2.Y+dieInset+effectiveDieTileSize)
+	return (r.Position.X+rockInset+effectiveRockSize > die.Vec2.X+dieInset &&
+		r.Position.X+rockInset < die.Vec2.X+dieInset+effectiveDieTileSize) &&
+		(r.Position.Y+rockInset+effectiveRockSize > die.Vec2.Y+dieInset &&
+			r.Position.Y+rockInset < die.Vec2.Y+dieInset+effectiveDieTileSize)
 }
 
 // XYWithinRock checks if a point (X, Y) is within the rock's bounding box
@@ -554,4 +536,197 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec3, diceVeloc
 		rock.SlopeX += xJitter
 		rock.SlopeY += yJitter
 	}
+}
+
+// initSpatialGrid initializes the hybrid offset+count spatial grid
+// Cell size is render.DieTileSize for optimal collision detection with dice
+func (r *RocksRenderer) initSpatialGrid(config RocksConfig) {
+	r.gridCellSize = render.DieTileSize
+	r.gridCols = int(math.Ceil(float64(config.WorldBoundsX) / float64(r.gridCellSize)))
+	r.gridRows = int(math.Ceil(float64(config.WorldBoundsY) / float64(r.gridCellSize)))
+
+	totalCells := r.gridCols * r.gridRows
+
+	// Pre-allocate arrays
+	r.gridOffsets = make([]uint16, totalCells)
+	r.gridCounts = make([]uint16, totalCells)
+	r.gridRocks = make([]uint16, config.TotalRocks[r.ActiveBaseBufferIdx])
+}
+
+func clampCell(gridCols, gridRows, cellX, cellY int) int {
+	if cellX < 0 {
+		cellX = 0
+	} else if cellX >= gridCols {
+		cellX = gridCols - 1
+	}
+	if cellY < 0 {
+		cellY = 0
+	} else if cellY >= gridRows {
+		cellY = gridRows - 1
+	}
+	return cellY*gridCols + cellX
+}
+
+// rebuildGrid rebuilds the spatial grid from current rock positions
+// Called once per frame before collision detection
+// Uses 2-pass algorithm: count rocks per cell, then place indices
+// Includes ALL buffers: base, held, and transition
+// IMPORTANT: Uses rock CENTER for grid cell assignment (not top-left corner)
+func (r *RocksRenderer) rebuildGrid() {
+	// Reset counts to 0
+	for i := range r.gridCounts {
+		r.gridCounts[i] = 0
+	}
+
+	// Inverse cell size for fast division (multiply instead of divide)
+	invCellSize := 1.0 / r.gridCellSize
+
+	// Helper to clamp cell coordinates
+	// Phase 1: Count rocks per cell (all buffers)
+	// Use rock CENTER for cell assignment to ensure consistent collision detection
+	var totalRocks uint16 = 0
+
+	// Count base buffer rocks
+	for bufIdx := range r.BaseColorBuffers {
+		buffer := &r.BaseColorBuffers[bufIdx]
+		for i := range buffer.Rocks {
+			rock := &buffer.Rocks[i]
+			sizeData := rock.SizeData()
+			centerX := rock.Position.X + sizeData.HalfSize
+			centerY := rock.Position.Y + sizeData.HalfSize
+			cellIdx := clampCell(r.gridCols, r.gridRows, int(centerX*invCellSize), int(centerY*invCellSize))
+			r.gridCounts[cellIdx]++
+			totalRocks++
+		}
+	}
+
+	// Count held buffer rocks
+	for _, buffer := range r.HeldColorBuffers {
+		for i := range buffer.Rocks {
+			rock := &buffer.Rocks[i]
+			sizeData := rock.SizeData()
+			centerX := rock.Position.X + sizeData.HalfSize
+			centerY := rock.Position.Y + sizeData.HalfSize
+			cellIdx := clampCell(r.gridCols, r.gridRows, int(centerX*invCellSize), int(centerY*invCellSize))
+			r.gridCounts[cellIdx]++
+			totalRocks++
+		}
+	}
+
+	// Count transition buffer rocks
+	for _, buffer := range r.TransitionBuffers {
+		for i := range buffer.Rocks {
+			rock := &buffer.Rocks[i]
+			sizeData := rock.SizeData()
+			centerX := rock.Position.X + sizeData.HalfSize
+			centerY := rock.Position.Y + sizeData.HalfSize
+			cellIdx := clampCell(r.gridCols, r.gridRows, int(centerX*invCellSize), int(centerY*invCellSize))
+			r.gridCounts[cellIdx]++
+			totalRocks++
+		}
+	}
+
+	// Grow gridRocks if needed (rocks can move between buffers)
+	if int(totalRocks) > len(r.gridRocks) {
+		r.gridRocks = make([]uint16, totalRocks)
+	}
+
+	// Phase 2: Calculate offsets (prefix sum)
+	var currentOffset uint16 = 0
+	for i := range r.gridCounts {
+		r.gridOffsets[i] = currentOffset
+		currentOffset += uint16(r.gridCounts[i])
+	}
+
+	// Reset counts to use as placement indices
+	for i := range r.gridCounts {
+		r.gridCounts[i] = 0
+	}
+
+	// Phase 3: Place rock indices into gridRocks (all buffers)
+	// Use rock CENTER for cell assignment (must match Phase 1)
+	var globalIdx uint16 = 0
+
+	// Place base buffer rocks
+	for bufIdx := range r.BaseColorBuffers {
+		buffer := &r.BaseColorBuffers[bufIdx]
+		for i := range buffer.Rocks {
+			rock := &buffer.Rocks[i]
+			sizeData := rock.SizeData()
+			centerX := rock.Position.X + sizeData.HalfSize
+			centerY := rock.Position.Y + sizeData.HalfSize
+			cellIdx := clampCell(r.gridCols, r.gridRows, int(centerX*invCellSize), int(centerY*invCellSize))
+			insertPos := r.gridOffsets[cellIdx] + uint16(r.gridCounts[cellIdx])
+			r.gridRocks[insertPos] = globalIdx
+			r.gridCounts[cellIdx]++
+			globalIdx++
+		}
+	}
+
+	// Place held buffer rocks
+	for _, buffer := range r.HeldColorBuffers {
+		for i := range buffer.Rocks {
+			rock := &buffer.Rocks[i]
+			sizeData := rock.SizeData()
+			centerX := rock.Position.X + sizeData.HalfSize
+			centerY := rock.Position.Y + sizeData.HalfSize
+			cellIdx := clampCell(r.gridCols, r.gridRows, int(centerX*invCellSize), int(centerY*invCellSize))
+			insertPos := r.gridOffsets[cellIdx] + uint16(r.gridCounts[cellIdx])
+			r.gridRocks[insertPos] = globalIdx
+			r.gridCounts[cellIdx]++
+			globalIdx++
+		}
+	}
+
+	// Place transition buffer rocks
+	for _, buffer := range r.TransitionBuffers {
+		for i := range buffer.Rocks {
+			rock := &buffer.Rocks[i]
+			sizeData := rock.SizeData()
+			centerX := rock.Position.X + sizeData.HalfSize
+			centerY := rock.Position.Y + sizeData.HalfSize
+			cellIdx := clampCell(r.gridCols, r.gridRows, int(centerX*invCellSize), int(centerY*invCellSize))
+			insertPos := r.gridOffsets[cellIdx] + uint16(r.gridCounts[cellIdx])
+			r.gridRocks[insertPos] = globalIdx
+			r.gridCounts[cellIdx]++
+			globalIdx++
+		}
+	}
+}
+
+// getRockByGlobalIndex returns a rock pointer from global index
+// Global index maps: BaseColorBuffers → HeldColorBuffers → TransitionBuffers
+func (r *RocksRenderer) getRockByGlobalIndex(globalIdx uint16) *SimpleRock {
+	idx := int(globalIdx)
+
+	// Check base buffers
+	for bufIdx := range r.BaseColorBuffers {
+		buffer := &r.BaseColorBuffers[bufIdx]
+		if idx < len(buffer.Rocks) {
+			return &buffer.Rocks[idx]
+		}
+		idx -= len(buffer.Rocks)
+	}
+
+	// Check held buffers (iterate in consistent order)
+	for i := range len(render.RainbowColors) {
+		buffer, ok := r.HeldColorBuffers[render.DieIdentity(i)]
+		if !ok {
+			continue
+		}
+		if idx < len(buffer.Rocks) {
+			return &buffer.Rocks[idx]
+		}
+		idx -= len(buffer.Rocks)
+	}
+
+	// Check transition buffers
+	for _, buffer := range r.TransitionBuffers {
+		if idx < len(buffer.Rocks) {
+			return &buffer.Rocks[idx]
+		}
+		idx -= len(buffer.Rocks)
+	}
+
+	return nil // Should never happen
 }

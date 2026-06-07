@@ -249,6 +249,9 @@ type RocksRenderer struct {
 	diceCollisionBuffer   []*SimpleRock
 	cursorCollisionBuffer []*SimpleRock
 
+	// collection during updates
+	updatingBuffers []*RockBuffer
+
 	diceCollisionDataBuffer []dieCollisionData
 
 	// Image pool for temporary rendering buffers (lazily allocated and reused every frame)
@@ -315,6 +318,8 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 	r.ExplosionBuffers = make(map[render.DieIdentity]*RockBuffer)
 	r.TransitionBuffers = make([]*RockBuffer, 0, 10)
 	r.selectionOrder = make([]render.DieIdentity, 0, 7) // Track selection order for draw order
+
+	r.updatingBuffers = make([]*RockBuffer, 0)
 
 	// Initialize rock size lookup table (pre-compute all size calculations)
 	r.initRockSizeLookup()
@@ -506,12 +511,6 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 			Rocks:           allRocks[i],
 		})
 	}
-
-	// Update total count
-	// r.totalRocks = 0
-	// for i := 0; i < NUM_ROCK_TYPES; i++ {
-	// 	r.totalRocks += len(r.Rocks[i])
-	// }
 }
 
 // DrawRocks renders all rocks with fast direct array access
@@ -579,6 +578,7 @@ func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
 // The children start centered on the parent, then bounce outward in a radial pattern.
 // Rocks that are already SmallScore do not split further and return a nil slice
 func (r *RocksRenderer) SplitRock(rock SimpleRock) []SimpleRock {
+	//TODO: make the rocks made spin in a specific way based on input rock
 	childScores := splitRockScores(rock.Score.GetScore())
 	if len(childScores) == 0 {
 		return nil
@@ -644,10 +644,6 @@ func randomRockTypeForScore(score int) RockScoreType {
 		panic(fmt.Errorf("invalid rock score %d", score))
 	}
 }
-
-// NOTE: the recreation of rock buffers here is likely not performant
-// it would be better to clear the buffer and then reassign our heldBuffer
-// to a blank RockBuffer instead of creating a &RockBuffer{}?
 
 // ExplodeRocks explodes up to numRocks rocks into the initiating die's color.
 func (r *RocksRenderer) ExplodeRocks(dieIdentity render.DieIdentity, numRocks int) {
@@ -774,10 +770,6 @@ func (r *RocksRenderer) updateExplosions() {
 				buffer.Rocks = buffer.Rocks[:len(buffer.Rocks)-1]
 			}
 		}
-
-		/*if len(buffer.Rocks) == 0 {
-			delete(r.ExplosionBuffers, dieIdentity)
-		}*/
 	}
 }
 
@@ -837,7 +829,12 @@ func (r *RocksRenderer) GetStats() (visible, total int) {
 func CalculateRockTileSize(baseTileSize float32, rockAmount int) float32 {
 	var scaleFactor float32
 
-	//TODO:FIXME:
+	// TODO:
+	// FIXME:
+	// we want varying behaviors for rock renderer based on scale
+	// and len(rocks) left and numRocks [the score]
+	// grab all small rocks, grab X small rocks and Y big rocks
+	// grab rockso nly X fast, lots of variety here?
 
 	if rockAmount <= 100 {
 		scaleFactor = 2.0
@@ -869,199 +866,91 @@ func (r *RocksRenderer) initRockSizeLookup() {
 	}
 }
 
-// initSpatialGrid initializes the hybrid offset+count spatial grid
-// Cell size is render.DieTileSize for optimal collision detection with dice
-func (r *RocksRenderer) initSpatialGrid(config RocksConfig) {
-	r.gridCellSize = render.DieTileSize
-	r.gridCols = int(math.Ceil(float64(config.WorldBoundsX) / float64(r.gridCellSize)))
-	r.gridRows = int(math.Ceil(float64(config.WorldBoundsY) / float64(r.gridCellSize)))
-
-	totalCells := r.gridCols * r.gridRows
-
-	// Pre-allocate arrays
-	r.gridOffsets = make([]uint16, totalCells)
-	r.gridCounts = make([]uint16, totalCells)
-	r.gridRocks = make([]uint16, config.TotalRocks[r.ActiveBaseBufferIdx])
-}
-
-// rebuildGrid rebuilds the spatial grid from current rock positions
-// Called once per frame before collision detection
-// Uses 2-pass algorithm: count rocks per cell, then place indices
-// Includes ALL buffers: base, held, and transition
-// IMPORTANT: Uses rock CENTER for grid cell assignment (not top-left corner)
-func (r *RocksRenderer) rebuildGrid() {
-	// Reset counts to 0
-	for i := range r.gridCounts {
-		r.gridCounts[i] = 0
+// UpdateAnimation handles the smooth sprite rotation during direction changes
+// Now includes full rotation on each bounce
+// Modifies the Transition
+func (r *SimpleRock) UpdateAnimation() {
+	if r.SlopeX != 0 || r.SlopeY != 0 {
+		r.frameCount++
 	}
 
-	// Inverse cell size for fast division (multiply instead of divide)
-	invCellSize := 1.0 / r.gridCellSize
+	// FIXME: we need to have framecount adjusted here somehow the % isn't ideal
 
-	// Helper to clamp cell coordinates
-	clampCell := func(cellX, cellY int) int {
-		if cellX < 0 {
-			cellX = 0
-		} else if cellX >= r.gridCols {
-			cellX = r.gridCols - 1
-		}
-		if cellY < 0 {
-			cellY = 0
-		} else if cellY >= r.gridRows {
-			cellY = r.gridRows - 1
-		}
-		return cellY*r.gridCols + cellX
-	}
-
-	// Phase 1: Count rocks per cell (all buffers)
-	// Use rock CENTER for cell assignment to ensure consistent collision detection
-	var totalRocks uint16 = 0
-
-	// Count base buffer rocks
-	for bufIdx := range r.BaseColorBuffers {
-		buffer := &r.BaseColorBuffers[bufIdx]
-		for i := range buffer.Rocks {
-			rock := &buffer.Rocks[i]
-			sizeData := rock.SizeData()
-			centerX := rock.Position.X + sizeData.HalfSize
-			centerY := rock.Position.Y + sizeData.HalfSize
-			cellIdx := clampCell(int(centerX*invCellSize), int(centerY*invCellSize))
-			r.gridCounts[cellIdx]++
-			totalRocks++
+	// Update SpriteIndex based on rock SIZE (smaller rocks rotate faster)
+	if int(r.frameCount)%r.Score.GetScore() == 0 {
+		// Increment or decrement sprite index based on horizontal direction
+		// Moving right (positive SlopeX): increment (rotate clockwise)
+		// Moving left (negative SlopeX): decrement (rotate counter-clockwise)
+		if r.SlopeX != 0 && r.SlopeY != 0 {
+			if r.SlopeX >= 0 {
+				if r.SpriteIndex == 0 {
+					r.SpriteIndex = ROTATION_FRAMES - 1
+				} else {
+					r.SpriteIndex--
+				}
+			} else {
+				r.SpriteIndex++
+				if r.SpriteIndex >= ROTATION_FRAMES {
+					r.SpriteIndex = 0
+				}
+			}
 		}
 	}
 
-	// Count held buffer rocks
-	for _, buffer := range r.HeldColorBuffers {
-		for i := range buffer.Rocks {
-			rock := &buffer.Rocks[i]
-			sizeData := rock.SizeData()
-			centerX := rock.Position.X + sizeData.HalfSize
-			centerY := rock.Position.Y + sizeData.HalfSize
-			cellIdx := clampCell(int(centerX*invCellSize), int(centerY*invCellSize))
-			r.gridCounts[cellIdx]++
-			totalRocks++
+	if r.SlopeX == 0 && r.SlopeY == 0 {
+		return
+	}
+
+	// Update SpriteSlopeX/Y based on SPEED (for smooth transitions during bounces)
+	// Derive animation rate on-the-fly from current slopes (faster than storing/loading from memory)
+	// Fast approximation: max(|x|, |y|) + min(|x|, |y|)/2
+	absX := r.SlopeX
+	if absX < 0 {
+		absX = -absX
+	}
+	absY := r.SlopeY
+	if absY < 0 {
+		absY = -absY
+	}
+
+	var speed int8
+	if absX > absY {
+		speed = absX + absY/2
+	} else {
+		speed = absY + absX/2
+	}
+
+	n := int(baseN) - int(speed)*3 // Simplified from speed*speedFactor (3.5 → 3 for int math)
+	if n < 2 {
+		n = 2
+	}
+
+	if int(r.frameCount)%n != 0 {
+		return
+	}
+
+	// If rock is completely stopped, don't update sprite slopes
+	// Keep SpriteSlopeX/Y frozen at current values
+	if r.SlopeX == 0 && r.SlopeY == 0 {
+		return
+	}
+
+	// Always update sprite slopes by +1 (transitions always increment)
+	// X component
+	if r.getTransitionStepsX() > 0 {
+		r.SpriteSlopeX++
+		if r.SpriteSlopeX >= DIRECTIONS_TO_SNAP {
+			r.SpriteSlopeX = 0
 		}
+		r.decrementTransitionStepX()
 	}
 
-	// Count transition buffer rocks
-	for _, buffer := range r.TransitionBuffers {
-		for i := range buffer.Rocks {
-			rock := &buffer.Rocks[i]
-			sizeData := rock.SizeData()
-			centerX := rock.Position.X + sizeData.HalfSize
-			centerY := rock.Position.Y + sizeData.HalfSize
-			cellIdx := clampCell(int(centerX*invCellSize), int(centerY*invCellSize))
-			r.gridCounts[cellIdx]++
-			totalRocks++
+	// Y component
+	if r.getTransitionStepsY() > 0 {
+		r.SpriteSlopeY++
+		if r.SpriteSlopeY >= DIRECTIONS_TO_SNAP {
+			r.SpriteSlopeY = 0
 		}
+		r.decrementTransitionStepY()
 	}
-
-	// Grow gridRocks if needed (rocks can move between buffers)
-	if int(totalRocks) > len(r.gridRocks) {
-		r.gridRocks = make([]uint16, totalRocks)
-	}
-
-	// Phase 2: Calculate offsets (prefix sum)
-	var currentOffset uint16 = 0
-	for i := range r.gridCounts {
-		r.gridOffsets[i] = currentOffset
-		currentOffset += uint16(r.gridCounts[i])
-	}
-
-	// Reset counts to use as placement indices
-	for i := range r.gridCounts {
-		r.gridCounts[i] = 0
-	}
-
-	// Phase 3: Place rock indices into gridRocks (all buffers)
-	// Use rock CENTER for cell assignment (must match Phase 1)
-	var globalIdx uint16 = 0
-
-	// Place base buffer rocks
-	for bufIdx := range r.BaseColorBuffers {
-		buffer := &r.BaseColorBuffers[bufIdx]
-		for i := range buffer.Rocks {
-			rock := &buffer.Rocks[i]
-			sizeData := rock.SizeData()
-			centerX := rock.Position.X + sizeData.HalfSize
-			centerY := rock.Position.Y + sizeData.HalfSize
-			cellIdx := clampCell(int(centerX*invCellSize), int(centerY*invCellSize))
-			insertPos := r.gridOffsets[cellIdx] + uint16(r.gridCounts[cellIdx])
-			r.gridRocks[insertPos] = globalIdx
-			r.gridCounts[cellIdx]++
-			globalIdx++
-		}
-	}
-
-	// Place held buffer rocks
-	for _, buffer := range r.HeldColorBuffers {
-		for i := range buffer.Rocks {
-			rock := &buffer.Rocks[i]
-			sizeData := rock.SizeData()
-			centerX := rock.Position.X + sizeData.HalfSize
-			centerY := rock.Position.Y + sizeData.HalfSize
-			cellIdx := clampCell(int(centerX*invCellSize), int(centerY*invCellSize))
-			insertPos := r.gridOffsets[cellIdx] + uint16(r.gridCounts[cellIdx])
-			r.gridRocks[insertPos] = globalIdx
-			r.gridCounts[cellIdx]++
-			globalIdx++
-		}
-	}
-
-	// Place transition buffer rocks
-	for _, buffer := range r.TransitionBuffers {
-		for i := range buffer.Rocks {
-			rock := &buffer.Rocks[i]
-			sizeData := rock.SizeData()
-			centerX := rock.Position.X + sizeData.HalfSize
-			centerY := rock.Position.Y + sizeData.HalfSize
-			cellIdx := clampCell(int(centerX*invCellSize), int(centerY*invCellSize))
-			insertPos := r.gridOffsets[cellIdx] + uint16(r.gridCounts[cellIdx])
-			r.gridRocks[insertPos] = globalIdx
-			r.gridCounts[cellIdx]++
-			globalIdx++
-		}
-	}
-}
-
-// getRockByGlobalIndex returns a rock pointer from global index
-// Global index maps: BaseColorBuffers → HeldColorBuffers → TransitionBuffers
-func (r *RocksRenderer) getRockByGlobalIndex(globalIdx uint16) *SimpleRock {
-	idx := int(globalIdx)
-
-	// Check base buffers
-	for bufIdx := range r.BaseColorBuffers {
-		buffer := &r.BaseColorBuffers[bufIdx]
-		if idx < len(buffer.Rocks) {
-			return &buffer.Rocks[idx]
-		}
-		idx -= len(buffer.Rocks)
-	}
-
-	// Check held buffers (iterate in consistent order)
-	for i := range len(render.RainbowColors) {
-		buffer, ok := r.HeldColorBuffers[render.DieIdentity(i)]
-		if !ok {
-			continue
-		}
-		if idx < len(buffer.Rocks) {
-			return &buffer.Rocks[idx]
-		}
-		idx -= len(buffer.Rocks)
-	}
-
-	// Check transition buffers
-	for _, buffer := range r.TransitionBuffers {
-		if idx < len(buffer.Rocks) {
-			return &buffer.Rocks[idx]
-		}
-		idx -= len(buffer.Rocks)
-	}
-
-	return nil // Should never happen
-}
-
-func (r *RocksRenderer) Explode(num int, identity render.DieIdentity) {
-	// get num rocks
 }
