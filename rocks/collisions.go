@@ -148,7 +148,28 @@ func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCent
 	for _, buffer := range r.updatingBuffers {
 		for i := range buffer.Rocks {
 			rock := &buffer.Rocks[i]
-			rock.Update()
+
+			rock.Position.Y += BaseVelocity * float32(rock.SlopeY)
+			rock.Position.X += BaseVelocity * float32(rock.SlopeX)
+			sizeData := rock.SizeData()
+
+			// Wall bouncing
+			if rock.Position.X+sizeData.Size >= render.GAME_BOUNDS_X {
+				rock.Position.X = render.GAME_BOUNDS_X - sizeData.Size
+				rock.BounceX()
+			} else if rock.Position.X <= 0 {
+				rock.Position.X = 0
+				rock.BounceX()
+			}
+
+			if rock.Position.Y+sizeData.Size >= render.GAME_BOUNDS_Y {
+				rock.Position.Y = render.GAME_BOUNDS_Y - sizeData.Size
+				rock.BounceY()
+			} else if rock.Position.Y <= 0 {
+				rock.Position.Y = 0
+				rock.BounceY()
+			}
+			rock.UpdateAnimation()
 		}
 	}
 
@@ -505,7 +526,7 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec3, diceVeloc
 		}
 
 		// Rock CENTER should be at: dieEdge + rockHalfEffective + 2px buffer
-		rockCenterDistance := edgeDistance + float64(sizeData.EffectiveSize) + 2
+		rockCenterDistance := edgeDistance + float64(sizeData.HalfEffective) + 2
 
 		// Snap rock center to that distance along the angle
 		newCenterX := dieData.centerX + float32(math.Cos(angleToRock)*rockCenterDistance)

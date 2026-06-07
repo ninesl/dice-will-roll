@@ -7,32 +7,6 @@ import (
 	"github.com/ninesl/dice-will-roll/render"
 )
 
-func (r *SimpleRock) Update() {
-	sizeData := r.SizeData()
-
-	// Wall bouncing
-	if r.Position.X+sizeData.Size >= render.GAME_BOUNDS_X {
-		r.Position.X = render.GAME_BOUNDS_X - sizeData.Size
-		r.BounceX()
-	} else if r.Position.X <= 0 {
-		r.Position.X = 0
-		r.BounceX()
-	}
-
-	if r.Position.Y+sizeData.Size >= render.GAME_BOUNDS_Y {
-		r.Position.Y = render.GAME_BOUNDS_Y - sizeData.Size
-		r.BounceY()
-	} else if r.Position.Y <= 0 {
-		r.Position.Y = 0
-		r.BounceY()
-	}
-
-	r.Position.Y += BaseVelocity * float32(r.SlopeY)
-	r.Position.X += BaseVelocity * float32(r.SlopeX)
-
-	r.UpdateAnimation()
-}
-
 // updateAllBufferTransitions decrements transition counters for all buffer types
 func (r *RocksRenderer) updateAllBufferTransitions() {
 	// Update HeldColorBuffers transitions (stop at 0, don't go negative)
