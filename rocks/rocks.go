@@ -246,8 +246,9 @@ type RocksRenderer struct {
 	RockTileSize float32 // Base tile size for rock rendering and collision calculations
 
 	// Internal collision buffers - reused each frame to avoid allocations
-	diceCollisionBuffer   []*SimpleRock
-	cursorCollisionBuffer []*SimpleRock
+	diceCollisionBuffer           []*SimpleRock
+	diceCollisionDieIndexesBuffer []int
+	cursorCollisionBuffer         []*SimpleRock
 
 	// collection during updates
 	updatingBuffers []*RockBuffer
@@ -303,8 +304,9 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 
 		// Pre-allocate collision buffers with typical capacity to avoid allocations
 		// Capacity based on typical collision counts: ~50 dice collisions, ~20 cursor collisions
-		diceCollisionBuffer:   make([]*SimpleRock, 0, 128),
-		cursorCollisionBuffer: make([]*SimpleRock, 0, 128),
+		diceCollisionBuffer:           make([]*SimpleRock, 0, 128),
+		diceCollisionDieIndexesBuffer: make([]int, 0, 128),
+		cursorCollisionBuffer:         make([]*SimpleRock, 0, 128),
 
 		diceCollisionDataBuffer: make([]dieCollisionData, 0, 7), //TODO:constant
 		config:                  config,

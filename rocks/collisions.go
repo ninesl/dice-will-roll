@@ -395,35 +395,6 @@ func (r *RocksRenderer) handleCursorCollisions(cursorX, cursorY float32) {
 	}
 }
 
-// RandomXORRockJitter generates 2 psuedo-random numbers in range [-range, +range] using XOR-shift algorithm
-// xSeed and ySeed are typically rock position.X and position.Y
-// range specifies the jitter range (e.g., range=1 gives [-1,0,1], range=2 gives [-2,-1,0,1,2])
-func RandomXORRockJitter(xSeed, ySeed float32, jitterRange int8) (int8, int8) {
-	// Convert position to uint32 seed
-
-	var s uint32
-	if xSeed > ySeed {
-		s = uint32(xSeed) - uint32(ySeed)
-	} else {
-		s = uint32(xSeed) + uint32(ySeed)
-	}
-
-	s = s ^ (s << 13)
-	s = s ^ (s >> 7)
-	s = s ^ (s << 17)
-
-	// Calculate modulo value: range * 2 + 1 (e.g., range=1 -> 3 values, range=2 -> 5 values)
-	modValue := uint32(jitterRange*2 + 1)
-
-	// Extract X jitter from lower bits
-	jitterX := int8((s % modValue) - uint32(jitterRange))
-
-	// Extract Y jitter from upper bits
-	jitterY := int8(((s >> 8) % modValue) - uint32(jitterRange))
-
-	return jitterX, jitterY
-}
-
 // handleDieCollisions processes die-rock collision responses using die centers and velocities
 // diceCenters: die center positions (X=centerX, Y=centerY)
 // diceVelocities: die velocity vectors (X=velocityX, Y=velocityY) - determines bounce direction
@@ -433,10 +404,18 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec3, diceVeloc
 		return
 	}
 
+	r.diceCollisionDieIndexesBuffer = r.diceCollisionDieIndexesBuffer[:0]
+
 	// Pre-compute all die collision data ONCE (instead of per-rock)
 	diceData := r.preprocessDiceCollisionData(diceCenters, diceVelocities)
 
 	// OUTER LOOP: Each rock (allows break to work correctly)
+
+	//TODO: make each collision buffer its own collection to not waste work
+	// by checking each frame WHICH die it's in. we should already know
+
+	// each rock needs a die index to bounce from
+
 	for _, rock := range r.diceCollisionBuffer {
 		sizeData := rock.SizeData()
 
@@ -454,6 +433,9 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec3, diceVeloc
 		rockTop := rockCenterY - sizeData.HalfEffective
 		rockBottom := rockCenterY + sizeData.HalfEffective
 
+		//TODO: this is the collision buffer, each dice data should already know
+		// which rocks it needs to check on, not this branching waste of work.
+		// should be better for cache thruput as well
 		for dieIdx, dieData := range diceData {
 			if dieData.skipMe {
 				continue
@@ -479,6 +461,14 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec3, diceVeloc
 			}
 		}
 
+		r.diceCollisionDieIndexesBuffer = append(r.diceCollisionDieIndexesBuffer, bestDieIndex)
+	}
+
+	var bestDieIndex int = -1
+
+	for i, rock := range r.diceCollisionBuffer {
+		bestDieIndex = r.diceCollisionDieIndexesBuffer[i]
+
 		// If no collision found, skip this rock
 		if bestDieIndex == -1 {
 			continue
@@ -487,6 +477,12 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec3, diceVeloc
 		// PASS 2: Process collision with the die that has deepest penetration
 		// Use pre-computed die data instead of recalculating
 		dieData := diceData[bestDieIndex]
+		sizeData := rock.SizeData()
+		//TODO: recalcing this hsould be fine?
+		rockCenterX := rock.Position.X + sizeData.HalfSize
+		rockCenterY := rock.Position.Y + sizeData.HalfSize
+
+		// NOTE: slop distance calc here. heaviest work
 
 		// Calculate angle from die center to rock center (world space)
 		angleToRock := math.Atan2(
@@ -532,6 +528,8 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec3, diceVeloc
 		newCenterX := dieData.centerX + float32(math.Cos(angleToRock)*rockCenterDistance)
 		newCenterY := dieData.centerY + float32(math.Sin(angleToRock)*rockCenterDistance)
 
+		// NOTE: end of slop collision check
+
 		// Rock position is top-left corner, so subtract half size
 		rock.Position.X = newCenterX - sizeData.HalfSize
 		rock.Position.Y = newCenterY - sizeData.HalfSize
@@ -558,6 +556,37 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec3, diceVeloc
 		rock.SlopeY += yJitter
 	}
 }
+
+// RandomXORRockJitter generates 2 psuedo-random numbers in range [-range, +range] using XOR-shift algorithm
+// xSeed and ySeed are typically rock position.X and position.Y
+// range specifies the jitter range (e.g., range=1 gives [-1,0,1], range=2 gives [-2,-1,0,1,2])
+func RandomXORRockJitter(xSeed, ySeed float32, jitterRange int8) (int8, int8) {
+	// Convert position to uint32 seed
+
+	var s uint32
+	if xSeed > ySeed {
+		s = uint32(xSeed) - uint32(ySeed)
+	} else {
+		s = uint32(xSeed) + uint32(ySeed)
+	}
+
+	s = s ^ (s << 13)
+	s = s ^ (s >> 7)
+	s = s ^ (s << 17)
+
+	// Calculate modulo value: range * 2 + 1 (e.g., range=1 -> 3 values, range=2 -> 5 values)
+	modValue := uint32(jitterRange*2 + 1)
+
+	// Extract X jitter from lower bits
+	jitterX := int8((s % modValue) - uint32(jitterRange))
+
+	// Extract Y jitter from upper bits
+	jitterY := int8(((s >> 8) % modValue) - uint32(jitterRange))
+
+	return jitterX, jitterY
+}
+
+// FIXME: we need to rethink how the grids work
 
 // initSpatialGrid initializes the hybrid offset+count spatial grid
 // Cell size is render.DieTileSize for optimal collision detection with dice
