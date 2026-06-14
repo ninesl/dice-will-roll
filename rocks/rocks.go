@@ -213,9 +213,9 @@ const BaseVelocity = 1.0
 
 type RockBuffer struct {
 	Rocks           []SimpleRock
+	Transition      int
 	TransitionColor render.Vec3
 	Color           render.Vec3
-	Transition      int
 	//FrameCounter    int
 }
 

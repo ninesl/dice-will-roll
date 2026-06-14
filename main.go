@@ -71,10 +71,15 @@ type Game struct {
 	holdCx, holdCy     float32
 	ActiveLevel        *Level // keeping track of rocks
 	// is updated with UpdateCursor() in update loop
-	cx, cy float32 // the x/y coordinates of the cursor
+	cursorPos render.Vec2
+	//cx, cy    float32 // the x/y coordinates of the cursor
 	// holdCx, holdCy float32
-	time float32 // tracks time for shaders. updated in g.Update()
+	time         float32 // tracks time for shaders. updated in g.Update()
+	activeDieIdx int     // active die index, g.ActiveDie() to get the *Die
+}
 
+func (g *Game) ActiveDie() *Die {
+	return g.Dice[g.activeDieIdx]
 }
 
 //TODO: make mode and action different types

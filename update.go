@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -10,34 +11,83 @@ import (
 )
 
 func DEBUGTitleFPS(x, y float32) {
-	msg := fmt.Sprintf("T%0.2f F%0.2f x%4.0f y%4.0f ", ebiten.ActualTPS(), ebiten.ActualFPS(), x, y)
-	ebiten.SetWindowTitle("Dice Will Roll " + msg)
+	ebiten.SetWindowTitle("Dice Will Roll " +
+		fmt.Sprintf("T%0.2f F%0.2f x%4.0f y%4.0f ", ebiten.ActualTPS(), ebiten.ActualFPS(), x, y))
 }
+
+// find/assign handrank
+var heldDie []*Die = make([]*Die, 0)
+var hold []dice.Die = make([]dice.Die, 0)
 
 func (g *Game) Update() error {
 	g.UpdateCusor()
+	g.SetActiveDieIndex(g.Dice...)
+
 	g.time = float32(time.Since(g.startTime).Milliseconds()) / float32(ebiten.TPS())
 
-	DEBUGTitleFPS(g.cx, g.cy)
-
-	// find/assign handrank
-	var held []*Die
-	var hold []dice.Die
-	for i := 0; i < len(g.Dice); i++ {
-		d := g.Dice[i]
+	heldDie = heldDie[:0]
+	hold = hold[:0]
+	//DEBUGTitleFPS(g.cursorPos.X, g.cursorPos.Y)
+	for _, d := range g.Dice {
 		if d.Mode == HELD {
 			d.Height = -.5
 			hold = append(hold, d.Die)
-			held = append(held, d)
+			heldDie = append(heldDie, d)
 		}
 	}
+
+	//closest.DieRenderable.Velocity.X
+
 	g.ActiveLevel.Hand = dice.DetermineHandRank(hold)
-	g.ActiveLevel.ScoringHand = FindHandRankDice(held, g.ActiveLevel.Hand)
+	g.ActiveLevel.ScoringHand = FindHandRankDice(heldDie, g.ActiveLevel.Hand)
 	for _, die := range g.ActiveLevel.ScoringHand {
 		die.Height = .1
 	}
 
-	g.ControlAction(g.Controls())
+	action := g.Controls()
+	// cant make an action if scoring
+	if action != ROLLING || g.ActiveLevel.scoringState != SCORING_IDLE {
+		switch action {
+		case ROLL:
+			if g.ActiveLevel.RollsLeft > 0 {
+				g.ActiveLevel.RollsLeft--
+				for _, die := range g.Dice {
+					die.Roll()
+				}
+
+			} else {
+				for _, die := range g.Dice {
+					if die.Mode == ROLLING {
+						// specific impl if roll was pressed and no more rolls
+						die.ZRotation = rand.Float32() + -rand.Float32() // rotate changes
+					} else {
+						die.Roll()
+					}
+				}
+
+				// for rockType := range render.NUM_ROCK_TYPES {
+				// 	for _, rock := range g.RocksRenderer.Rocks[rockType] {
+				// 		// Toggle bounce direction for rocks
+				// 		if rock.SpriteIndex%2 == 1 {
+				// 			rock.BounceX()
+				// 		} else {
+				// 			rock.BounceY()
+				// 		}
+				// 	}
+				// }
+			}
+		case PRESS:
+			g.Press(g.ActiveDie())
+		case SELECT:
+			g.Select()
+		case SCORE:
+			if g.ActiveLevel.HandsLeft > 0 {
+				g.ActiveLevel.HandsLeft--
+				g.ActiveLevel.RollsLeft = g.ActiveLevel.MaxRolls
+				g.SetToScore()
+			}
+		}
+	}
 
 	g.UpdateDice()
 	g.UpdateRocks()
@@ -45,14 +95,51 @@ func (g *Game) Update() error {
 	return nil
 }
 
+// if no dice are given, uses g.Dice as default
+//
+// active die Index is the closest die to the cursor
+func (g *Game) SetActiveDieIndex(dice ...*Die) {
+	g.activeDieIdx, _ = g.ClosestDieToPoint(g.cursorPos, g.Dice...)
+}
+
+func (g *Game) ClosestDieToPoint(point render.Vec2, dice ...*Die) (int, *Die) {
+	if len(g.Dice) == 0 {
+		return -1, nil
+	}
+
+	idxOfClosest := 0
+	dx := point.X - (dice[idxOfClosest].Vec2.X + render.HalfDieTileSize)
+	dy := point.Y - (dice[idxOfClosest].Vec2.Y + render.HalfDieTileSize)
+	closestDistance := dx*dx + dy*dy
+
+	for i := 1; i < len(dice); i++ {
+		dx = point.X - (dice[i].Vec2.X + render.HalfDieTileSize)
+		dy = point.Y - (dice[i].Vec2.Y + render.HalfDieTileSize)
+		distance := dx*dx + dy*dy
+		if distance < closestDistance {
+			idxOfClosest = i
+			closestDistance = distance
+		}
+	}
+
+	return idxOfClosest, dice[idxOfClosest]
+}
+
+var (
+	rolling     = make([]*render.DieRenderable, 0)
+	held        = make([]*render.DieRenderable, 0)
+	moving      = make([]*render.DieRenderable, 0)
+	resetting   = make([]*render.DieRenderable, 0)
+	scoringDice = make([]*Die, 0)
+)
+
 func (g *Game) UpdateDice() {
-	var (
-		rolling     []*render.DieRenderable
-		held        []*render.DieRenderable
-		moving      []*render.DieRenderable
-		resetting   []*render.DieRenderable
-		scoringDice []*Die
-	)
+
+	rolling = rolling[:0]
+	held = held[:0]
+	moving = moving[:0]
+	resetting = resetting[:0]
+	scoringDice = scoringDice[:0]
 
 	for i := 0; i < len(g.Dice); i++ {
 		die := g.Dice[i]
@@ -73,11 +160,14 @@ func (g *Game) UpdateDice() {
 
 			rolling = append(rolling, d)
 		} else if die.Mode == DRAG {
-			d.Vec2.X = g.cx - render.XOffset
-			d.Vec2.Y = g.cy - render.YOffset
-			d.Velocity.X *= render.BounceFactor
-			d.Velocity.Y *= render.BounceFactor
+			d.Fixed.X = g.cursorPos.X - render.HalfDieTileSize
+			d.Fixed.Y = g.cursorPos.Y - render.HalfDieTileSize
 
+			d.Velocity.X = (d.Fixed.X - d.Vec2.X) * render.MoveFactor
+			d.Velocity.Y = (d.Fixed.Y - d.Vec2.Y) * render.MoveFactor
+
+			d.Vec2.X += d.Velocity.X
+			d.Vec2.Y += d.Velocity.Y
 			moving = append(moving, d)
 		} else if die.Mode == HELD {
 			held = append(held, d)
@@ -85,6 +175,10 @@ func (g *Game) UpdateDice() {
 			scoringDice = append(scoringDice, die)
 		}
 	}
+
+	// if g.ActiveDie().Fixed.X != 0 {
+	//
+	// }
 	moving = append(moving, rolling...)
 
 	render.HandleResettingDice(resetting)
@@ -93,6 +187,10 @@ func (g *Game) UpdateDice() {
 	render.BounceAndClamp(rolling)
 
 	g.ActiveLevel.HandleScoring(scoringDice, g.RocksRenderer)
+
+	if g.ActiveDie().Mode != DRAG {
+		g.ActiveDie().DieRenderable.ZRotation = g.time / 100 // normalize to 0-1
+	}
 
 	// Populate dice center and velocity buffers after all dice physics are resolved
 	g.diceCenterBuffer = g.diceCenterBuffer[:0]
@@ -115,16 +213,16 @@ func (g *Game) UpdateDice() {
 
 func (g *Game) UpdateRocks() {
 	// Pass pre-computed dice collision data to renderer
-	g.RocksRenderer.UpdateRocksAndCollide(g.cx, g.cy, g.diceCenterBuffer, g.diceVelocityBuffer)
+	g.RocksRenderer.UpdateRocksAndCollide(g.cursorPos.X, g.cursorPos.Y, g.diceCenterBuffer, g.diceVelocityBuffer)
 }
 
 // always is called at the beginning of the update loop
 func (g *Game) UpdateCusor() {
 	x, y := ebiten.CursorPosition()
-	g.cx = float32(x)
-	g.cy = float32(y)
+	g.cursorPos.X = float32(x)
+	g.cursorPos.Y = float32(y)
 }
 
 func (g *Game) cursorWithin(zone render.ZoneRenderable) bool {
-	return g.cx > zone.MinWidth && g.cx < zone.MaxWidth && g.cy > zone.MinHeight && g.cy < zone.MaxHeight
+	return g.cursorPos.X > zone.MinWidth && g.cursorPos.X < zone.MaxWidth && g.cursorPos.Y > zone.MinHeight && g.cursorPos.Y < zone.MaxHeight
 }

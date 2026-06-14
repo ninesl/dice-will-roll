@@ -24,12 +24,12 @@ type AnimatedItem interface {
 }
 
 type GenericButton struct {
-	XY   *render.Vec2
+	XY   render.Vec2
 	Size render.Vec2
 }
 
 // only check each Button if the mouse is okay. Look at RENDERZONES, etc
 func (g *Game) cursorWithinBounds(b ScreenItem) bool {
-	return g.cx < +b.XY().X+b.DimensionSize().X && g.cx > b.XY().X &&
-		g.cy < b.XY().Y+b.DimensionSize().Y && g.cy > b.XY().Y
+	return g.cursorPos.X < +b.XY().X+b.DimensionSize().X && g.cursorPos.X > b.XY().X &&
+		g.cursorPos.Y < b.XY().Y+b.DimensionSize().Y && g.cursorPos.Y > b.XY().Y
 }

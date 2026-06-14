@@ -41,109 +41,55 @@ func (g *Game) Controls() Action {
 	return action
 }
 
-// returns the first Die found that is within the cursor's bounds
+// // returns the first Die found that is within the cursor's bounds
+// //
+// // used to later set the die's mode to DRAG
+// //
+// // inputs:
+// //
+// //	dice []*Die // usually g.Dice
+// //	x, y int    // cursor should be from ebiten.CursorPosition()
 //
-// used to later set the die's mode to DRAG
+//	func (g *Game) PickDie() *Die {
+//		if len(g.Dice) == 0 {
+//			return nil
+//		}
 //
-// inputs:
+//		var index int // to put on last element of g.Dice to have it render on top
+//		var PickedDie *Die
+//		//tempDie := g.Dice[index]
 //
-//	dice []*Die // usually g.Dice
-//	x, y int    // cursor should be from ebiten.CursorPosition()
-func (g *Game) PickDie() *Die {
-	if len(g.Dice) == 0 {
-		return nil
-	}
-
-	x := g.cx
-	y := g.cy
-
-	var index int // to put on last element of g.Dice to have it render on top
-	var PickedDie *Die
-	//tempDie := g.Dice[index]
-
-	// the last one rendered is on top
-	for i := len(g.Dice) - 1; i >= 0; i -= 1 {
-		die := g.Dice[i]
-		withinX := x > die.Vec2.X && x < die.Vec2.X+TileSize
-		withinY := y > die.Vec2.Y && y < die.Vec2.Y+TileSize
-
-		if withinX && withinY {
-			render.XOffset = x - die.Vec2.X
-			render.YOffset = y - die.Vec2.Y
-			index = i
-			PickedDie = die
-			break
-		}
-	}
-
-	//clicked nothing
-	if PickedDie == nil {
-		return nil
-	}
-
-	// shift left
-	for i := index; i < len(g.Dice)-1; i++ {
-		g.Dice[i] = g.Dice[i+1]
-	}
-
-	// set top to picked die
-	g.Dice[len(g.Dice)-1] = PickedDie
-
-	return PickedDie
-}
-
-func (g *Game) ControlAction(action Action) {
-	if action == ROLLING {
-		return
-	}
-
-	// cant make an action if scoring
-	if g.ActiveLevel.scoringState != SCORING_IDLE {
-		return
-	}
-
-	switch action {
-	case ROLL:
-		if g.ActiveLevel.RollsLeft > 0 {
-			g.ActiveLevel.RollsLeft--
-			for _, die := range g.Dice {
-				die.Roll()
-			}
-
-		} else {
-			for _, die := range g.Dice {
-				if die.Mode == ROLLING {
-					// specific impl if roll was pressed and no more rolls
-					die.ZRotation = rand.Float32() + -rand.Float32() // rotate changes
-				} else {
-					die.Roll()
-				}
-			}
-
-			// for rockType := range render.NUM_ROCK_TYPES {
-			// 	for _, rock := range g.RocksRenderer.Rocks[rockType] {
-			// 		// Toggle bounce direction for rocks
-			// 		if rock.SpriteIndex%2 == 1 {
-			// 			rock.BounceX()
-			// 		} else {
-			// 			rock.BounceY()
-			// 		}
-			// 	}
-			// }
-		}
-	case PRESS:
-		g.Press()
-	case SELECT:
-		g.Select()
-	case SCORE:
-		if g.ActiveLevel.HandsLeft > 0 {
-			g.ActiveLevel.HandsLeft--
-			g.ActiveLevel.RollsLeft = g.ActiveLevel.MaxRolls
-			g.SetToScore()
-		}
-	}
-}
-
+//		// the last one rendered is on top
+//		for i := len(g.Dice) - 1; i >= 0; i -= 1 {
+//			die := g.Dice[i]
+//			withinX := g.cursorPos.X > die.Vec2.X && g.cursorPos.X < die.Vec2.X+TileSize
+//			withinY := g.cursorPos.Y > die.Vec2.Y && g.cursorPos.Y < die.Vec2.Y+TileSize
+//
+//			if withinX && withinY {
+//				render.XOffset = g.cursorPos.X - die.Vec2.X
+//				render.YOffset = g.cursorPos.Y - die.Vec2.Y
+//				index = i
+//				PickedDie = die
+//				break
+//			}
+//		}
+//
+//		//clicked nothing
+//		if PickedDie == nil {
+//			return nil
+//		}
+//
+//		// shift left
+//		for i := index; i < len(g.Dice)-1; i++ {
+//			g.Dice[i] = g.Dice[i+1]
+//		}
+//
+//		// set top to picked die
+//		g.Dice[len(g.Dice)-1] = PickedDie
+//
+//		return PickedDie
+//	}
+//
 // assigns hand within ActiveLevel to SCORING
 func (g *Game) SetToScore() {
 	g.ActiveLevel.ScoreHand = g.ActiveLevel.Hand
@@ -184,12 +130,11 @@ func (g *Game) SetToScore() {
 // when a die gets clicked on for the first time
 //
 // turn's that Die's mode to DRAG
-func (g *Game) Press() {
-	die := g.PickDie()
+func (g *Game) Press(die *Die) {
 	if die != nil {
 		g.holdTime = time.Now()
-		g.holdCx = g.cx
-		g.holdCy = g.cy
+		g.holdCx = g.cursorPos.X
+		g.holdCy = g.cursorPos.Y
 
 		// g.Time = time.Now()
 
@@ -199,12 +144,10 @@ func (g *Game) Press() {
 		// 	Y: g.y,
 		// } // set the fixed position to the current position
 		die.Mode = DRAG
+		die.Fixed = g.cursorPos
 		die.Height = 0 //reset height if needed
 		// die.Modifier = .25 // for speeding up if needed
 	}
-	// if g.cursorWithin(render.ROLLZONE) {
-	// 	// render.Zones
-	// }
 }
 
 // lets go of the die. contextually knows what to do with it
