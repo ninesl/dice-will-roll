@@ -17,6 +17,14 @@ type Die struct {
 	dice.Die
 	Mode       Action // Current mode of the die, is modified thru player Controls()
 	Identifier render.DieIdentity
+	Wiggle     DieWiggleState
+}
+
+// DieWiggleState stores cursor-focus wobble state that should follow this die
+// even if the dice slice is reordered.
+type DieWiggleState struct {
+	ZRotation   float32 // Cursor-facing target Z rotation, normalized 0..1 like the shader uniform.
+	ZRotationFx float32 // Current wobble amplitude; increase for wider bounce, damp toward 0 when inactive.
 }
 
 func SetupNewDie(color render.Vec3) *Die {

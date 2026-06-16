@@ -391,8 +391,37 @@ func (r *RocksRenderer) handleCursorCollisions(cursorX, cursorY float32) {
 					}
 				}
 			}
+
+			rock.Bounce(rockCursorBounceSlope(rockCenterX-cursorX, rockCenterY-cursorY))
 		}
 	}
+}
+
+func rockCursorBounceSlope(dx, dy float32) (int8, int8) {
+	if dx < 0 {
+		if dy < 0 {
+			return -MAX_SLOPE, -MAX_SLOPE
+		}
+		if dy > 0 {
+			return -MAX_SLOPE, MAX_SLOPE
+		}
+		return -MAX_SLOPE, 0
+	}
+
+	if dx > 0 {
+		if dy < 0 {
+			return MAX_SLOPE, -MAX_SLOPE
+		}
+		if dy > 0 {
+			return MAX_SLOPE, MAX_SLOPE
+		}
+		return MAX_SLOPE, 0
+	}
+
+	if dy < 0 {
+		return 0, -MAX_SLOPE
+	}
+	return 0, MAX_SLOPE
 }
 
 // handleDieCollisions processes die-rock collision responses using die centers and velocities

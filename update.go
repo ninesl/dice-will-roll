@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"time"
 
@@ -18,6 +19,10 @@ func DEBUGTitleFPS(x, y float32) {
 // find/assign handrank
 var heldDie []*Die = make([]*Die, 0)
 var hold []dice.Die = make([]dice.Die, 0)
+
+var activeDieWiggleArc = degreesToZRotation(45)
+var activeDieWiggleFollowFactor float32 = 0.2
+var activeDieWiggleSpeed float32 = 0.25
 
 func (g *Game) Update() error {
 	g.UpdateCusor()
@@ -168,6 +173,8 @@ func (g *Game) UpdateDice() {
 
 			d.Vec2.X += d.Velocity.X
 			d.Vec2.Y += d.Velocity.Y
+			d.Velocity.X = 0
+			d.Velocity.Y = 0
 			moving = append(moving, d)
 		} else if die.Mode == HELD {
 			held = append(held, d)
@@ -188,10 +195,6 @@ func (g *Game) UpdateDice() {
 
 	g.ActiveLevel.HandleScoring(scoringDice, g.RocksRenderer)
 
-	if g.ActiveDie().Mode != DRAG {
-		g.ActiveDie().DieRenderable.ZRotation = g.time / 100 // normalize to 0-1
-	}
-
 	// Populate dice center and velocity buffers after all dice physics are resolved
 	g.diceCenterBuffer = g.diceCenterBuffer[:0]
 	g.diceVelocityBuffer = g.diceVelocityBuffer[:0]
@@ -209,6 +212,86 @@ func (g *Game) UpdateDice() {
 			Y: d.Velocity.Y,
 		})
 	}
+
+	g.updateActiveDieWiggle()
+}
+
+// updateActiveDieWiggle updates cursor-follow wobble for the focused die and
+// lets every other die's existing wobble fade out naturally.
+func (g *Game) updateActiveDieWiggle() {
+	for i, die := range g.Dice {
+		if i == g.activeDieIdx && g.dieUsesCursorWiggle(die) {
+			g.updateCursorWiggleTarget(i, die)
+		} else {
+			die.Wiggle.ZRotationFx *= 0.85
+		}
+
+		g.applyDieWiggle(die)
+	}
+}
+
+// updateCursorWiggleTarget points the die's wobble target toward the cursor and
+// adds amplitude from how far the rendered rotation has to catch up.
+func (g *Game) updateCursorWiggleTarget(i int, die *Die) {
+	dieCenter := g.diceCenterBuffer[i]
+	cursorX := g.cursorPos.X - dieCenter.X
+	cursorY := g.cursorPos.Y - dieCenter.Y
+	nextZRotation := (atan2f(cursorY, cursorX) + float32(math.Pi)) / (2 * float32(math.Pi))
+	zDelta := wrappedDelta(nextZRotation, die.Wiggle.ZRotation)
+
+	die.Wiggle.ZRotation += zDelta * activeDieWiggleFollowFactor
+	die.Wiggle.ZRotationFx = max(activeDieWiggleArc, die.Wiggle.ZRotationFx*0.85+absf(zDelta)*0.15)
+}
+
+// applyDieWiggle writes the visual Z rotation used by the die shader.
+func (g *Game) applyDieWiggle(die *Die) {
+	die.DieRenderable.ZRotation = die.Wiggle.ZRotation + sinf(g.time*activeDieWiggleSpeed)*die.Wiggle.ZRotationFx
+}
+
+// dieUsesCursorWiggle defines which focused die modes are allowed to retarget
+// toward the cursor; tweak this when changing focus behavior by mode.
+func (g *Game) dieUsesCursorWiggle(die *Die) bool {
+	return die.Mode == ROLLING || die.Mode == HELD || (die.Mode == DRAG && g.cursorWithinDie(die))
+}
+
+// wrappedDelta returns the shortest difference between normalized rotations.
+func wrappedDelta(next, current float32) float32 {
+	delta := next - current
+	if delta > 0.5 {
+		return delta - 1
+	}
+	if delta < -0.5 {
+		return delta + 1
+	}
+	return delta
+}
+
+// cursorWithinDie checks the cursor against the die's current screen bounds.
+func (g *Game) cursorWithinDie(die *Die) bool {
+	return g.cursorPos.X > die.Vec2.X && g.cursorPos.X < die.Vec2.X+render.DieTileSize && g.cursorPos.Y > die.Vec2.Y && g.cursorPos.Y < die.Vec2.Y+render.DieTileSize
+}
+
+// atan2f keeps callsites in float32 even though Go's math package uses float64.
+func atan2f(y, x float32) float32 {
+	return float32(math.Atan2(float64(y), float64(x)))
+}
+
+// degreesToZRotation converts degrees into the shader's normalized 0..1 turn value.
+func degreesToZRotation(degrees float32) float32 {
+	return degrees / 360
+}
+
+// sinf keeps callsites in float32 even though Go's math package uses float64.
+func sinf(x float32) float32 {
+	return float32(math.Sin(float64(x)))
+}
+
+// absf returns the absolute value without converting through math.Abs.
+func absf(x float32) float32 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 func (g *Game) UpdateRocks() {
