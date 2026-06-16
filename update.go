@@ -16,10 +16,6 @@ func DEBUGTitleFPS(x, y float32) {
 		fmt.Sprintf("T%0.2f F%0.2f x%4.0f y%4.0f ", ebiten.ActualTPS(), ebiten.ActualFPS(), x, y))
 }
 
-// find/assign handrank
-var heldDie []*Die = make([]*Die, 0)
-var hold []dice.Die = make([]dice.Die, 0)
-
 var activeDieWiggleArc = degreesToZRotation(45)
 var activeDieWiggleFollowFactor float32 = 0.2
 var activeDieWiggleSpeed float32 = 0.25
@@ -30,21 +26,21 @@ func (g *Game) Update() error {
 
 	g.time = float32(time.Since(g.startTime).Milliseconds()) / float32(ebiten.TPS())
 
-	heldDie = heldDie[:0]
-	hold = hold[:0]
+	g.heldDie = g.heldDie[:0]
+	g.hold = g.hold[:0]
 	//DEBUGTitleFPS(g.cursorPos.X, g.cursorPos.Y)
 	for _, d := range g.Dice {
 		if d.Mode == HELD {
 			d.Height = -.5
-			hold = append(hold, d.Die)
-			heldDie = append(heldDie, d)
+			g.hold = append(g.hold, d.Die)
+			g.heldDie = append(g.heldDie, d)
 		}
 	}
 
 	//closest.DieRenderable.Velocity.X
 
-	g.ActiveLevel.Hand = dice.DetermineHandRank(hold)
-	g.ActiveLevel.ScoringHand = FindHandRankDice(heldDie, g.ActiveLevel.Hand)
+	g.ActiveLevel.Hand = dice.DetermineHandRank(g.hold)
+	g.ActiveLevel.ScoringHand = FindHandRankDice(g.heldDie, g.ActiveLevel.Hand)
 	for _, die := range g.ActiveLevel.ScoringHand {
 		die.Height = .1
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/ninesl/dice-will-roll/dice"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
 	"github.com/ninesl/dice-will-roll/rocks"
@@ -66,6 +67,8 @@ type Game struct {
 	Dice               []*Die        // Player's dice
 	diceCenterBuffer   []render.Vec3 // Pre-allocated die center buffer (X=centerX, Y=centerY, Z=360rotation axis)
 	diceVelocityBuffer []render.Vec2 // Pre-allocated die velocity buffer (X=velocityX, Y=velocityY)
+	heldDie            []*Die        // Reused scratch buffer of currently held dice.
+	hold               []dice.Die    // Reused scratch buffer for hand ranking held dice.
 	startTime          time.Time
 	holdTime           time.Time
 	holdCx, holdCy     float32
@@ -121,7 +124,7 @@ func LoadGame() *Game {
 	// dieImgSize := TILE_SIZE * 2
 	render.SetZones()
 
-	dice := SetupPlayerDice()
+	playerDice := SetupPlayerDice()
 
 	rockAmount := *numRocks
 	// Initialize rocks renderer with hybrid real-time 3D SDF system
@@ -145,11 +148,13 @@ func LoadGame() *Game {
 	}
 
 	g := &Game{
-		Dice:               dice,
+		Dice:               playerDice,
 		Shaders:            shaders.LoadShaders(),
 		RocksRenderer:      rocks.NewRocksRenderer(rocksConfig),
 		diceCenterBuffer:   make([]render.Vec3, 0, NUM_PLAYER_DICE),
 		diceVelocityBuffer: make([]render.Vec2, 0, NUM_PLAYER_DICE),
+		heldDie:            make([]*Die, 0),
+		hold:               make([]dice.Die, 0),
 		startTime:          time.Now(),
 		ActiveLevel: NewLevel(LevelOptions{
 			Rocks: rockAmount,
