@@ -16,3 +16,14 @@ type Area struct {
 	XY   render.Vec2 // top left
 	Size render.Vec2 // X is width, Y is Height
 }
+
+// corresponds to a specific Area
+type UIElementID int
+
+// NOTE:
+//
+
+type UIData struct {
+	ActiveUIElementID UIElementID
+	Areas             []Area
+}

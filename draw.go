@@ -10,27 +10,33 @@ import (
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
 
-var screen = ebiten.NewImage(GAME_BOUNDS_X, GAME_BOUNDS_Y)
+// var screen = ebiten.NewImage(GAME_BOUNDS_X, GAME_BOUNDS_Y)
+var (
+	opts     = &ebiten.DrawImageOptions{}
+	textOpts = &text.DrawOptions{}
+
+	// TODO: die specific shader uniforms, gems, power ups, etc. this is the fun part
+	shaderOpts = &ebiten.DrawRectShaderOptions{}
+)
 
 func (g *Game) Draw(s *ebiten.Image) {
-	screen.Clear()
+	s.Clear()
 
-	screen.DrawRectShader(GAME_BOUNDS_X, GAME_BOUNDS_Y,
+	s.DrawRectShader(GAME_BOUNDS_X, GAME_BOUNDS_Y,
 		g.Shaders[shaders.BackgroundShaderKey],
-		&ebiten.DrawRectShaderOptions{})
+		shaderOpts)
 
-	opts := &ebiten.DrawImageOptions{}
-	DrawROLLZONE(screen, opts)
+	DrawROLLZONE(s, opts)
 
-	g.RocksRenderer.DrawRocks(screen)
+	g.RocksRenderer.DrawRocks(s)
 
-	DEBUGView(screen, g, DEBUGGameView)
+	DEBUGView(s, g, textOpts, DEBUGGameView)
 
-	g.DrawDice(screen)
+	g.DrawDice(s, opts)
 
-	// g.DrawUI(screen)
+	// g.DrawUI(s)
 
-	s.DrawImage(screen, opts)
+	//s.DrawImage(s, opts)
 	opts.GeoM.Reset()
 }
 
@@ -40,10 +46,10 @@ const (
 	DEBUGGameView DEBUGViewMode = iota
 )
 
-func DEBUGView(screen *ebiten.Image, g *Game, viewMode DEBUGViewMode) {
-	DEBUGDrawMessage(screen, g.ActiveLevel.String(), 0.0)
-	DEBUGDrawMessage(screen, fmt.Sprintf("%.2f fps / %.2f tps\n", ebiten.ActualFPS(), ebiten.ActualTPS()), FONT_SIZE)
-	DEBUGDiceValues(screen, g.Dice)
+func DEBUGView(screen *ebiten.Image, g *Game, textOpts *text.DrawOptions, viewMode DEBUGViewMode) {
+	DEBUGDrawMessage(screen, textOpts, g.ActiveLevel.String(), 0.0)
+	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%.2f fps / %.2f tps\n", ebiten.ActualFPS(), ebiten.ActualTPS()), FONT_SIZE)
+	DEBUGDiceValues(screen, textOpts, g.Dice)
 
 }
 
@@ -79,14 +85,15 @@ func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOption
 	)
 }
 
-func DEBUGDrawMessage(screen *ebiten.Image, msg string, y float64) {
-	op := &text.DrawOptions{}
-	op.GeoM.Translate(0, float64(y))
-	op.ColorScale.ScaleWithColor(color.White)
+func DEBUGDrawMessage(screen *ebiten.Image, textOpts *text.DrawOptions, msg string, y float64) {
+	textOpts.GeoM.Translate(0, float64(y))
+	textOpts.ColorScale.ScaleWithColor(color.White)
 	text.Draw(screen, msg, &text.GoTextFace{
 		Source: DEBUG_FONT,
 		Size:   FONT_SIZE,
-	}, op)
+	}, textOpts)
+	textOpts.GeoM.Reset()
+	textOpts.ColorScale.Reset()
 }
 
 func DEBUGValuesFromDice(dice []*Die) []int {
@@ -97,7 +104,7 @@ func DEBUGValuesFromDice(dice []*Die) []int {
 	return track
 }
 
-func DEBUGDiceValues(screen *ebiten.Image, dice []*Die) {
+func DEBUGDiceValues(screen *ebiten.Image, textOpts *text.DrawOptions, dice []*Die) {
 	var (
 		Rolling []*Die
 		Held    []*Die
@@ -115,7 +122,7 @@ func DEBUGDiceValues(screen *ebiten.Image, dice []*Die) {
 		}
 	}
 	y := (float64(render.GAME_BOUNDS_Y) - FONT_SIZE)
-	DEBUGDrawMessage(screen, fmt.Sprintf("%5s%v", "roll", DEBUGValuesFromDice(Rolling)), y)
-	DEBUGDrawMessage(screen, fmt.Sprintf("%5s%v", "held", DEBUGValuesFromDice(Held)), y-FONT_SIZE)
-	DEBUGDrawMessage(screen, fmt.Sprintf("%5s%v", "score", DEBUGValuesFromDice(Scoring)), y-FONT_SIZE*2)
+	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "roll", DEBUGValuesFromDice(Rolling)), y)
+	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "held", DEBUGValuesFromDice(Held)), y-FONT_SIZE)
+	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "score", DEBUGValuesFromDice(Scoring)), y-FONT_SIZE*2)
 }

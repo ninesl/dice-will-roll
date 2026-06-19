@@ -96,6 +96,47 @@ func SetupPlayerDice() []*Die {
 	return dice
 }
 
+func (g *Game) DrawDice(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
+	//sideLen := int(g.Dice[0].image.Bounds().Dx())
+	sideLen := int(render.DieTileSize)
+
+	shader := g.Shaders[shaders.DieShaderKey]
+
+	shaderOpts.Uniforms = map[string]any{
+		"Time":            g.time,
+		"DieScale":        1.15,
+		"HoveringSpeedUp": 0,
+		// "Cursor": []float32{float32(cx), float32(cy)},
+	}
+
+	for i := 0; i < len(g.Dice); i++ {
+		g.Dice[i].image.Clear()
+
+		if g.Dice[i].Mode == DRAG && g.cursorWithin(render.SCOREZONE) {
+			shaderOpts.Uniforms["HoveringSpeedUp"] = 1
+
+		} else {
+			shaderOpts.Uniforms["HoveringSpeedUp"] = 0
+		}
+
+		shaderOpts.Uniforms["FaceLayouts"] = g.Dice[i].LocationsPips()
+		shaderOpts.Uniforms["ActiveFace"] = g.Dice[i].ActiveFaceIndex()
+		shaderOpts.Uniforms["Height"] = g.Dice[i].Height
+		shaderOpts.Uniforms["Direction"] = g.Dice[i].Direction.KageVec2()
+		shaderOpts.Uniforms["Velocity"] = g.Dice[i].Velocity.KageVec2()
+		shaderOpts.Uniforms["DieColor"] = g.Dice[i].Color.KageVec3()
+		shaderOpts.Uniforms["ZRotation"] = g.Dice[i].ZRotation
+		shaderOpts.Uniforms["Mode"] = int(g.Dice[i].Mode)
+
+		g.Dice[i].image.DrawRectShader(sideLen, sideLen, shader, shaderOpts)
+
+		ops := &ebiten.DrawImageOptions{}
+		ops.GeoM.Translate(float64(g.Dice[i].Vec2.X), float64(g.Dice[i].Vec2.Y))
+		screen.DrawImage(g.Dice[i].image, ops)
+		ops.GeoM.Reset()
+	}
+}
+
 // When spacebar/roll is pressed
 //
 // moves die around on the screen if applicable
@@ -325,49 +366,4 @@ func bestValues(dice []*Die, x int) []*Die {
 	}
 
 	return bestValues
-}
-
-func (g *Game) DrawDice(screen *ebiten.Image) {
-	s := int(g.Dice[0].image.Bounds().Dx())
-
-	shader := g.Shaders[shaders.DieShaderKey]
-
-	u := map[string]any{
-		"Time":            g.time,
-		"DieScale":        1.15,
-		"HoveringSpeedUp": 0,
-		// "Cursor": []float32{float32(cx), float32(cy)},
-	}
-
-	// TODO: die specific shader uniforms, gems, power ups, etc. this is the fun part
-	opts := &ebiten.DrawRectShaderOptions{
-		Uniforms: u,
-	}
-
-	for i := 0; i < len(g.Dice); i++ {
-		die := g.Dice[i]
-		die.image.Clear()
-
-		if die.Mode == DRAG && g.cursorWithin(render.SCOREZONE) {
-			opts.Uniforms["HoveringSpeedUp"] = 1
-
-		} else {
-			opts.Uniforms["HoveringSpeedUp"] = 0
-		}
-
-		opts.Uniforms["FaceLayouts"] = die.LocationsPips()
-		opts.Uniforms["ActiveFace"] = die.ActiveFaceIndex()
-		opts.Uniforms["Height"] = die.Height
-		opts.Uniforms["Direction"] = die.Direction.KageVec2()
-		opts.Uniforms["Velocity"] = die.Velocity.KageVec2()
-		opts.Uniforms["DieColor"] = die.Color.KageVec3()
-		opts.Uniforms["ZRotation"] = die.ZRotation
-		opts.Uniforms["Mode"] = int(die.Mode)
-
-		die.image.DrawRectShader(s, s, shader, opts)
-
-		ops := &ebiten.DrawImageOptions{}
-		ops.GeoM.Translate(float64(die.Vec2.X), float64(die.Vec2.Y))
-		screen.DrawImage(die.image, ops)
-	}
 }
