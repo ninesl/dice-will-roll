@@ -24,21 +24,27 @@ func (g *Game) Draw(s *ebiten.Image) {
 
 	g.RocksRenderer.DrawRocks(screen)
 
-	if g.cursorWithin(render.SCOREZONE) {
-		//TODO:FIXME: have to make this work for standard input, etc. will probably change with shaders anyways later
-		if ebiten.IsMouseButtonPressed(ebiten.MouseButton0) {
-			DrawSCOREZONE(screen, opts)
-		}
-	}
+	DEBUGView(screen, g, DEBUGGameView)
 
 	g.DrawDice(screen)
 
+	// g.DrawUI(screen)
+
+	s.DrawImage(screen, opts)
+	opts.GeoM.Reset()
+}
+
+type DEBUGViewMode int
+
+const (
+	DEBUGGameView DEBUGViewMode = iota
+)
+
+func DEBUGView(screen *ebiten.Image, g *Game, viewMode DEBUGViewMode) {
 	DEBUGDrawMessage(screen, g.ActiveLevel.String(), 0.0)
 	DEBUGDrawMessage(screen, fmt.Sprintf("%.2f fps / %.2f tps\n", ebiten.ActualFPS(), ebiten.ActualTPS()), FONT_SIZE)
 	DEBUGDiceValues(screen, g.Dice)
 
-	s.DrawImage(screen, opts)
-	opts.GeoM.Reset()
 }
 
 func DrawSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {

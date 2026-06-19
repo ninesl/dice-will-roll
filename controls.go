@@ -41,57 +41,8 @@ func (g *Game) Controls() Action {
 	return action
 }
 
-// // returns the first Die found that is within the cursor's bounds
-// //
-// // used to later set the die's mode to DRAG
-// //
-// // inputs:
-// //
-// //	dice []*Die // usually g.Dice
-// //	x, y int    // cursor should be from ebiten.CursorPosition()
-//
-//	func (g *Game) PickDie() *Die {
-//		if len(g.Dice) == 0 {
-//			return nil
-//		}
-//
-//		var index int // to put on last element of g.Dice to have it render on top
-//		var PickedDie *Die
-//		//tempDie := g.Dice[index]
-//
-//		// the last one rendered is on top
-//		for i := len(g.Dice) - 1; i >= 0; i -= 1 {
-//			die := g.Dice[i]
-//			withinX := g.cursorPos.X > die.Vec2.X && g.cursorPos.X < die.Vec2.X+TileSize
-//			withinY := g.cursorPos.Y > die.Vec2.Y && g.cursorPos.Y < die.Vec2.Y+TileSize
-//
-//			if withinX && withinY {
-//				render.XOffset = g.cursorPos.X - die.Vec2.X
-//				render.YOffset = g.cursorPos.Y - die.Vec2.Y
-//				index = i
-//				PickedDie = die
-//				break
-//			}
-//		}
-//
-//		//clicked nothing
-//		if PickedDie == nil {
-//			return nil
-//		}
-//
-//		// shift left
-//		for i := index; i < len(g.Dice)-1; i++ {
-//			g.Dice[i] = g.Dice[i+1]
-//		}
-//
-//		// set top to picked die
-//		g.Dice[len(g.Dice)-1] = PickedDie
-//
-//		return PickedDie
-//	}
-//
-// assigns hand within ActiveLevel to SCORING
-func (g *Game) SetToScore() {
+// assigns dice that are in the hand within ActiveLevel to SCORING
+func (g *Game) SetDiceToScore() {
 	g.ActiveLevel.ScoreHand = g.ActiveLevel.Hand
 
 	for i := 0; i < len(g.ActiveLevel.ScoringHand); i++ {

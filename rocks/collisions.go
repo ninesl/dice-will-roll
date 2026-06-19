@@ -132,10 +132,10 @@ func sqrt32(x float32) float32 {
 	return float32(math.Sqrt(float64(x)))
 }
 
-// UpdateRocksAndCollide performs all rock updates, wall bouncing, and collision detection/response
+// CollideAndAnimateRocks performs all rock updates, wall bouncing, and collision detection/response
 // diceCenters: die center positions (X=centerX, Y=centerY, Z=rotationZ)
 // diceVelocities: die velocity vectors (X=velocityX, Y=velocityY) for bounce direction
-func (r *RocksRenderer) UpdateRocksAndCollide(cursorX, cursorY float32, diceCenters []render.Vec3, diceVelocities []render.Vec2) {
+func (r *RocksRenderer) CollideAndAnimateRocks(cursorX, cursorY float32, diceCenters []render.Vec3, diceVelocities []render.Vec2) {
 	// Reset collision buffers to length 0 (keeps capacity - no allocation)
 	r.diceCollisionBuffer = r.diceCollisionBuffer[:0]
 	r.cursorCollisionBuffer = r.cursorCollisionBuffer[:0]

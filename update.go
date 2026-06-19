@@ -11,6 +11,21 @@ import (
 	"github.com/ninesl/dice-will-roll/render"
 )
 
+func (g *Game) Update() error {
+	g.time = float32(time.Since(g.startTime).Milliseconds()) / float32(ebiten.TPS())
+	g.UpdateCusor()
+	g.SetActiveDieIndex(g.Dice...)
+
+	g.UpdateDice()
+
+	g.PlayerInput()
+
+	g.AnimateDice()
+	g.AnimateRocks()
+
+	return nil
+}
+
 func DEBUGTitleFPS(x, y float32) {
 	ebiten.SetWindowTitle("Dice Will Roll " +
 		fmt.Sprintf("T%0.2f F%0.2f x%4.0f y%4.0f ", ebiten.ActualTPS(), ebiten.ActualFPS(), x, y))
@@ -20,14 +35,10 @@ var activeDieWiggleArc = degreesToZRotation(45)
 var activeDieWiggleFollowFactor float32 = 0.2
 var activeDieWiggleSpeed float32 = 0.25
 
-func (g *Game) Update() error {
-	g.UpdateCusor()
-	g.SetActiveDieIndex(g.Dice...)
-
-	g.time = float32(time.Since(g.startTime).Milliseconds()) / float32(ebiten.TPS())
-
+func (g *Game) UpdateDice() {
 	g.heldDie = g.heldDie[:0]
 	g.hold = g.hold[:0]
+
 	//DEBUGTitleFPS(g.cursorPos.X, g.cursorPos.Y)
 	for _, d := range g.Dice {
 		if d.Mode == HELD {
@@ -44,7 +55,9 @@ func (g *Game) Update() error {
 	for _, die := range g.ActiveLevel.ScoringHand {
 		die.Height = .1
 	}
+}
 
+func (g *Game) PlayerInput() {
 	action := g.Controls()
 	// cant make an action if scoring
 	if action != ROLLING || g.ActiveLevel.scoringState != SCORING_IDLE {
@@ -85,15 +98,10 @@ func (g *Game) Update() error {
 			if g.ActiveLevel.HandsLeft > 0 {
 				g.ActiveLevel.HandsLeft--
 				g.ActiveLevel.RollsLeft = g.ActiveLevel.MaxRolls
-				g.SetToScore()
+				g.SetDiceToScore()
 			}
 		}
 	}
-
-	g.UpdateDice()
-	g.UpdateRocks()
-
-	return nil
 }
 
 // if no dice are given, uses g.Dice as default
@@ -134,7 +142,7 @@ var (
 	scoringDice = make([]*Die, 0)
 )
 
-func (g *Game) UpdateDice() {
+func (g *Game) AnimateDice() {
 
 	rolling = rolling[:0]
 	held = held[:0]
@@ -290,9 +298,9 @@ func absf(x float32) float32 {
 	return x
 }
 
-func (g *Game) UpdateRocks() {
+func (g *Game) AnimateRocks() {
 	// Pass pre-computed dice collision data to renderer
-	g.RocksRenderer.UpdateRocksAndCollide(g.cursorPos.X, g.cursorPos.Y, g.diceCenterBuffer, g.diceVelocityBuffer)
+	g.RocksRenderer.CollideAndAnimateRocks(g.cursorPos.X, g.cursorPos.Y, g.diceCenterBuffer, g.diceVelocityBuffer)
 }
 
 // always is called at the beginning of the update loop
