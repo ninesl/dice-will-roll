@@ -63,6 +63,9 @@ type Game struct {
 	Shaders       map[shaders.ShaderKey]*ebiten.Shader
 	RocksImage    *ebiten.Image
 	RocksRenderer *rocks.RocksRenderer // New rocks rendering system,
+
+	opts *DrawOptions
+
 	// //TODO:FIXME: make a new one per level?, game renders the same but active level reassigns
 	Dice               []*Die        // Player's dice
 	diceCenterBuffer   []render.Vec3 // Pre-allocated die center buffer (X=centerX, Y=centerY, Z=360rotation axis)
@@ -148,9 +151,13 @@ func LoadGame() *Game {
 	}
 
 	g := &Game{
-		Dice:               playerDice,
-		Shaders:            shaders.LoadShaders(),
-		RocksRenderer:      rocks.NewRocksRenderer(rocksConfig),
+		Dice:          playerDice,
+		Shaders:       shaders.LoadShaders(),
+		RocksRenderer: rocks.NewRocksRenderer(rocksConfig),
+		opts: &DrawOptions{
+			image:  &ebiten.DrawImageOptions{},
+			text:   &text.DrawOptions{},
+			shader: &ebiten.DrawRectShaderOptions{}},
 		diceCenterBuffer:   make([]render.Vec3, 0, NUM_PLAYER_DICE),
 		diceVelocityBuffer: make([]render.Vec2, 0, NUM_PLAYER_DICE),
 		heldDie:            make([]*Die, 0),

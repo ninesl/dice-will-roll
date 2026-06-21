@@ -61,7 +61,6 @@ func calculateSheetCols(frames int) int {
 
 const (
 	// Score value constants - the actual score value of the rock
-	//TODO:FIXME: hsould this not be in render/?
 	SmallScore        = 1
 	MediumScore       = 3
 	BigScore          = 5

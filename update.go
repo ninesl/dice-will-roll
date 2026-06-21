@@ -227,10 +227,10 @@ func (g *Game) updateActiveDieWiggle() {
 		if i == g.activeDieIdx && g.dieUsesCursorWiggle(die) {
 			g.updateCursorWiggleTarget(i, die)
 		} else {
-			die.Wiggle.ZRotationFx *= 0.85
+			die.Wiggle.ZRotationFx *= 0.25
 		}
 
-		g.applyDieWiggle(die)
+		die.DieRenderable.ZRotation = die.Wiggle.ZRotation + sinf(g.time*activeDieWiggleSpeed)*die.Wiggle.ZRotationFx
 	}
 }
 
@@ -238,18 +238,15 @@ func (g *Game) updateActiveDieWiggle() {
 // adds amplitude from how far the rendered rotation has to catch up.
 func (g *Game) updateCursorWiggleTarget(i int, die *Die) {
 	dieCenter := g.diceCenterBuffer[i]
-	cursorX := g.cursorPos.X - dieCenter.X
-	cursorY := g.cursorPos.Y - dieCenter.Y
-	nextZRotation := (atan2f(cursorY, cursorX) + float32(math.Pi)) / (2 * float32(math.Pi))
+	// cursorX := g.cursorPos.X - dieCenter.X
+	// cursorY := g.cursorPos.Y - dieCenter.Y
+	// if diceCenter.X > g.cursorPos.X {
+	// }
+	nextZRotation := (atan2f(g.cursorPos.Y-dieCenter.Y, g.cursorPos.X-dieCenter.X) + float32(math.Pi)) / (2 * float32(math.Pi))
 	zDelta := wrappedDelta(nextZRotation, die.Wiggle.ZRotation)
 
 	die.Wiggle.ZRotation += zDelta * activeDieWiggleFollowFactor
-	die.Wiggle.ZRotationFx = max(activeDieWiggleArc, die.Wiggle.ZRotationFx*0.85+absf(zDelta)*0.15)
-}
-
-// applyDieWiggle writes the visual Z rotation used by the die shader.
-func (g *Game) applyDieWiggle(die *Die) {
-	die.DieRenderable.ZRotation = die.Wiggle.ZRotation + sinf(g.time*activeDieWiggleSpeed)*die.Wiggle.ZRotationFx
+	die.Wiggle.ZRotationFx = max(activeDieWiggleArc, die.Wiggle.ZRotationFx+absf(zDelta)*0.15)
 }
 
 // dieUsesCursorWiggle defines which focused die modes are allowed to retarget

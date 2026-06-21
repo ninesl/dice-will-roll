@@ -8,7 +8,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ninesl/dice-will-roll/dice"
 	"github.com/ninesl/dice-will-roll/render"
-	"github.com/ninesl/dice-will-roll/render/shaders"
 )
 
 type Die struct {
@@ -94,47 +93,6 @@ func SetupPlayerDice() []*Die {
 	}
 
 	return dice
-}
-
-func (g *Game) DrawDice(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
-	//sideLen := int(g.Dice[0].image.Bounds().Dx())
-	sideLen := int(render.DieTileSize)
-
-	shader := g.Shaders[shaders.DieShaderKey]
-
-	shaderOpts.Uniforms = map[string]any{
-		"Time":            g.time,
-		"DieScale":        1.15,
-		"HoveringSpeedUp": 0,
-		// "Cursor": []float32{float32(cx), float32(cy)},
-	}
-
-	for i := 0; i < len(g.Dice); i++ {
-		g.Dice[i].image.Clear()
-
-		if g.Dice[i].Mode == DRAG && g.cursorWithin(render.SCOREZONE) {
-			shaderOpts.Uniforms["HoveringSpeedUp"] = 1
-
-		} else {
-			shaderOpts.Uniforms["HoveringSpeedUp"] = 0
-		}
-
-		shaderOpts.Uniforms["FaceLayouts"] = g.Dice[i].LocationsPips()
-		shaderOpts.Uniforms["ActiveFace"] = g.Dice[i].ActiveFaceIndex()
-		shaderOpts.Uniforms["Height"] = g.Dice[i].Height
-		shaderOpts.Uniforms["Direction"] = g.Dice[i].Direction.KageVec2()
-		shaderOpts.Uniforms["Velocity"] = g.Dice[i].Velocity.KageVec2()
-		shaderOpts.Uniforms["DieColor"] = g.Dice[i].Color.KageVec3()
-		shaderOpts.Uniforms["ZRotation"] = g.Dice[i].ZRotation
-		shaderOpts.Uniforms["Mode"] = int(g.Dice[i].Mode)
-
-		g.Dice[i].image.DrawRectShader(sideLen, sideLen, shader, shaderOpts)
-
-		ops := &ebiten.DrawImageOptions{}
-		ops.GeoM.Translate(float64(g.Dice[i].Vec2.X), float64(g.Dice[i].Vec2.Y))
-		screen.DrawImage(g.Dice[i].image, ops)
-		ops.GeoM.Reset()
-	}
 }
 
 // When spacebar/roll is pressed

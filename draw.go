@@ -11,33 +11,34 @@ import (
 )
 
 // var screen = ebiten.NewImage(GAME_BOUNDS_X, GAME_BOUNDS_Y)
-var (
-	opts     = &ebiten.DrawImageOptions{}
-	textOpts = &text.DrawOptions{}
 
+type DrawOptions struct {
+	image *ebiten.DrawImageOptions
+	text  *text.DrawOptions
 	// TODO: die specific shader uniforms, gems, power ups, etc. this is the fun part
-	shaderOpts = &ebiten.DrawRectShaderOptions{}
-)
+	shader *ebiten.DrawRectShaderOptions
+}
 
 func (g *Game) Draw(s *ebiten.Image) {
 	s.Clear()
+	// likely redundant
+	g.opts.image.GeoM.Reset()
 
 	s.DrawRectShader(GAME_BOUNDS_X, GAME_BOUNDS_Y,
 		g.Shaders[shaders.BackgroundShaderKey],
-		shaderOpts)
+		g.opts.shader)
 
-	DrawROLLZONE(s, opts)
+	DrawROLLZONE(s, g.opts.image)
 
 	g.RocksRenderer.DrawRocks(s)
 
-	DEBUGView(s, g, textOpts, DEBUGGameView)
+	DEBUGView(s, g, g.opts.text, DEBUGGameView)
 
-	g.DrawDice(s, opts)
+	g.DrawDice(s, g.opts.image)
 
 	// g.DrawUI(s)
 
 	//s.DrawImage(s, opts)
-	opts.GeoM.Reset()
 }
 
 type DEBUGViewMode int
@@ -125,4 +126,43 @@ func DEBUGDiceValues(screen *ebiten.Image, textOpts *text.DrawOptions, dice []*D
 	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "roll", DEBUGValuesFromDice(Rolling)), y)
 	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "held", DEBUGValuesFromDice(Held)), y-FONT_SIZE)
 	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "score", DEBUGValuesFromDice(Scoring)), y-FONT_SIZE*2)
+}
+
+func (g *Game) DrawDice(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
+	//sideLen := int(g.Dice[0].image.Bounds().Dx())
+	shader := g.Shaders[shaders.DieShaderKey]
+
+	g.opts.shader.Uniforms = map[string]any{
+		"Time":            g.time,
+		"DieScale":        1.15,
+		"HoveringSpeedUp": 0,
+		// "Cursor": []float32{float32(cx), float32(cy)},
+	}
+
+	for i := 0; i < len(g.Dice); i++ {
+		g.Dice[i].image.Clear()
+
+		if g.Dice[i].Mode == DRAG && g.cursorWithin(render.SCOREZONE) {
+			g.opts.shader.Uniforms["HoveringSpeedUp"] = 1
+
+		} else {
+			g.opts.shader.Uniforms["HoveringSpeedUp"] = 0
+		}
+
+		g.opts.shader.Uniforms["FaceLayouts"] = g.Dice[i].LocationsPips()
+		g.opts.shader.Uniforms["ActiveFace"] = g.Dice[i].ActiveFaceIndex()
+		g.opts.shader.Uniforms["Height"] = g.Dice[i].Height
+		g.opts.shader.Uniforms["Direction"] = g.Dice[i].Direction.KageVec2()
+		g.opts.shader.Uniforms["Velocity"] = g.Dice[i].Velocity.KageVec2()
+		g.opts.shader.Uniforms["DieColor"] = g.Dice[i].Color.KageVec3()
+		g.opts.shader.Uniforms["ZRotation"] = g.Dice[i].ZRotation
+		g.opts.shader.Uniforms["Mode"] = int(g.Dice[i].Mode)
+
+		g.Dice[i].image.DrawRectShader(TILE_SIZE, TILE_SIZE, shader, g.opts.shader)
+
+		ops := &ebiten.DrawImageOptions{}
+		ops.GeoM.Translate(float64(g.Dice[i].Vec2.X), float64(g.Dice[i].Vec2.Y))
+		screen.DrawImage(g.Dice[i].image, ops)
+		ops.GeoM.Reset()
+	}
 }
