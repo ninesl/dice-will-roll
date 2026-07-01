@@ -1,4 +1,5 @@
 /video
+*.mkv
 /.vscode
 store.mindtick
 .opencode/
