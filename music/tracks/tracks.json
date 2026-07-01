@@ -1,0 +1,12 @@
+{
+  "tracks": [
+    {
+      "name": "placeholder",
+      "file": "tracks/files/placeholder.mp3",
+      "hooks": [
+        [100, 500, 900, 1300],
+        [300, 700, 1100, 1500]
+      ]
+    }
+  ]
+}

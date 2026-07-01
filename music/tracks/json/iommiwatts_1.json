@@ -1,0 +1,20 @@
+{
+  "name": "iommiwatts",
+  "file": "/home/ulamog/dev/dice-will-roll/music/tracks/files/iommiwatts.mp3",
+  "hooks": [
+    [
+      2912,
+      4056,
+      5257,
+      6445,
+      7665
+    ],
+    [
+      3519,
+      4661,
+      5843,
+      7061,
+      8255
+    ]
+  ]
+}
