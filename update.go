@@ -8,12 +8,14 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ninesl/dice-will-roll/dice"
+	"github.com/ninesl/dice-will-roll/music"
 	"github.com/ninesl/dice-will-roll/render"
 )
 
 func (g *Game) Update() error {
 	g.time = float32(time.Since(g.startTime).Milliseconds()) / float32(ebiten.TPS())
-	g.UpdateCusor()
+	g.UpdateMusic()
+	g.UpdateMouseInput()
 	g.SetActiveDieIndex(g.Dice...)
 
 	g.UpdateDice()
@@ -26,12 +28,21 @@ func (g *Game) Update() error {
 	return nil
 }
 
+func (g *Game) UpdateMusic() {
+	if g.Music == nil {
+		return
+	}
+
+	g.Music.Tick()
+}
+
 func DEBUGTitleFPS(x, y float32) {
 	ebiten.SetWindowTitle("Dice Will Roll " +
 		fmt.Sprintf("T%0.2f F%0.2f x%4.0f y%4.0f ", ebiten.ActualTPS(), ebiten.ActualFPS(), x, y))
 }
 
 var activeDieWiggleArc = degreesToZRotation(45)
+var activeDiePrimarySpinArc = degreesToZRotation(360)
 var activeDieWiggleFollowFactor float32 = 0.2
 var activeDieWiggleSpeed float32 = 0.25
 
@@ -39,7 +50,7 @@ func (g *Game) UpdateDice() {
 	g.heldDie = g.heldDie[:0]
 	g.hold = g.hold[:0]
 
-	//DEBUGTitleFPS(g.cursorPos.X, g.cursorPos.Y)
+	//DEBUGTitleFPS(g.Mouse.Position.X, g.Mouse.Position.Y)
 	for _, d := range g.Dice {
 		if d.Mode == HELD {
 			d.Height = -.5
@@ -108,7 +119,7 @@ func (g *Game) PlayerInput() {
 //
 // active die Index is the closest die to the cursor
 func (g *Game) SetActiveDieIndex(dice ...*Die) {
-	g.activeDieIdx, _ = g.ClosestDieToPoint(g.cursorPos, g.Dice...)
+	g.activeDieIdx, _ = g.ClosestDieToPoint(g.Mouse.Position, g.Dice...)
 }
 
 func (g *Game) ClosestDieToPoint(point render.Vec2, dice ...*Die) (int, *Die) {
@@ -169,8 +180,8 @@ func (g *Game) AnimateDice() {
 
 			rolling = append(rolling, d)
 		} else if die.Mode == DRAG {
-			d.Fixed.X = g.cursorPos.X - render.HalfDieTileSize
-			d.Fixed.Y = g.cursorPos.Y - render.HalfDieTileSize
+			d.Fixed.X = g.Mouse.Position.X - render.HalfDieTileSize
+			d.Fixed.Y = g.Mouse.Position.Y - render.HalfDieTileSize
 
 			d.Velocity.X = (d.Fixed.X - d.Vec2.X) * render.MoveFactor
 			d.Velocity.Y = (d.Fixed.Y - d.Vec2.Y) * render.MoveFactor
@@ -197,7 +208,7 @@ func (g *Game) AnimateDice() {
 	render.HandleDiceCollisions(moving)
 	render.BounceAndClamp(rolling)
 
-	g.ActiveLevel.HandleScoring(scoringDice, g.RocksRenderer)
+	g.ActiveLevel.HandleScoring(scoringDice, g.RocksRenderer, g.Music)
 
 	// Populate dice center and velocity buffers after all dice physics are resolved
 	g.diceCenterBuffer = g.diceCenterBuffer[:0]
@@ -225,8 +236,15 @@ func (g *Game) AnimateDice() {
 func (g *Game) updateActiveDieWiggle() {
 	for i, die := range g.Dice {
 		if i == g.activeDieIdx && g.dieUsesCursorWiggle(die) {
-			g.updateCursorWiggleTarget(i, die)
+			g.updatePrimaryHoverSwing(die)
+			die.Wiggle.ZRotationFx = 0
+		} else if die.Mode == SCORING || g.dieInActiveHand(die) {
+			g.updatePrimaryHoverSwing(die)
+			die.Wiggle.ZRotationFx = 0
 		} else {
+			die.Wiggle.SwingActive = false
+			die.Wiggle.SwingSpinning = false
+			die.Wiggle.SwingWaitHooks = 0
 			die.Wiggle.ZRotationFx *= 0.25
 		}
 
@@ -234,19 +252,110 @@ func (g *Game) updateActiveDieWiggle() {
 	}
 }
 
+func (g *Game) dieInActiveHand(die *Die) bool {
+	if g.ActiveLevel == nil {
+		return false
+	}
+	for _, activeDie := range g.ActiveLevel.ScoringHand {
+		if activeDie == die {
+			return true
+		}
+	}
+	return false
+}
+
 // updateCursorWiggleTarget points the die's wobble target toward the cursor and
 // adds amplitude from how far the rendered rotation has to catch up.
 func (g *Game) updateCursorWiggleTarget(i int, die *Die) {
 	dieCenter := g.diceCenterBuffer[i]
-	// cursorX := g.cursorPos.X - dieCenter.X
-	// cursorY := g.cursorPos.Y - dieCenter.Y
-	// if diceCenter.X > g.cursorPos.X {
+	// cursorX := g.Mouse.Position.X - dieCenter.X
+	// cursorY := g.Mouse.Position.Y - dieCenter.Y
+	// if diceCenter.X > g.Mouse.Position.X {
 	// }
-	nextZRotation := (atan2f(g.cursorPos.Y-dieCenter.Y, g.cursorPos.X-dieCenter.X) + float32(math.Pi)) / (2 * float32(math.Pi))
+	nextZRotation := (atan2f(g.Mouse.Position.Y-dieCenter.Y, g.Mouse.Position.X-dieCenter.X) + float32(math.Pi)) / (2 * float32(math.Pi))
 	zDelta := wrappedDelta(nextZRotation, die.Wiggle.ZRotation)
 
 	die.Wiggle.ZRotation += zDelta * activeDieWiggleFollowFactor
 	die.Wiggle.ZRotationFx = max(activeDieWiggleArc, die.Wiggle.ZRotationFx+absf(zDelta)*0.15)
+}
+
+func (g *Game) updatePrimaryHoverSwing(die *Die) {
+	if g.Music == nil {
+		return
+	}
+
+	nowMS := g.Music.MS()
+	primaryMS := g.Music.UpcomingMS(music.LandingLane)
+	if !die.Wiggle.SwingActive || nowMS < die.Wiggle.SwingLastMS {
+		die.Wiggle.ZRotation = wrapZRotation(die.DieRenderable.ZRotation)
+		die.Wiggle.SwingLastMS = nowMS
+		die.Wiggle.SwingHookMS = primaryMS
+		die.Wiggle.SwingDurationMS = 0
+		die.Wiggle.SwingWaitHooks = 0
+		die.Wiggle.SwingActive = true
+		die.Wiggle.SwingSpinning = false
+		if die.Wiggle.SwingDir == 0 {
+			die.Wiggle.SwingDir = 1
+		}
+		return
+	}
+	if primaryMS != 0 && primaryMS != die.Wiggle.SwingHookMS {
+		die.Wiggle.SwingHookMS = primaryMS
+		if !die.Wiggle.SwingSpinning {
+			die.Wiggle.SwingWaitHooks++
+			die.Wiggle.SwingLastMS = nowMS
+			if die.Wiggle.SwingWaitHooks < 1 {
+				return
+			}
+			die.Wiggle.SwingSpinning = true
+		} else {
+			die.Wiggle.SwingDir *= -1
+		}
+		die.Wiggle.SwingDurationMS = g.Music.UpcomingMS(music.LandingLane) - nowMS
+	}
+	if !die.Wiggle.SwingSpinning {
+		die.Wiggle.SwingLastMS = nowMS
+		return
+	}
+
+	durationMS := die.Wiggle.SwingDurationMS
+	if durationMS <= 0 {
+		die.Wiggle.SwingLastMS = nowMS
+		return
+	}
+
+	elapsedMS := nowMS - die.Wiggle.SwingLastMS
+	die.Wiggle.SwingLastMS = nowMS
+	die.Wiggle.ZRotation = wrapZRotation(die.Wiggle.ZRotation + die.Wiggle.SwingDir*activeDiePrimarySpinArc*float32(elapsedMS)/float32(durationMS))
+}
+
+func (g *Game) upcomingHookMS(lane music.HookLane, count uint8) int64 {
+	if count == 0 {
+		count = 1
+	}
+	if g.Music == nil || g.Music.LaneIndexes == nil {
+		return 0
+	}
+	if lane < 0 || int(lane) >= len(g.Music.Track.Hooks) || int(lane) >= len(g.Music.LaneIndexes) {
+		return 0
+	}
+
+	hooks := g.Music.Track.Hooks[lane]
+	if len(hooks) == 0 {
+		return 0
+	}
+
+	idx := int(g.Music.LaneIndexes[lane])
+	loops := int64(0)
+	for range count - 1 {
+		idx++
+		if idx >= len(hooks) {
+			idx = 0
+			loops++
+		}
+	}
+
+	return hooks[idx] + loops*g.Music.DurationMS
 }
 
 // dieUsesCursorWiggle defines which focused die modes are allowed to retarget
@@ -267,9 +376,19 @@ func wrappedDelta(next, current float32) float32 {
 	return delta
 }
 
+func wrapZRotation(rotation float32) float32 {
+	for rotation >= 1 {
+		rotation--
+	}
+	for rotation < 0 {
+		rotation++
+	}
+	return rotation
+}
+
 // cursorWithinDie checks the cursor against the die's current screen bounds.
 func (g *Game) cursorWithinDie(die *Die) bool {
-	return g.cursorPos.X > die.Vec2.X && g.cursorPos.X < die.Vec2.X+render.DieTileSize && g.cursorPos.Y > die.Vec2.Y && g.cursorPos.Y < die.Vec2.Y+render.DieTileSize
+	return g.Mouse.Position.X > die.Vec2.X && g.Mouse.Position.X < die.Vec2.X+render.DieTileSize && g.Mouse.Position.Y > die.Vec2.Y && g.Mouse.Position.Y < die.Vec2.Y+render.DieTileSize
 }
 
 // atan2f keeps callsites in float32 even though Go's math package uses float64.
@@ -297,16 +416,5 @@ func absf(x float32) float32 {
 
 func (g *Game) AnimateRocks() {
 	// Pass pre-computed dice collision data to renderer
-	g.RocksRenderer.CollideAndAnimateRocks(g.cursorPos.X, g.cursorPos.Y, g.diceCenterBuffer, g.diceVelocityBuffer)
-}
-
-// always is called at the beginning of the update loop
-func (g *Game) UpdateCusor() {
-	x, y := ebiten.CursorPosition()
-	g.cursorPos.X = float32(x)
-	g.cursorPos.Y = float32(y)
-}
-
-func (g *Game) cursorWithin(zone render.ZoneRenderable) bool {
-	return g.cursorPos.X > zone.MinWidth && g.cursorPos.X < zone.MaxWidth && g.cursorPos.Y > zone.MinHeight && g.cursorPos.Y < zone.MaxHeight
+	g.RocksRenderer.CollideAndAnimateRocks(g.Mouse.Position.X, g.Mouse.Position.Y, g.diceCenterBuffer, g.diceVelocityBuffer)
 }

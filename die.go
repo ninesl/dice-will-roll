@@ -22,8 +22,15 @@ type Die struct {
 // DieWiggleState stores cursor-focus wobble state that should follow this die
 // even if the dice slice is reordered.
 type DieWiggleState struct {
-	ZRotation   float32 // Cursor-facing target Z rotation, normalized 0..1 like the shader uniform.
-	ZRotationFx float32 // Current wobble amplitude; increase for wider bounce, damp toward 0 when inactive.
+	ZRotation       float32 // Cursor-facing target Z rotation, normalized 0..1 like the shader uniform.
+	ZRotationFx     float32 // Current wobble amplitude; increase for wider bounce, damp toward 0 when inactive.
+	SwingLastMS     int64
+	SwingHookMS     int64
+	SwingDurationMS int64
+	SwingDir        float32
+	SwingWaitHooks  uint8
+	SwingActive     bool
+	SwingSpinning   bool
 }
 
 func SetupNewDie(color render.Vec3) *Die {

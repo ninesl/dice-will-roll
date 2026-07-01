@@ -84,8 +84,8 @@ func (g *Game) SetDiceToScore() {
 func (g *Game) Press(die *Die) {
 	if die != nil {
 		g.holdTime = time.Now()
-		g.holdCx = g.cursorPos.X
-		g.holdCy = g.cursorPos.Y
+		g.holdCx = g.Mouse.Position.X
+		g.holdCy = g.Mouse.Position.Y
 
 		// g.Time = time.Now()
 
@@ -95,7 +95,7 @@ func (g *Game) Press(die *Die) {
 		// 	Y: g.y,
 		// } // set the fixed position to the current position
 		die.Mode = DRAG
-		die.Fixed = g.cursorPos
+		die.Fixed = g.Mouse.Position
 		die.Height = 0 //reset height if needed
 		// die.Modifier = .25 // for speeding up if needed
 	}
@@ -155,4 +155,20 @@ func (g *Game) Select() {
 	if !g.cursorWithin(render.ROLLZONE) {
 		render.ClampInZone(&die.DieRenderable, render.ROLLZONE)
 	}
+}
+
+// always is called at the beginning of the update loop
+func (g *Game) UpdateMouseInput() {
+	x, y := ebiten.CursorPosition()
+	g.Mouse.LastPosition = g.Mouse.Position
+	g.Mouse.Position.X = float32(x)
+	g.Mouse.Position.Y = float32(y)
+
+	g.Mouse.Down = ebiten.IsMouseButtonPressed(ebiten.MouseButton0)
+	g.Mouse.Clicked = inpututil.IsMouseButtonJustPressed(ebiten.MouseButton0)
+	g.Mouse.Released = inpututil.IsMouseButtonJustReleased(ebiten.MouseButton0)
+}
+
+func (g *Game) cursorWithin(zone render.ZoneRenderable) bool {
+	return g.Mouse.Position.X > zone.MinWidth && g.Mouse.Position.X < zone.MaxWidth && g.Mouse.Position.Y > zone.MinHeight && g.Mouse.Position.Y < zone.MaxHeight
 }

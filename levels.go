@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"sort"
 
+	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ninesl/dice-will-roll/dice"
+	"github.com/ninesl/dice-will-roll/music"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/rocks"
 )
@@ -15,33 +16,43 @@ type ScoringState uint8
 
 const (
 	SCORING_IDLE ScoringState = iota
-	SCORING_MOVING
-	SCORING_PAUSING
+	SCORING_WAIT_QUATERNARY
+	SCORING_WAIT_FINAL_QUINARY
 )
 
 // A level keep track of state and scoring for an 'instance' of a run
 type Level struct {
-	ScoringHand  []*Die        // the dice that are being scored
-	Rocks        int           // how many rocks are left
-	CurrentScore int           // current amount of rocks that are getting removed
-	scoringIndex int           // which die is currently being scored
-	Hand         dice.HandRank // current hand for the level
-	ScoreHand    dice.HandRank // current hand that will apply mult to the score
-
-	MaxRolls  int // max rolls per hand
-	RollsLeft int // rolls left this hand
-	MaxHands  int // max hands this level
-	HandsLeft int // hands remaining this level
+	ScoringHand  []*Die // the dice that are being scored
+	Rocks        int    // how many rocks are left
+	CurrentScore int    // current amount of rocks that are getting removed
+	scoringIndex int    // which die is currently being scored
+	MaxRolls     int    // max rolls per hand
+	RollsLeft    int    // rolls left this hand
+	MaxHands     int    // max hands this level
+	HandsLeft    int    // hands remaining this level
 
 	// State machine fields
-	// gets decremented/incremented every call bc it hits through a tick each time
-	scoringTimer int          // A tick-based timer for delays
-	scoringState ScoringState // The current state of the scoring animation
+	scoringState          ScoringState // The current state of the scoring animation
+	scoringMoves          []scoringMove
+	finalScoringHookCount uint8
+	finalScoringArmed     bool
 
+	Hand      dice.HandRank // current hand for the level
+	ScoreHand dice.HandRank // current hand that will apply mult to the score
 }
 
-// TODO:FIXME: should be determined in options?
-const scoringDelay int = 15 //  How many ticks to wait between scoring each die e.g., pause for 15 ticks (1/4 of a second at 60 TPS)
+type scoringMove struct {
+	die    *Die
+	frame  int
+	frames int
+	startX float32
+	startY float32
+	endX   float32
+	endY   float32
+	landed bool
+}
+
+const explosionMinLeadMS = 100
 
 // parameters for a level. Used in NewLevel(levelOps)
 type LevelOptions struct {
@@ -64,22 +75,9 @@ func NewLevel(ops LevelOptions) *Level {
 // handles scoring and render changes, used in g.ActiveLevel
 //
 // TODO: make this animation better/more fun
-func (l *Level) HandleScoring(heldDice []*Die, rockRenderer *rocks.RocksRenderer) {
-	// If there are no dice to score, ensure we are idle.
-	if len(heldDice) == 0 {
+func (l *Level) HandleScoring(heldDice []*Die, rockRenderer *rocks.RocksRenderer, musicState *music.NowPlaying) {
+	if len(heldDice) == 0 || musicState == nil || musicState.LaneIndexes == nil {
 		l.scoringState = SCORING_IDLE
-		return
-	}
-
-	// If we are idle and have dice, let's start the process.
-	if l.scoringState == SCORING_IDLE {
-		l.scoringIndex = 0
-		l.scoringState = SCORING_MOVING
-	}
-
-	// Decrement the timer if it's running.
-	if l.scoringTimer > 0 {
-		l.scoringTimer--
 		return
 	}
 
@@ -89,112 +87,246 @@ func (l *Level) HandleScoring(heldDice []*Die, rockRenderer *rocks.RocksRenderer
 		return heldDice[i].ActiveFace().NumPips() < heldDice[j].ActiveFace().NumPips()
 	})
 
-	// --- State Machine Logic ---
-
-	// Are we done with all the dice?
-	if l.scoringIndex >= len(heldDice) {
-		if l.scoringIndex == len(heldDice) {
-			l.scoringIndex++ // skips this final mult animation
-			l.scoringTimer = scoringDelay * 2
-			l.CurrentScore = int(float32(l.CurrentScore) * l.ScoreHand.Multiplier())
-			return
-		}
-
-		l.Rocks -= l.CurrentScore
-
-		// Calculate and distribute remaining score explosions (from multiplier)
-		sumOfNumPips := 0
-		for _, d := range heldDice {
-			sumOfNumPips += d.ActiveFace().NumPips()
-		}
-		remainingScore := l.CurrentScore - sumOfNumPips
-
-		if remainingScore > 0 {
-			numDice := len(heldDice)
-			rocksPerDie := remainingScore / numDice
-			remainder := remainingScore % numDice
-
-			// Distribute base amount to all dice
-			for _, d := range heldDice {
-				if rocksPerDie > 0 {
-					rockRenderer.ExplodeRocks(d.Identifier, rocksPerDie)
-				}
-			}
-
-			// Distribute remainder round-robin
-			for i := 0; remainder > 0; i++ {
-				die := heldDice[i%numDice]
-				rockRenderer.ExplodeRocks(die.Identifier, 1)
-				remainder--
-			}
-		}
-
-		l.CurrentScore = 0
-		for _, die := range heldDice {
-			die.Mode = ROLLING
-			die.Roll()                              // set diff die value
-			die.Velocity.Y = render.DieTileSize * 2 // downward velocity
-			die.Direction = render.DirectionArr[render.DOWN]
-		}
-
-		rockRenderer.DeselectAll()
-
-		l.ScoringHand = l.ScoringHand[:0] // Clear the hand
-		l.scoringState = SCORING_IDLE
+	if l.scoringState == SCORING_IDLE {
+		l.scoringIndex = 0
+		l.scoringMoves = l.scoringMoves[:0]
+		l.finalScoringArmed = false
+		musicState.ResetHooks(music.LaneOne)
+		l.scoringState = SCORING_WAIT_QUATERNARY
 		return
 	}
 
+	switch l.scoringState {
+	case SCORING_WAIT_QUATERNARY:
+		l.updateScoringMoves(rockRenderer)
+		if l.scoringIndex < len(heldDice) && musicState.Hook(music.LaneOne) {
+			l.startScoringDie(heldDice, musicState)
+			l.scoringIndex++
+		}
+		if l.scoringIndex < len(heldDice) || !l.allScoringMovesLanded() {
+			return
+		}
+		l.finalScoringArmed = false
+		l.scoringState = SCORING_WAIT_FINAL_QUINARY
+
+	case SCORING_WAIT_FINAL_QUINARY:
+		if !l.finalScoringArmed {
+			musicState.ResetHooks(music.LaneOne)
+			l.finalScoringHookCount = 1
+			if upcomingHookMS(musicState, music.LaneOne, 1)-musicState.MS() < explosionMinLeadMS {
+				l.finalScoringHookCount = 2
+			}
+			l.finalScoringArmed = true
+		}
+		if !musicState.Hooks(music.LaneOne, l.finalScoringHookCount) {
+			return
+		}
+		l.finishScoring(heldDice, rockRenderer)
+	}
+}
+
+func (l *Level) startScoringDie(heldDice []*Die, musicState *music.NowPlaying) {
 	die := heldDice[l.scoringIndex]
+	x, y := l.scoringTargetPosition(heldDice, l.scoringIndex)
+	die.Fixed.X = x
+	die.Fixed.Y = y
 
-	if l.scoringState == SCORING_MOVING {
-		// positioning - matches HandleMovingHeldDice logic
-		num := len(heldDice)
-		x := float32(GAME_BOUNDS_X)/2 - render.HalfDieTileSize
-		y := render.SmallRollZone.MaxHeight + render.SCOREZONE.MinHeight/2 + render.DieTileSize/5
+	durationMS := l.scoringLandingMS(musicState) - musicState.MS()
+	if durationMS < 1 {
+		durationMS = 1
+	}
+	frames := int(durationMS * int64(ebiten.TPS()) / 1000)
+	if frames < 1 {
+		frames = 1
+	}
 
-		// Shift left to center the group
-		if num > 1 {
-			x -= render.DieTileSize * (float32(num) - 1.0)
+	l.scoringMoves = append(l.scoringMoves, scoringMove{
+		die:    die,
+		frames: frames,
+		startX: die.Vec2.X,
+		startY: die.Vec2.Y,
+		endX:   x,
+		endY:   y,
+	})
+}
+
+func (l *Level) scoringLandingMS(musicState *music.NowPlaying) int64 {
+	return upcomingHookMS(musicState, music.LaneOne, 1)
+}
+
+func (l *Level) activeScoringMoveCount() uint8 {
+	var count uint8
+	for i := range l.scoringMoves {
+		if !l.scoringMoves[i].landed {
+			count++
+		}
+	}
+	return count
+}
+
+func upcomingHookMS(musicState *music.NowPlaying, lane music.HookLane, count uint8) int64 {
+	if count == 0 {
+		count = 1
+	}
+	if musicState == nil || musicState.LaneIndexes == nil {
+		return 0
+	}
+	if lane < 0 || int(lane) >= len(musicState.Track.Hooks) || int(lane) >= len(musicState.LaneIndexes) {
+		return 0
+	}
+
+	hooks := musicState.Track.Hooks[lane]
+	if len(hooks) == 0 {
+		return 0
+	}
+
+	idx := int(musicState.LaneIndexes[lane])
+	loops := int64(0)
+	for range count - 1 {
+		idx++
+		if idx >= len(hooks) {
+			idx = 0
+			loops++
+		}
+	}
+
+	return hooks[idx] + loops*musicState.DurationMS
+}
+
+func upcomingHookMSAfter(musicState *music.NowPlaying, lane music.HookLane, count uint8, afterMS int64) int64 {
+	if count == 0 {
+		count = 1
+	}
+	if musicState == nil || musicState.LaneIndexes == nil {
+		return 0
+	}
+	if lane < 0 || int(lane) >= len(musicState.Track.Hooks) || int(lane) >= len(musicState.LaneIndexes) {
+		return 0
+	}
+
+	hooks := musicState.Track.Hooks[lane]
+	if len(hooks) == 0 {
+		return 0
+	}
+
+	idx := int(musicState.LaneIndexes[lane])
+	loops := int64(0)
+	for hooks[idx]+loops*musicState.DurationMS <= afterMS {
+		idx++
+		if idx >= len(hooks) {
+			idx = 0
+			loops++
+		}
+	}
+
+	for range count - 1 {
+		idx++
+		if idx >= len(hooks) {
+			idx = 0
+			loops++
+		}
+	}
+
+	return hooks[idx] + loops*musicState.DurationMS
+}
+
+func (l *Level) scoringTargetPosition(heldDice []*Die, index int) (float32, float32) {
+	num := len(heldDice)
+	x := float32(GAME_BOUNDS_X)/2 - render.HalfDieTileSize
+	y := render.SmallRollZone.MaxHeight + render.SCOREZONE.MinHeight/2 + render.DieTileSize/5
+	if num > 1 {
+		x -= render.DieTileSize * (float32(num) - 1.0)
+	}
+	x += render.DieTileSize * 2 * float32(index)
+	return x, y
+}
+
+func (l *Level) updateScoringMoves(rockRenderer *rocks.RocksRenderer) {
+	for i := range l.scoringMoves {
+		move := &l.scoringMoves[i]
+		if move.landed {
+			continue
 		}
 
-		// Position this specific die based on its index with DieTileSize * 2 spacing
-		x += render.DieTileSize * 2 * float32(l.scoringIndex)
+		progress := float32(move.frame) / float32(move.frames)
+		if progress > 1 {
+			progress = 1
+		}
+		progress = progress * progress * (3 - 2*progress)
+		move.die.Vec2.X = move.startX + (move.endX-move.startX)*progress
+		move.die.Vec2.Y = move.startY + (move.endY-move.startY)*progress
+		move.frame++
 
-		die.Fixed.X = x
-		die.Fixed.Y = y
+		if move.frame <= move.frames {
+			continue
+		}
 
-		// Apply velocity to move towards the fixed point
-		die.Velocity.X = (die.Fixed.X - die.Vec2.X) * 0.15
-		die.Velocity.Y = (die.Fixed.Y - die.Vec2.Y) * 0.15
+		l.landScoringDie(move, rockRenderer)
+	}
+}
 
-		die.Vec2.X += die.Velocity.X
-		die.Vec2.Y += die.Velocity.Y
+func (l *Level) allScoringMovesLanded() bool {
+	if len(l.scoringMoves) == 0 {
+		return false
+	}
+	for i := range l.scoringMoves {
+		if !l.scoringMoves[i].landed {
+			return false
+		}
+	}
+	return true
+}
 
-		// --- Arrival Check ---
-		// Instead of rushing to the next die, it now transitions to a pause.
-		if math.Abs(float64(die.Vec2.Y-die.Fixed.Y)) < 0.05 && math.Abs(float64(die.Vec2.X-die.Fixed.X)) < 0.05 {
-			// Die has arrived. Stop it and start the pause.
-			die.Velocity.X = 0
-			die.Velocity.Y = 0
-			// l.Rocks -= die.ActiveFace().Value() // Score it
+func (l *Level) landScoringDie(move *scoringMove, rockRenderer *rocks.RocksRenderer) {
+	die := move.die
+	die.Vec2.X = move.endX
+	die.Vec2.Y = move.endY
+	die.Velocity.X = 0
+	die.Velocity.Y = 0
+	l.CurrentScore += die.ActiveFace().Value()
+	rockRenderer.ExplodeRocks(die.Identifier, die.ActiveFace().NumPips())
+	move.landed = true
+}
 
-			l.CurrentScore += die.ActiveFace().Value()
+func (l *Level) finishScoring(heldDice []*Die, rockRenderer *rocks.RocksRenderer) {
+	l.CurrentScore = int(float32(l.CurrentScore) * l.ScoreHand.Multiplier())
+	l.Rocks -= l.CurrentScore
 
-			l.scoringState = SCORING_PAUSING
-			l.scoringTimer = scoringDelay // Start the timer
+	sumOfNumPips := 0
+	for _, d := range heldDice {
+		sumOfNumPips += d.ActiveFace().NumPips()
+	}
+	remainingScore := l.CurrentScore - sumOfNumPips
 
-			// Explode rocks from this die's held buffer
-			rockRenderer.ExplodeRocks(die.Identifier, die.ActiveFace().NumPips())
+	if remainingScore > 0 {
+		numDice := len(heldDice)
+		rocksPerDie := remainingScore / numDice
+		remainder := remainingScore % numDice
 
-			if l.scoringIndex == len(heldDice)-1 {
-				l.scoringTimer *= 2
+		for _, d := range heldDice {
+			if rocksPerDie > 0 {
+				rockRenderer.ExplodeRocks(d.Identifier, rocksPerDie)
 			}
 		}
-	} else if l.scoringState == SCORING_PAUSING {
-		// The timer has finished. Move to the next die.
-		l.scoringIndex++
-		l.scoringState = SCORING_MOVING
+
+		for i := 0; remainder > 0; i++ {
+			die := heldDice[i%numDice]
+			rockRenderer.ExplodeRocks(die.Identifier, 1)
+			remainder--
+		}
 	}
+
+	l.CurrentScore = 0
+	for _, die := range heldDice {
+		die.Mode = ROLLING
+		die.Roll()
+		die.Velocity.Y = render.DieTileSize * 2
+		die.Direction = render.DirectionArr[render.DOWN]
+	}
+
+	rockRenderer.DeselectAll()
+	l.ScoringHand = l.ScoringHand[:0]
+	l.scoringState = SCORING_IDLE
 }
 
 func (l Level) String() string {

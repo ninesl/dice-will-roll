@@ -1,19 +1,22 @@
 package main
 
 import (
-	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"time"
 
 	// _ "embed"
 	// _ "image/png" // for png encoder
 
-	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/audio"
+	"github.com/hajimehoshi/ebiten/v2/audio/mp3"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/ninesl/dice-will-roll/dice"
+	"github.com/ninesl/dice-will-roll/music"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
 	"github.com/ninesl/dice-will-roll/rocks"
@@ -59,12 +62,28 @@ func init() {
 
 }
 
+// TODO: last position...?
+type CursorInfo struct {
+	LastPosition render.Vec2
+	Position     render.Vec2
+}
+
+type MouseInfo struct {
+	CursorInfo
+	Clicked, Down, Released                bool
+	RightClicked, RightDown, RightReleased bool
+}
+
 type Game struct {
-	Shaders       map[shaders.ShaderKey]*ebiten.Shader
+	Shaders map[shaders.ShaderKey]*ebiten.Shader
+	UIState *PlayerUIState
+
 	RocksImage    *ebiten.Image
 	RocksRenderer *rocks.RocksRenderer // New rocks rendering system,
+	opts          *DrawOptions
 
-	opts *DrawOptions
+	ActiveLevel *Level // keeping track of rocks
+	Music       *music.NowPlaying
 
 	// //TODO:FIXME: make a new one per level?, game renders the same but active level reassigns
 	Dice               []*Die        // Player's dice
@@ -72,16 +91,17 @@ type Game struct {
 	diceVelocityBuffer []render.Vec2 // Pre-allocated die velocity buffer (X=velocityX, Y=velocityY)
 	heldDie            []*Die        // Reused scratch buffer of currently held dice.
 	hold               []dice.Die    // Reused scratch buffer for hand ranking held dice.
-	startTime          time.Time
-	holdTime           time.Time
-	holdCx, holdCy     float32
-	ActiveLevel        *Level // keeping track of rocks
+
+	Mouse MouseInfo
+
+	startTime      time.Time
+	holdTime       time.Time
+	activeDieIdx   int // active die index, g.ActiveDie() to get the *Die
+	holdCx, holdCy float32
 	// is updated with UpdateCursor() in update loop
-	cursorPos render.Vec2
 	//cx, cy    float32 // the x/y coordinates of the cursor
 	// holdCx, holdCy float32
-	time         float32 // tracks time for shaders. updated in g.Update()
-	activeDieIdx int     // active die index, g.ActiveDie() to get the *Die
+	time float32 // tracks time for shaders and animations. updated in g.Update() every tick
 }
 
 func (g *Game) ActiveDie() *Die {
@@ -109,23 +129,14 @@ const (
 	SCORE  // when the score button is pressed
 )
 
-var (
-	DEBUG_FONT *text.GoTextFaceSource
-)
-
-func SetFonts() {
-	s, err := text.NewGoTextFaceSource(bytes.NewReader(fonts.ArcadeN_ttf))
+func LoadGame() *Game {
+	// dieImgSize := TILE_SIZE * 2
+	render.SetZones()
+	nowPlaying, err := loadGameMusic()
 	if err != nil {
 		log.Fatal(err)
 	}
-	DEBUG_FONT = s
-}
-
-func LoadGame() *Game {
-	SetFonts()
-
-	// dieImgSize := TILE_SIZE * 2
-	render.SetZones()
+	nowPlaying.Play()
 
 	playerDice := SetupPlayerDice()
 
@@ -151,9 +162,11 @@ func LoadGame() *Game {
 	}
 
 	g := &Game{
+		UIState:       NewUIState(),
 		Dice:          playerDice,
 		Shaders:       shaders.LoadShaders(),
 		RocksRenderer: rocks.NewRocksRenderer(rocksConfig),
+		Music:         nowPlaying,
 		opts: &DrawOptions{
 			image:  &ebiten.DrawImageOptions{},
 			text:   &text.DrawOptions{},
@@ -165,7 +178,7 @@ func LoadGame() *Game {
 		startTime:          time.Now(),
 		ActiveLevel: NewLevel(LevelOptions{
 			Rocks: rockAmount,
-			Hands: 3,
+			Hands: 10,
 			Rolls: 2,
 		}),
 	}
@@ -176,6 +189,44 @@ func LoadGame() *Game {
 	// g.DEBUG.dieImgTransparent = render.CreateImage(dieImgSize, dieImgSize, color.RGBA{56, 56, 56, 100})
 
 	return g
+}
+
+func loadGameMusic() (*music.NowPlaying, error) {
+	trackFile, err := music.TracksFS.Open("tracks/json/track_iommiwatts.json")
+	if err != nil {
+		return nil, err
+	}
+	defer trackFile.Close()
+
+	var track music.Track
+	if err := json.NewDecoder(trackFile).Decode(&track); err != nil {
+		return nil, err
+	}
+
+	audioFile, err := music.TracksFS.Open("tracks/files/iommiwatts.mp3")
+	if err != nil {
+		return nil, err
+	}
+	defer audioFile.Close()
+
+	const sampleRate = 44100
+	stream, err := mp3.DecodeWithSampleRate(sampleRate, audioFile)
+	if err != nil {
+		return nil, err
+	}
+
+	pcm, err := io.ReadAll(stream)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx := audio.NewContext(sampleRate)
+	player := ctx.NewPlayerFromBytes(pcm)
+	player.SetVolume(0.5)
+	nowPlaying := music.NewNowPlaying(track, player)
+	nowPlaying.DurationMS = int64(len(pcm)) * 1000 / int64(sampleRate*4)
+
+	return nowPlaying, nil
 }
 
 func (g *Game) String() string {

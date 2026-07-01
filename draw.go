@@ -1,9 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"image/color"
-
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/ninesl/dice-will-roll/render"
@@ -11,6 +8,17 @@ import (
 )
 
 // var screen = ebiten.NewImage(GAME_BOUNDS_X, GAME_BOUNDS_Y)
+
+// NOTE:
+// text itself should be bespoke,
+// as in each element will have a text DrawOptions
+// and can use this to draw text onitself when needed
+// FX shaders can be built within the element as needed bc of shader draw options
+//
+// debug elements are their own thing,
+// bespoke buttons are their own thing,
+// random sprites are their own thing,
+// random SDFs or shaders are their own thing,
 
 type DrawOptions struct {
 	image *ebiten.DrawImageOptions
@@ -32,26 +40,14 @@ func (g *Game) Draw(s *ebiten.Image) {
 
 	g.RocksRenderer.DrawRocks(s)
 
-	DEBUGView(s, g, g.opts.text, DEBUGGameView)
+	DEBUGView(s, g, g.opts.text, DEBUGPLAYView)
 
 	g.DrawDice(s, g.opts.image)
 
+	//g.DrawUI(s, g.opts)
 	// g.DrawUI(s)
 
 	//s.DrawImage(s, opts)
-}
-
-type DEBUGViewMode int
-
-const (
-	DEBUGGameView DEBUGViewMode = iota
-)
-
-func DEBUGView(screen *ebiten.Image, g *Game, textOpts *text.DrawOptions, viewMode DEBUGViewMode) {
-	DEBUGDrawMessage(screen, textOpts, g.ActiveLevel.String(), 0.0)
-	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%.2f fps / %.2f tps\n", ebiten.ActualFPS(), ebiten.ActualTPS()), FONT_SIZE)
-	DEBUGDiceValues(screen, textOpts, g.Dice)
-
 }
 
 func DrawSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
@@ -84,48 +80,6 @@ func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOption
 		dieImgTransparent,
 		opts,
 	)
-}
-
-func DEBUGDrawMessage(screen *ebiten.Image, textOpts *text.DrawOptions, msg string, y float64) {
-	textOpts.GeoM.Translate(0, float64(y))
-	textOpts.ColorScale.ScaleWithColor(color.White)
-	text.Draw(screen, msg, &text.GoTextFace{
-		Source: DEBUG_FONT,
-		Size:   FONT_SIZE,
-	}, textOpts)
-	textOpts.GeoM.Reset()
-	textOpts.ColorScale.Reset()
-}
-
-func DEBUGValuesFromDice(dice []*Die) []int {
-	var track []int
-	for i := 0; i < len(dice); i++ {
-		track = append(track, dice[i].ActiveFace().NumPips())
-	}
-	return track
-}
-
-func DEBUGDiceValues(screen *ebiten.Image, textOpts *text.DrawOptions, dice []*Die) {
-	var (
-		Rolling []*Die
-		Held    []*Die
-		Scoring []*Die
-	)
-	for i := 0; i < len(dice); i++ {
-		d := dice[i]
-		switch d.Mode {
-		case ROLLING:
-			Rolling = append(Rolling, d)
-		case HELD:
-			Held = append(Held, d)
-		case SCORING:
-			Scoring = append(Scoring, d)
-		}
-	}
-	y := (float64(render.GAME_BOUNDS_Y) - FONT_SIZE)
-	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "roll", DEBUGValuesFromDice(Rolling)), y)
-	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "held", DEBUGValuesFromDice(Held)), y-FONT_SIZE)
-	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "score", DEBUGValuesFromDice(Scoring)), y-FONT_SIZE*2)
 }
 
 func (g *Game) DrawDice(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
