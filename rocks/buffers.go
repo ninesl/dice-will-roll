@@ -52,15 +52,14 @@ func (r *RocksRenderer) takeRocksFromTransitionBuffers(needed int) []RockID {
 		if needed <= 0 {
 			break
 		}
-		buffer := &r.TransitionBuffers[i]
 
 		takeCount := needed
-		if takeCount > len(buffer.RockIDs) {
-			takeCount = len(buffer.RockIDs)
+		if takeCount > len(r.TransitionBuffers[i].RockIDs) {
+			takeCount = len(r.TransitionBuffers[i].RockIDs)
 		}
 
-		collected = append(collected, buffer.RockIDs[:takeCount]...)
-		buffer.RockIDs = buffer.RockIDs[takeCount:]
+		collected = append(collected, r.TransitionBuffers[i].RockIDs[:takeCount]...)
+		r.TransitionBuffers[i].RockIDs = r.TransitionBuffers[i].RockIDs[takeCount:]
 		needed -= takeCount
 	}
 
@@ -103,19 +102,18 @@ func (r *RocksRenderer) takeRocksFromActiveBaseBuffer(needed int) []RockID {
 		return make([]RockID, 0)
 	}
 
-	buffer := &r.BaseColorBuffers[r.ActiveBaseBufferIdx]
-	if len(buffer.RockIDs) == 0 {
+	if len(r.BaseColorBuffers[r.ActiveBaseBufferIdx].RockIDs) == 0 {
 		return make([]RockID, 0)
 	}
 
 	takeCount := needed
-	if takeCount > len(buffer.RockIDs) {
-		takeCount = len(buffer.RockIDs)
+	if takeCount > len(r.BaseColorBuffers[r.ActiveBaseBufferIdx].RockIDs) {
+		takeCount = len(r.BaseColorBuffers[r.ActiveBaseBufferIdx].RockIDs)
 	}
 
-	startIdx := len(buffer.RockIDs) - takeCount
-	collected := buffer.RockIDs[startIdx:]
-	buffer.RockIDs = buffer.RockIDs[:startIdx]
+	startIdx := len(r.BaseColorBuffers[r.ActiveBaseBufferIdx].RockIDs) - takeCount
+	collected := r.BaseColorBuffers[r.ActiveBaseBufferIdx].RockIDs[startIdx:]
+	r.BaseColorBuffers[r.ActiveBaseBufferIdx].RockIDs = r.BaseColorBuffers[r.ActiveBaseBufferIdx].RockIDs[:startIdx]
 
 	return collected
 }
@@ -188,7 +186,7 @@ func (r *RocksRenderer) DeselectRocks(dieIdentity render.DieIdentity) {
 	}
 
 	transitionBuffer := RockBuffer{
-		RockIDs:         append(make([]RockID, 0), heldBuffer.RockIDs...),
+		RockIDs:         heldBuffer.RockIDs,
 		Color:           r.BaseColorBuffers[r.ActiveBaseBufferIdx].Color, // Target: this base color
 		TransitionColor: heldBuffer.Color,                                // Source: die color
 		Transition:      r.config.ColorTransitionFrames,

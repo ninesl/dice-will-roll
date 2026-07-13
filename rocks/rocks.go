@@ -309,7 +309,6 @@ func NewRocksRenderer(config RocksConfig) *RocksRenderer {
 
 		diceCollisionDataBuffer: make([]dieCollisionData, 0, 7), //TODO:constant
 		config:                  config,
-		// ActiveBuffers: make([]*RockBuffer, 0, 16),
 		// Define colors for each rock type (applied via shader at draw time)
 	}
 

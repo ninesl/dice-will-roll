@@ -664,9 +664,8 @@ func (r *RocksRenderer) rebuildGrid() {
 
 	// Count base buffer rocks
 	for bufIdx := range r.BaseColorBuffers {
-		buffer := &r.BaseColorBuffers[bufIdx]
-		for i := range buffer.RockIDs {
-			rock := r.Rocks[r.ActiveBaseBufferIdx][buffer.RockIDs[i]]
+		for i := range r.BaseColorBuffers[bufIdx].RockIDs {
+			rock := r.Rocks[r.ActiveBaseBufferIdx][r.BaseColorBuffers[bufIdx].RockIDs[i]]
 			sizeData := rock.SizeData()
 			centerX := rock.Position.X + sizeData.HalfSize
 			centerY := rock.Position.Y + sizeData.HalfSize
@@ -723,9 +722,8 @@ func (r *RocksRenderer) rebuildGrid() {
 	// Use rock CENTER for cell assignment (must match Phase 1)
 	// Place base buffer rocks
 	for bufIdx := range r.BaseColorBuffers {
-		buffer := &r.BaseColorBuffers[bufIdx]
-		for i := range buffer.RockIDs {
-			rockID := buffer.RockIDs[i]
+		for i := range r.BaseColorBuffers[bufIdx].RockIDs {
+			rockID := r.BaseColorBuffers[bufIdx].RockIDs[i]
 			rock := r.Rocks[r.ActiveBaseBufferIdx][rockID]
 			sizeData := rock.SizeData()
 			centerX := rock.Position.X + sizeData.HalfSize
