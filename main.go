@@ -222,7 +222,7 @@ func loadGameMusic() (*music.NowPlaying, error) {
 
 	ctx := audio.NewContext(sampleRate)
 	player := ctx.NewPlayerFromBytes(pcm)
-	player.SetVolume(0.5)
+	player.SetVolume(0.1)
 	nowPlaying := music.NewNowPlaying(track, player)
 	nowPlaying.DurationMS = int64(len(pcm)) * 1000 / int64(sampleRate*4)
 
