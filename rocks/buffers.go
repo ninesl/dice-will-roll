@@ -27,7 +27,7 @@ func (r *RocksRenderer) updateAllBufferTransitions() {
 
 		// If transition complete, move rocks to the active base buffer
 		if buffer.Transition <= 0 {
-			r.ActiveBaseBuffer.Rocks = append(r.ActiveBaseBuffer.Rocks, buffer.Rocks...)
+			r.ActiveBaseBuffer.RockIDs = append(r.ActiveBaseBuffer.RockIDs, buffer.RockIDs...)
 
 			// Remove this transition buffer
 			r.TransitionBuffers = append(r.TransitionBuffers[:i], r.TransitionBuffers[i+1:]...)
@@ -35,22 +35,11 @@ func (r *RocksRenderer) updateAllBufferTransitions() {
 	}
 }
 
-// countAvailableRocks returns total rocks in base color buffers
-func (r *RocksRenderer) countAvailableRocks() int {
-	total := 0
-	for i := 0; i < len(r.config.BaseColors); i++ {
-		if i < len(r.BaseColorBuffers) {
-			total += len(r.BaseColorBuffers[i].Rocks)
-		}
-	}
-	return total
-}
-
 // takeRocksFromTransitionBuffers takes rocks from transition buffers when base buffers depleted
 // Prioritizes buffers with lowest Transition value (closest to completion)
-func (r *RocksRenderer) takeRocksFromTransitionBuffers(needed int) []SimpleRock {
+func (r *RocksRenderer) takeRocksFromTransitionBuffers(needed int) []RockID {
 	if len(r.TransitionBuffers) == 0 || needed <= 0 {
-		return []SimpleRock{}
+		return make([]RockID, 0)
 	}
 
 	// Sort transition buffers by Transition value (ascending - lowest first)
@@ -59,19 +48,19 @@ func (r *RocksRenderer) takeRocksFromTransitionBuffers(needed int) []SimpleRock 
 	})
 
 	// Take rocks from sorted buffers
-	collected := make([]SimpleRock, 0, needed)
-	for _, buf := range r.TransitionBuffers {
+	collected := make([]RockID, 0, needed)
+	for _, buffer := range r.TransitionBuffers {
 		if needed <= 0 {
 			break
 		}
 
 		takeCount := needed
-		if takeCount > len(buf.Rocks) {
-			takeCount = len(buf.Rocks)
+		if takeCount > len(buffer.RockIDs) {
+			takeCount = len(buffer.RockIDs)
 		}
 
-		collected = append(collected, buf.Rocks[:takeCount]...)
-		buf.Rocks = buf.Rocks[takeCount:]
+		collected = append(collected, buffer.RockIDs[:takeCount]...)
+		buffer.RockIDs = buffer.RockIDs[takeCount:]
 		needed -= takeCount
 	}
 
@@ -79,7 +68,7 @@ func (r *RocksRenderer) takeRocksFromTransitionBuffers(needed int) []SimpleRock 
 	filtered := make([]*RockBuffer, 0, len(r.TransitionBuffers))
 
 	for _, buf := range r.TransitionBuffers {
-		if len(buf.Rocks) > 0 {
+		if len(buf.RockIDs) > 0 {
 			filtered = append(filtered, buf)
 		}
 	}
@@ -92,7 +81,7 @@ func (r *RocksRenderer) takeRocksFromTransitionBuffers(needed int) []SimpleRock 
 func (r *RocksRenderer) countTransitionRocks() int {
 	total := 0
 	for _, buf := range r.TransitionBuffers {
-		total += len(buf.Rocks)
+		total += len(buf.RockIDs)
 	}
 	return total
 }
@@ -101,7 +90,7 @@ func (r *RocksRenderer) countTransitionRocks() int {
 func (r *RocksRenderer) countHeldBuffersWithRocks() int {
 	total := 0
 	for _, buffer := range r.HeldColorBuffers {
-		if buffer != nil && len(buffer.Rocks) > 0 {
+		if buffer != nil && len(buffer.RockIDs) > 0 {
 			total++
 		}
 	}
@@ -109,25 +98,25 @@ func (r *RocksRenderer) countHeldBuffersWithRocks() int {
 }
 
 // takeRocksFromActiveBaseBuffer takes rocks from the top (end) of the active base buffer.
-func (r *RocksRenderer) takeRocksFromActiveBaseBuffer(needed int) []SimpleRock {
-	if r.ActiveBaseBuffer == nil || needed <= 0 || len(r.ActiveBaseBuffer.Rocks) == 0 {
-		return []SimpleRock{}
+func (r *RocksRenderer) takeRocksFromActiveBaseBuffer(needed int) []RockID {
+	if r.ActiveBaseBuffer == nil || needed <= 0 || len(r.ActiveBaseBuffer.RockIDs) == 0 {
+		return make([]RockID, 0)
 	}
 
 	takeCount := needed
-	if takeCount > len(r.ActiveBaseBuffer.Rocks) {
-		takeCount = len(r.ActiveBaseBuffer.Rocks)
+	if takeCount > len(r.ActiveBaseBuffer.RockIDs) {
+		takeCount = len(r.ActiveBaseBuffer.RockIDs)
 	}
 
-	startIdx := len(r.ActiveBaseBuffer.Rocks) - takeCount
-	collected := append([]SimpleRock{}, r.ActiveBaseBuffer.Rocks[startIdx:]...)
-	r.ActiveBaseBuffer.Rocks = r.ActiveBaseBuffer.Rocks[:startIdx]
+	startIdx := len(r.ActiveBaseBuffer.RockIDs) - takeCount
+	collected := r.ActiveBaseBuffer.RockIDs[startIdx:]
+	r.ActiveBaseBuffer.RockIDs = r.ActiveBaseBuffer.RockIDs[:startIdx]
 
 	return collected
 }
 
 var (
-	rocksBeingSelected = []SimpleRock{}
+	rocksBeingSelected = []RockID{}
 )
 
 // SelectRocksColor assigns rocks from base/transition buffers to a die's held buffer
@@ -144,7 +133,7 @@ func (r *RocksRenderer) SelectRocksColor(color render.Vec3, dieIdentity render.D
 
 	// Give each collected rock movement/bounce based on index for psuedo-random
 	for i := range rocksBeingSelected {
-		rock := &rocksBeingSelected[i]
+		rock := &r.Rocks[r.ActiveBaseBufferIdx][rocksBeingSelected[i]]
 
 		// Convert SpriteSlopeX/Y (0..7) back to SlopeX/Y (-4..+4)
 		rock.SlopeX = rock.SpriteSlopeX + MIN_SLOPE
@@ -159,7 +148,7 @@ func (r *RocksRenderer) SelectRocksColor(color render.Vec3, dieIdentity render.D
 	}
 
 	heldBuffer := r.ensureHeldBuffer(dieIdentity)
-	heldBuffer.Rocks = append(heldBuffer.Rocks[:0], rocksBeingSelected...)
+	heldBuffer.RockIDs = append(heldBuffer.RockIDs[:0], rocksBeingSelected...)
 	heldBuffer.Color = color                              // Die color (target)
 	heldBuffer.TransitionColor = r.ActiveBaseBuffer.Color // Random base color? or sequential
 	heldBuffer.Transition = r.config.ColorTransitionFrames
@@ -181,7 +170,7 @@ func (r *RocksRenderer) DeselectAll() {
 // DeselectRocks returns rocks from a die's held buffer back to base buffers via transition buffers
 func (r *RocksRenderer) DeselectRocks(dieIdentity render.DieIdentity) {
 	heldBuffer := r.ensureHeldBuffer(dieIdentity)
-	if len(heldBuffer.Rocks) == 0 {
+	if len(heldBuffer.RockIDs) == 0 {
 		return
 	}
 
@@ -193,7 +182,7 @@ func (r *RocksRenderer) DeselectRocks(dieIdentity render.DieIdentity) {
 	}
 
 	transitionBuffer := &RockBuffer{
-		Rocks:           append([]SimpleRock{}, heldBuffer.Rocks...),
+		RockIDs:         append(make([]RockID, 0), heldBuffer.RockIDs...),
 		Color:           r.ActiveBaseBuffer.Color, // Target: this base color
 		TransitionColor: heldBuffer.Color,         // Source: die color
 		Transition:      r.config.ColorTransitionFrames,
@@ -219,7 +208,8 @@ func (r *RocksRenderer) drawBufferToImage(
 	opts *ebiten.DrawImageOptions,
 ) {
 	// Note: tempImage is already cleared by imagePool.GetNext()
-	for _, rock := range buffer.Rocks {
+	for _, rockID := range buffer.RockIDs {
+		rock := &r.Rocks[r.ActiveBaseBufferIdx][rockID]
 		sprite := r.sprites[rock.SpriteSlopeX][rock.SpriteSlopeY]
 		frameRect := sprite.SpriteSheet.Rect(int(rock.SpriteIndex))
 		frameImage := sprite.Image.SubImage(frameRect).(*ebiten.Image)

@@ -63,11 +63,8 @@ func (r *RocksRenderer) collectCollisionCandidatesFromGrid(
 		count := r.gridCounts[cellIdx]
 
 		for i := uint16(0); i < uint16(count); i++ {
-			rockIdx := r.gridRocks[offset+i]
-			rock := r.getRockByGlobalIndex(rockIdx)
-			if rock != nil {
-				r.cursorCollisionBuffer = append(r.cursorCollisionBuffer, rock)
-			}
+			rockID := r.gridRocks[offset+i]
+			r.cursorCollisionBuffer = append(r.cursorCollisionBuffer, rockID)
 		}
 	}
 
@@ -117,11 +114,8 @@ func (r *RocksRenderer) collectCollisionCandidatesFromGrid(
 
 			// Sequential iteration through contiguous memory (L1 cache friendly)
 			for i := uint16(0); i < uint16(count); i++ {
-				rockIdx := r.gridRocks[gridOffset+i]
-				rock := r.getRockByGlobalIndex(rockIdx)
-				if rock != nil {
-					r.diceCollisionBuffer = append(r.diceCollisionBuffer, rock)
-				}
+				rockID := r.gridRocks[gridOffset+i]
+				r.diceCollisionBuffer = append(r.diceCollisionBuffer, rockID)
 			}
 		}
 	}
@@ -146,8 +140,8 @@ func (r *RocksRenderer) CollideAndAnimateRocks(cursorX, cursorY float32, diceCen
 	}
 	r.updatingBuffers = append(r.updatingBuffers, r.TransitionBuffers...)
 	for _, buffer := range r.updatingBuffers {
-		for i := range buffer.Rocks {
-			rock := &buffer.Rocks[i]
+		for i := range buffer.RockIDs {
+			rock := &r.Rocks[r.ActiveBaseBufferIdx][buffer.RockIDs[i]]
 
 			rock.Position.Y += BaseVelocity * float32(rock.SlopeY)
 			rock.Position.X += BaseVelocity * float32(rock.SlopeX)
@@ -191,8 +185,8 @@ func (r *RocksRenderer) CollideAndAnimateRocks(cursorX, cursorY float32, diceCen
 		r.updatingBuffers = append(r.updatingBuffers, buffer)
 	}
 	for _, buffer := range r.updatingBuffers {
-		for i := range buffer.Rocks {
-			rock := &buffer.Rocks[i]
+		for i := range buffer.RockIDs {
+			rock := &r.Rocks[r.ActiveBaseBufferIdx][buffer.RockIDs[i]]
 			rock.ApplyDamping()
 		}
 	}
@@ -311,7 +305,8 @@ func (r *SimpleRock) IsNearPoint(rockSize, pointX, pointY, radius float32) bool 
 
 // handleCursorCollisions processes cursor-rock collision responses
 func (r *RocksRenderer) handleCursorCollisions(cursorX, cursorY float32) {
-	for _, rock := range r.cursorCollisionBuffer {
+	for _, rockID := range r.cursorCollisionBuffer {
+		rock := &r.Rocks[r.ActiveBaseBufferIdx][rockID]
 		sizeData := rock.SizeData()
 
 		if rock.XYWithinRock(cursorX, cursorY, sizeData.Size) {
@@ -445,7 +440,8 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec3, diceVeloc
 
 	// each rock needs a die index to bounce from
 
-	for _, rock := range r.diceCollisionBuffer {
+	for _, rockID := range r.diceCollisionBuffer {
+		rock := &r.Rocks[r.ActiveBaseBufferIdx][rockID]
 		sizeData := rock.SizeData()
 
 		// Track the die with maximum total overlap
@@ -495,7 +491,8 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec3, diceVeloc
 
 	var bestDieIndex int = -1
 
-	for i, rock := range r.diceCollisionBuffer {
+	for i, rockID := range r.diceCollisionBuffer {
+		rock := &r.Rocks[r.ActiveBaseBufferIdx][rockID]
 		bestDieIndex = r.diceCollisionDieIndexesBuffer[i]
 
 		// If no collision found, skip this rock
@@ -629,7 +626,7 @@ func (r *RocksRenderer) initSpatialGrid(config RocksConfig) {
 	// Pre-allocate arrays
 	r.gridOffsets = make([]uint16, totalCells)
 	r.gridCounts = make([]uint16, totalCells)
-	r.gridRocks = make([]uint16, config.TotalRocks[r.ActiveBaseBufferIdx])
+	r.gridRocks = make([]RockID, config.TotalRocks[r.ActiveBaseBufferIdx])
 }
 
 func clampCell(gridCols, gridRows, cellX, cellY int) int {
@@ -668,8 +665,8 @@ func (r *RocksRenderer) rebuildGrid() {
 	// Count base buffer rocks
 	for bufIdx := range r.BaseColorBuffers {
 		buffer := &r.BaseColorBuffers[bufIdx]
-		for i := range buffer.Rocks {
-			rock := &buffer.Rocks[i]
+		for i := range buffer.RockIDs {
+			rock := r.Rocks[r.ActiveBaseBufferIdx][buffer.RockIDs[i]]
 			sizeData := rock.SizeData()
 			centerX := rock.Position.X + sizeData.HalfSize
 			centerY := rock.Position.Y + sizeData.HalfSize
@@ -681,8 +678,8 @@ func (r *RocksRenderer) rebuildGrid() {
 
 	// Count held buffer rocks
 	for _, buffer := range r.HeldColorBuffers {
-		for i := range buffer.Rocks {
-			rock := &buffer.Rocks[i]
+		for i := range buffer.RockIDs {
+			rock := r.Rocks[r.ActiveBaseBufferIdx][buffer.RockIDs[i]]
 			sizeData := rock.SizeData()
 			centerX := rock.Position.X + sizeData.HalfSize
 			centerY := rock.Position.Y + sizeData.HalfSize
@@ -694,8 +691,8 @@ func (r *RocksRenderer) rebuildGrid() {
 
 	// Count transition buffer rocks
 	for _, buffer := range r.TransitionBuffers {
-		for i := range buffer.Rocks {
-			rock := &buffer.Rocks[i]
+		for i := range buffer.RockIDs {
+			rock := r.Rocks[r.ActiveBaseBufferIdx][buffer.RockIDs[i]]
 			sizeData := rock.SizeData()
 			centerX := rock.Position.X + sizeData.HalfSize
 			centerY := rock.Position.Y + sizeData.HalfSize
@@ -707,7 +704,7 @@ func (r *RocksRenderer) rebuildGrid() {
 
 	// Grow gridRocks if needed (rocks can move between buffers)
 	if int(totalRocks) > len(r.gridRocks) {
-		r.gridRocks = make([]uint16, totalRocks)
+		r.gridRocks = make([]RockID, totalRocks)
 	}
 
 	// Phase 2: Calculate offsets (prefix sum)
@@ -722,90 +719,51 @@ func (r *RocksRenderer) rebuildGrid() {
 		r.gridCounts[i] = 0
 	}
 
-	// Phase 3: Place rock indices into gridRocks (all buffers)
+	// Phase 3: Place rock IDs into gridRocks (all buffers)
 	// Use rock CENTER for cell assignment (must match Phase 1)
-	var globalIdx uint16 = 0
-
 	// Place base buffer rocks
 	for bufIdx := range r.BaseColorBuffers {
 		buffer := &r.BaseColorBuffers[bufIdx]
-		for i := range buffer.Rocks {
-			rock := &buffer.Rocks[i]
+		for i := range buffer.RockIDs {
+			rockID := buffer.RockIDs[i]
+			rock := r.Rocks[r.ActiveBaseBufferIdx][rockID]
 			sizeData := rock.SizeData()
 			centerX := rock.Position.X + sizeData.HalfSize
 			centerY := rock.Position.Y + sizeData.HalfSize
 			cellIdx := clampCell(r.gridCols, r.gridRows, int(centerX*invCellSize), int(centerY*invCellSize))
 			insertPos := r.gridOffsets[cellIdx] + uint16(r.gridCounts[cellIdx])
-			r.gridRocks[insertPos] = globalIdx
+			r.gridRocks[insertPos] = rockID
 			r.gridCounts[cellIdx]++
-			globalIdx++
 		}
 	}
 
 	// Place held buffer rocks
 	for _, buffer := range r.HeldColorBuffers {
-		for i := range buffer.Rocks {
-			rock := &buffer.Rocks[i]
+		for i := range buffer.RockIDs {
+			rockID := buffer.RockIDs[i]
+			rock := r.Rocks[r.ActiveBaseBufferIdx][rockID]
 			sizeData := rock.SizeData()
 			centerX := rock.Position.X + sizeData.HalfSize
 			centerY := rock.Position.Y + sizeData.HalfSize
 			cellIdx := clampCell(r.gridCols, r.gridRows, int(centerX*invCellSize), int(centerY*invCellSize))
 			insertPos := r.gridOffsets[cellIdx] + uint16(r.gridCounts[cellIdx])
-			r.gridRocks[insertPos] = globalIdx
+			r.gridRocks[insertPos] = rockID
 			r.gridCounts[cellIdx]++
-			globalIdx++
 		}
 	}
 
 	// Place transition buffer rocks
 	for _, buffer := range r.TransitionBuffers {
-		for i := range buffer.Rocks {
-			rock := &buffer.Rocks[i]
+		for i := range buffer.RockIDs {
+			rockID := buffer.RockIDs[i]
+			rock := r.Rocks[r.ActiveBaseBufferIdx][rockID]
 			sizeData := rock.SizeData()
 			centerX := rock.Position.X + sizeData.HalfSize
 			centerY := rock.Position.Y + sizeData.HalfSize
 			cellIdx := clampCell(r.gridCols, r.gridRows, int(centerX*invCellSize), int(centerY*invCellSize))
 			insertPos := r.gridOffsets[cellIdx] + uint16(r.gridCounts[cellIdx])
-			r.gridRocks[insertPos] = globalIdx
+			r.gridRocks[insertPos] = rockID
 			r.gridCounts[cellIdx]++
-			globalIdx++
 		}
 	}
-}
-
-// getRockByGlobalIndex returns a rock pointer from global index
-// Global index maps: BaseColorBuffers → HeldColorBuffers → TransitionBuffers
-func (r *RocksRenderer) getRockByGlobalIndex(globalIdx uint16) *SimpleRock {
-	idx := int(globalIdx)
-
-	// Check base buffers
-	for bufIdx := range r.BaseColorBuffers {
-		buffer := &r.BaseColorBuffers[bufIdx]
-		if idx < len(buffer.Rocks) {
-			return &buffer.Rocks[idx]
-		}
-		idx -= len(buffer.Rocks)
-	}
-
-	// Check held buffers (iterate in consistent order)
-	for i := range len(render.RainbowColors) {
-		buffer, ok := r.HeldColorBuffers[render.DieIdentity(i)]
-		if !ok {
-			continue
-		}
-		if idx < len(buffer.Rocks) {
-			return &buffer.Rocks[idx]
-		}
-		idx -= len(buffer.Rocks)
-	}
-
-	// Check transition buffers
-	for _, buffer := range r.TransitionBuffers {
-		if idx < len(buffer.Rocks) {
-			return &buffer.Rocks[idx]
-		}
-		idx -= len(buffer.Rocks)
-	}
-
-	return nil // Should never happen
 }
