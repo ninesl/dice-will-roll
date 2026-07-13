@@ -679,73 +679,78 @@ func (r *RocksRenderer) ExplodeRocks(dieIdentity render.DieIdentity, numRocks in
 		return
 	}
 
-	//TODO:FIXME: need to use the new RockID
-	for explodedCount := 0; explodedCount < numRocks; explodedCount++ {
-		rockID, ownerIdentity, ok := r.popRockForExplosion(dieIdentity)
-		if !ok {
-			break
-		}
+	rockIDs := r.popRocksForExplosion(dieIdentity, numRocks)
+	if len(rockIDs) == 0 {
+		return
+	}
 
-		r.addExplosionRock(ownerIdentity, rockID)
+	r.addExplosionRocks(dieIdentity, rockIDs)
 
-		if newRocks := r.SplitRock(rockID); len(newRocks) > 0 {
-			ownerBuffer := r.ensureHeldBuffer(ownerIdentity)
-			ownerBuffer.RockIDs = append(ownerBuffer.RockIDs, newRocks...)
-			r.HeldColorBuffers[ownerIdentity] = ownerBuffer
-		}
+	newRockIDs := r.SplitRocks(rockIDs)
+	if len(newRockIDs) > 0 {
+		ownerBuffer := r.ensureHeldBuffer(dieIdentity)
+		ownerBuffer.RockIDs = append(ownerBuffer.RockIDs, newRockIDs...)
+		r.HeldColorBuffers[dieIdentity] = ownerBuffer
 	}
 }
 
-// popRockForExplosion removes the next rock that should explode from the from of the rockBuffer.
+func takeRockIDs(buffer *RockBuffer, needed int, collected []RockID) (int, []RockID) {
+	if needed <= 0 || len(buffer.RockIDs) == 0 {
+		return needed, collected
+	}
+
+	take := needed
+	if take > len(buffer.RockIDs) {
+		take = len(buffer.RockIDs)
+	}
+
+	collected = append(collected, buffer.RockIDs[:take]...)
+	buffer.RockIDs = buffer.RockIDs[take:]
+	return needed - take, collected
+}
+
+// popRocksForExplosion removes rocks that should explode from the front of their rock buffers.
 //
 // Selection order is intentional:
 // 1. consume rocks already held by the initiating die,
 // 2. consume active base rocks if the die runs out,
 // 3. consume rocks from other held buffers as a final fallback.
 //
-// Regardless of where a rock is taken from, it is returned as ownerIdentity == dieIdentity.
-// That makes fallback rocks visually explode into the initiating color and makes split
-// children re-enter that same held buffer, producing a confetti-like color conversion.
-//
-// NOTE: we have the render.DieIdentity for additional functionality later if we want
-func (r *RocksRenderer) popRockForExplosion(preferredIdentity render.DieIdentity) (RockID, render.DieIdentity, bool) {
+// Fallback rocks still visually explode into the initiating color and split children
+// re-enter that same held buffer, producing a confetti-like color conversion.
+func (r *RocksRenderer) popRocksForExplosion(preferredIdentity render.DieIdentity, needed int) []RockID {
+	collected := make([]RockID, 0, needed)
+
 	if buffer := r.HeldColorBuffers[preferredIdentity]; len(buffer.RockIDs) > 0 {
-		rockID := buffer.RockIDs[0]
-		buffer.RockIDs = buffer.RockIDs[1:]
+		needed, collected = takeRockIDs(&buffer, needed, collected)
 		r.HeldColorBuffers[preferredIdentity] = buffer
-		return rockID, preferredIdentity, true
 	}
 
-	if buffer := r.BaseColorBuffers[r.ActiveBaseBufferIdx]; len(buffer.RockIDs) > 0 {
-		rockID := buffer.RockIDs[0]
-		buffer.RockIDs = buffer.RockIDs[1:]
+	if needed > 0 {
+		buffer := r.BaseColorBuffers[r.ActiveBaseBufferIdx]
+		needed, collected = takeRockIDs(&buffer, needed, collected)
 		r.BaseColorBuffers[r.ActiveBaseBufferIdx] = buffer
-		return rockID, preferredIdentity, true
 	}
 
-	for i, buffer := range r.TransitionBuffers {
-		if len(buffer.RockIDs) == 0 {
-			continue
+	for i := range r.TransitionBuffers {
+		if needed <= 0 {
+			break
 		}
-
-		rock := buffer.RockIDs[0]
-		buffer.RockIDs = buffer.RockIDs[1:]
-		r.TransitionBuffers[i] = buffer
-		return rock, preferredIdentity, true
-
+		needed, collected = takeRockIDs(&r.TransitionBuffers[i], needed, collected)
 	}
+
 	for otherIdentity, buffer := range r.HeldColorBuffers {
-		if otherIdentity == preferredIdentity || len(buffer.RockIDs) == 0 {
+		if needed <= 0 {
+			break
+		}
+		if otherIdentity == preferredIdentity {
 			continue
 		}
-
-		rock := buffer.RockIDs[0]
-		buffer.RockIDs = buffer.RockIDs[1:]
+		needed, collected = takeRockIDs(&buffer, needed, collected)
 		r.HeldColorBuffers[otherIdentity] = buffer
-		return rock, preferredIdentity, true
 	}
 
-	return 0, 0, false
+	return collected
 }
 
 func (r *RocksRenderer) ensureHeldBuffer(dieIdentity render.DieIdentity) RockBuffer {
@@ -764,14 +769,26 @@ func (r *RocksRenderer) clearHeldBuffer(dieIdentity render.DieIdentity) {
 	r.HeldColorBuffers[dieIdentity] = buffer
 }
 
-// addExplosionRock moves a rock into the transient explosion buffer for a die identity.
+func (r *RocksRenderer) SplitRocks(rockIDs []RockID) []RockID {
+	newRockIDs := make([]RockID, 0, len(rockIDs)*2)
+	for _, rockID := range rockIDs {
+		newRockIDs = append(newRockIDs, r.SplitRock(rockID)...)
+	}
+	return newRockIDs
+}
+
+// addExplosionRocks moves rocks into the transient explosion buffer for a die identity.
 // Explosion buffers are separate from held buffers so the disappearing parent rock can
 // animate while any split children immediately continue moving in the held color buffer.
-func (r *RocksRenderer) addExplosionRock(dieIdentity render.DieIdentity, rockID RockID) {
+func (r *RocksRenderer) addExplosionRocks(dieIdentity render.DieIdentity, rockIDs []RockID) {
+	if len(rockIDs) == 0 {
+		return
+	}
+
 	explosionBuffer, exists := r.ExplosionBuffers[dieIdentity]
 	if !exists {
 		explosionBuffer = RockBuffer{
-			RockIDs: make([]RockID, 0),
+			RockIDs: make([]RockID, 0, len(rockIDs)),
 			Color:   render.RainbowColors[dieIdentity],
 		}
 		if heldBuffer := r.HeldColorBuffers[dieIdentity]; len(heldBuffer.RockIDs) > 0 {
@@ -779,8 +796,10 @@ func (r *RocksRenderer) addExplosionRock(dieIdentity render.DieIdentity, rockID 
 		}
 	}
 
-	r.Rocks[r.ActiveBaseBufferIdx][rockID].SpriteIndex = 60 // TODO: constant or modify based on what explode anim shader is going to be applied
-	explosionBuffer.RockIDs = append(explosionBuffer.RockIDs, rockID)
+	for _, rockID := range rockIDs {
+		r.Rocks[r.ActiveBaseBufferIdx][rockID].SpriteIndex = 60 // TODO: constant or modify based on what explode anim shader is going to be applied
+	}
+	explosionBuffer.RockIDs = append(explosionBuffer.RockIDs, rockIDs...)
 	r.ExplosionBuffers[dieIdentity] = explosionBuffer
 }
 
