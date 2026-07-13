@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/ninesl/dice-will-roll/music"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
@@ -90,6 +91,7 @@ func (g *Game) DrawDice(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
 		"Time":            g.time,
 		"DieScale":        1.15,
 		"HoveringSpeedUp": 0,
+		"LaneOneMS":       g.laneOneMS(),
 		// "Cursor": []float32{float32(cx), float32(cy)},
 	}
 
@@ -119,4 +121,15 @@ func (g *Game) DrawDice(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
 		screen.DrawImage(g.Dice[i].image, ops)
 		ops.GeoM.Reset()
 	}
+}
+
+func (g *Game) laneOneMS() float32 {
+	if g.Music == nil {
+		return 1000
+	}
+	ms := g.Music.UpcomingMS(music.LaneOne) - g.Music.MS()
+	if ms < 0 {
+		return 0
+	}
+	return float32(ms)
 }

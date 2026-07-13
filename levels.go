@@ -16,8 +16,8 @@ type ScoringState uint8
 
 const (
 	SCORING_IDLE ScoringState = iota
-	SCORING_WAIT_QUATERNARY
-	SCORING_WAIT_FINAL_QUINARY
+	SCORING_WAIT
+	SCORING_WAIT_FINAL
 )
 
 // A level keep track of state and scoring for an 'instance' of a run
@@ -92,12 +92,12 @@ func (l *Level) HandleScoring(heldDice []*Die, rockRenderer *rocks.RocksRenderer
 		l.scoringMoves = l.scoringMoves[:0]
 		l.finalScoringArmed = false
 		musicState.ResetHooks(music.LaneOne)
-		l.scoringState = SCORING_WAIT_QUATERNARY
+		l.scoringState = SCORING_WAIT
 		return
 	}
 
 	switch l.scoringState {
-	case SCORING_WAIT_QUATERNARY:
+	case SCORING_WAIT:
 		l.updateScoringMoves(rockRenderer)
 		if l.scoringIndex < len(heldDice) && musicState.Hook(music.LaneOne) {
 			l.startScoringDie(heldDice, musicState)
@@ -107,13 +107,13 @@ func (l *Level) HandleScoring(heldDice []*Die, rockRenderer *rocks.RocksRenderer
 			return
 		}
 		l.finalScoringArmed = false
-		l.scoringState = SCORING_WAIT_FINAL_QUINARY
+		l.scoringState = SCORING_WAIT_FINAL
 
-	case SCORING_WAIT_FINAL_QUINARY:
+	case SCORING_WAIT_FINAL:
 		if !l.finalScoringArmed {
 			musicState.ResetHooks(music.LaneOne)
 			l.finalScoringHookCount = 1
-			if upcomingHookMS(musicState, music.LaneOne, 1)-musicState.MS() < explosionMinLeadMS {
+			if upcomingHookDeltaMS(musicState, music.LaneOne, 1) < explosionMinLeadMS {
 				l.finalScoringHookCount = 2
 			}
 			l.finalScoringArmed = true
@@ -131,7 +131,8 @@ func (l *Level) startScoringDie(heldDice []*Die, musicState *music.NowPlaying) {
 	die.Fixed.X = x
 	die.Fixed.Y = y
 
-	durationMS := l.scoringLandingMS(musicState) - musicState.MS()
+	durationMS := upcomingHookDeltaMS(musicState, music.LaneOne, 1)
+
 	if durationMS < 1 {
 		durationMS = 1
 	}
@@ -151,7 +152,7 @@ func (l *Level) startScoringDie(heldDice []*Die, musicState *music.NowPlaying) {
 }
 
 func (l *Level) scoringLandingMS(musicState *music.NowPlaying) int64 {
-	return upcomingHookMS(musicState, music.LaneOne, 1)
+	return upcomingHookDeltaMS(musicState, music.LaneOne, 1)
 }
 
 func (l *Level) activeScoringMoveCount() uint8 {
@@ -191,6 +192,14 @@ func upcomingHookMS(musicState *music.NowPlaying, lane music.HookLane, count uin
 	}
 
 	return hooks[idx] + loops*musicState.DurationMS
+}
+
+func upcomingHookDeltaMS(musicState *music.NowPlaying, lane music.HookLane, count uint8) int64 {
+	ms := upcomingHookMS(musicState, lane, count) - musicState.MS()
+	if ms < 0 && musicState.DurationMS > 0 {
+		ms += musicState.DurationMS
+	}
+	return ms
 }
 
 func upcomingHookMSAfter(musicState *music.NowPlaying, lane music.HookLane, count uint8, afterMS int64) int64 {

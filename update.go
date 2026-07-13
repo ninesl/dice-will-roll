@@ -41,8 +41,6 @@ func DEBUGTitleFPS(x, y float32) {
 		fmt.Sprintf("T%0.2f F%0.2f x%4.0f y%4.0f ", ebiten.ActualTPS(), ebiten.ActualFPS(), x, y))
 }
 
-var activeDieWiggleArc = degreesToZRotation(45)
-var activeDiePrimarySpinArc = degreesToZRotation(360)
 var activeDieWiggleFollowFactor float32 = 0.2
 var activeDieWiggleSpeed float32 = 0.25
 
@@ -264,31 +262,24 @@ func (g *Game) dieInActiveHand(die *Die) bool {
 	return false
 }
 
-// updateCursorWiggleTarget points the die's wobble target toward the cursor and
-// adds amplitude from how far the rendered rotation has to catch up.
-func (g *Game) updateCursorWiggleTarget(i int, die *Die) {
-	dieCenter := g.diceCenterBuffer[i]
-	// cursorX := g.Mouse.Position.X - dieCenter.X
-	// cursorY := g.Mouse.Position.Y - dieCenter.Y
-	// if diceCenter.X > g.Mouse.Position.X {
-	// }
-	nextZRotation := (atan2f(g.Mouse.Position.Y-dieCenter.Y, g.Mouse.Position.X-dieCenter.X) + float32(math.Pi)) / (2 * float32(math.Pi))
-	zDelta := wrappedDelta(nextZRotation, die.Wiggle.ZRotation)
-
-	die.Wiggle.ZRotation += zDelta * activeDieWiggleFollowFactor
-	die.Wiggle.ZRotationFx = max(activeDieWiggleArc, die.Wiggle.ZRotationFx+absf(zDelta)*0.15)
-}
-
 func (g *Game) updatePrimaryHoverSwing(die *Die) {
 	if g.Music == nil {
 		return
 	}
 
 	nowMS := g.Music.MS()
+	nowRealMS := time.Since(g.startTime).Milliseconds()
+	// SwingHookMS tracks this selected next hook. The selected hook is whichever
+	// of LandingLane or LaneOne is coming up first, without consuming either lane.
+	// primaryMS := minNonZeroMS(g.Music.UpcomingMS(music.LandingLane), g.Music.UpcomingMS(music.LaneOne))
 	primaryMS := g.Music.UpcomingMS(music.LandingLane)
 	if !die.Wiggle.SwingActive || nowMS < die.Wiggle.SwingLastMS {
+		// First frame for this die's hover swing: seed rotation state from the
+		// rendered die and remember the currently selected hook as the baseline.
 		die.Wiggle.ZRotation = wrapZRotation(die.DieRenderable.ZRotation)
+		die.Wiggle.SwingStart = die.Wiggle.ZRotation
 		die.Wiggle.SwingLastMS = nowMS
+		die.Wiggle.SwingStartRealMS = nowRealMS
 		die.Wiggle.SwingHookMS = primaryMS
 		die.Wiggle.SwingDurationMS = 0
 		die.Wiggle.SwingWaitHooks = 0
@@ -300,10 +291,14 @@ func (g *Game) updatePrimaryHoverSwing(die *Die) {
 		return
 	}
 	if primaryMS != 0 && primaryMS != die.Wiggle.SwingHookMS {
+		// The selected lane hook advanced. Start a new eased segment from the
+		// current rotation, then flip direction if this die was already spinning.
 		die.Wiggle.SwingHookMS = primaryMS
+		die.Wiggle.SwingStart = die.Wiggle.ZRotation
+		die.Wiggle.SwingLastMS = nowMS
+		die.Wiggle.SwingStartRealMS = nowRealMS
 		if !die.Wiggle.SwingSpinning {
 			die.Wiggle.SwingWaitHooks++
-			die.Wiggle.SwingLastMS = nowMS
 			if die.Wiggle.SwingWaitHooks < 1 {
 				return
 			}
@@ -311,9 +306,12 @@ func (g *Game) updatePrimaryHoverSwing(die *Die) {
 		} else {
 			die.Wiggle.SwingDir *= -1
 		}
-		die.Wiggle.SwingDurationMS = g.Music.UpcomingMS(music.LandingLane) - nowMS
+		// Finish this half-spin exactly when the selected hook arrives.
+		die.Wiggle.SwingDurationMS = primaryMS - nowMS
 	}
 	if !die.Wiggle.SwingSpinning {
+		// Before the first hook starts the spin, keep time current so the first
+		// elapsed step does not include all the waiting time.
 		die.Wiggle.SwingLastMS = nowMS
 		return
 	}
@@ -324,9 +322,11 @@ func (g *Game) updatePrimaryHoverSwing(die *Die) {
 		return
 	}
 
-	elapsedMS := nowMS - die.Wiggle.SwingLastMS
-	die.Wiggle.SwingLastMS = nowMS
-	die.Wiggle.ZRotation = wrapZRotation(die.Wiggle.ZRotation + die.Wiggle.SwingDir*activeDiePrimarySpinArc*float32(elapsedMS)/float32(durationMS))
+	// Ease out from the segment start toward one full normalized turn. The next
+	// lane hook starts a new segment and reverses SwingDir.
+	elapsedMS := nowRealMS - die.Wiggle.SwingStartRealMS
+	progress := clampf(float32(elapsedMS)/float32(durationMS), 0, 1)
+	die.Wiggle.ZRotation = wrapZRotation(die.Wiggle.SwingStart + die.Wiggle.SwingDir*easeOutBack(progress))
 }
 
 func (g *Game) upcomingHookMS(lane music.HookLane, count uint8) int64 {
@@ -376,6 +376,34 @@ func wrappedDelta(next, current float32) float32 {
 	return delta
 }
 
+func minNonZeroMS(a, b int64) int64 {
+	if a == 0 {
+		return b
+	}
+	if b == 0 || a < b {
+		return a
+	}
+	return b
+}
+
+func easeOutBack(x float32) float32 {
+	const c1 float32 = 1.70158
+	const c3 float32 = c1 + 1
+
+	x -= 1
+	return 1 + c3*x*x*x + c1*x*x
+}
+
+func clampf(x, minValue, maxValue float32) float32 {
+	if x < minValue {
+		return minValue
+	}
+	if x > maxValue {
+		return maxValue
+	}
+	return x
+}
+
 func wrapZRotation(rotation float32) float32 {
 	for rotation >= 1 {
 		rotation--
@@ -394,11 +422,6 @@ func (g *Game) cursorWithinDie(die *Die) bool {
 // atan2f keeps callsites in float32 even though Go's math package uses float64.
 func atan2f(y, x float32) float32 {
 	return float32(math.Atan2(float64(y), float64(x)))
-}
-
-// degreesToZRotation converts degrees into the shader's normalized 0..1 turn value.
-func degreesToZRotation(degrees float32) float32 {
-	return degrees / 360
 }
 
 // sinf keeps callsites in float32 even though Go's math package uses float64.

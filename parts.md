@@ -1,3 +1,4 @@
+```text
 notes
 	shop/smith can make jewelry (rings, necklaces, etc) that give buffs. likely takes the slot of joker gems?
 	-- NOITA inspiration, crafting wands??? need to find right balance between complexity/worth doing
@@ -139,3 +140,4 @@ LOOP
  |  ____________  |
  |/_____gems_____\|
 iu
+```

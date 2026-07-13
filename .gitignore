@@ -1,3 +1,4 @@
+AGENTS.md
 /video
 *.mkv
 /.vscode
@@ -7,3 +8,5 @@ build/
 dice-will-roll
 mise.toml
 recordings/
+build/
+bin/

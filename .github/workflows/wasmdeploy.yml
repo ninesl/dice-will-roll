@@ -1,0 +1,56 @@
+name: Deploy wasm
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versioned wasm filename without .wasm, for example 0.0.1"
+        required: false
+        type: string
+
+jobs:
+  image:
+    runs-on: ubuntu-26.04
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.4"
+
+      - name: set wasm filename
+        id: wasm
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "filename=${{ inputs.version }}.wasm" >> "$GITHUB_OUTPUT"
+          else
+            echo "filename=latest.wasm" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: build wasm
+        run: make wasm-build WASM_PATH=./build/${{ steps.wasm.outputs.filename }}
+
+      - name: ensure deploy directory exists
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          port: ${{ secrets.PROD_PORT }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            mkdir -p ~/prod/ebiten-wasm/wasms/dicewillroll
+
+      - name: deploy wasm binary
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          port: ${{ secrets.PROD_PORT }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: ./build/${{ steps.wasm.outputs.filename }}
+          target: ~/prod/ebiten-wasm/wasms/dicewillroll
+          strip_components: 1

@@ -12,6 +12,7 @@ var DieColor vec3
 var Height float
 var ZRotation float
 var ActiveFace int // ActiveFace is correlated to the matrix index being used
+var LaneOneMS float
 
 var HoveringSpeedUp int
 // var NumPips int // Not used if FaceLayouts dictates pips
@@ -275,7 +276,8 @@ func pipColors(originalDieSurfaceColor vec3, finalHitPos vec3, normal vec3) vec3
 
             diffuse := max(dot(normal, lightDir), 0.0)
             ambient := 0.4 // Base ambient light to prevent shadows from being pitch black
-            shading := ambient + diffuse*0.8
+            laneOneGlow := 1.0 + (1.0 - clamp(LaneOneMS/500.0, 0.0, 1.0))*1.5
+            shading := (ambient + diffuse*0.8) * laneOneGlow
 
             return originalDieSurfaceColor * darkeningFactor * shading
         }
