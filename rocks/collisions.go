@@ -133,7 +133,7 @@ func (r *RocksRenderer) CollideAndAnimateRocks(cursorX, cursorY float32, diceCen
 	// Reset collision buffers to length 0 (keeps capacity - no allocation)
 	r.diceCollisionBuffer = r.diceCollisionBuffer[:0]
 	r.cursorCollisionBuffer = r.cursorCollisionBuffer[:0]
-	r.updatingBuffers = append(r.updatingBuffers[:0], r.ActiveBaseBuffer)
+	r.updatingBuffers = append(r.updatingBuffers[:0], r.BaseColorBuffers[r.ActiveBaseBufferIdx])
 
 	for _, buffer := range r.HeldColorBuffers {
 		r.updatingBuffers = append(r.updatingBuffers, buffer)
@@ -180,7 +180,7 @@ func (r *RocksRenderer) CollideAndAnimateRocks(cursorX, cursorY float32, diceCen
 
 	// PASS 5: DAMPING - Apply velocity reduction AFTER all collisions
 	// Held color buffers DO NOT get damping (maintain speed while held by dice)
-	r.updatingBuffers = append(r.updatingBuffers[:0], r.ActiveBaseBuffer)
+	r.updatingBuffers = append(r.updatingBuffers[:0], r.BaseColorBuffers[r.ActiveBaseBufferIdx])
 	for _, buffer := range r.TransitionBuffers {
 		r.updatingBuffers = append(r.updatingBuffers, buffer)
 	}

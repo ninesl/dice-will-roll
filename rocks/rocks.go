@@ -239,11 +239,12 @@ type RocksRenderer struct {
 	BaseColorBuffers    []RockBuffer // Source rocks (Grey, Brown, etc.)
 	ActiveBaseBufferIdx int          // which index of rock buffer/associated active base buffer
 
-	ActiveBaseBuffer  *RockBuffer                        // active depth level
-	HeldColorBuffers  map[render.DieIdentity]*RockBuffer // Rocks owned by held dice
-	TransitionBuffers []*RockBuffer                      // Rocks transitioning back to base colors
-	ExplosionBuffers  map[render.DieIdentity]*RockBuffer // Rocks currently exploding
-	selectionOrder    []render.DieIdentity               // Tracks order dice were selected (for draw order)
+	HeldColorBuffers  map[render.DieIdentity]RockBuffer // Rocks owned by held dice
+	TransitionBuffers []RockBuffer                      // Rocks transitioning back to base colors
+	ExplosionBuffers  map[render.DieIdentity]RockBuffer // Rocks currently exploding
+	selectionOrder    []render.DieIdentity              // Tracks order dice were selected (for draw order)
+	// collection during updates
+	updatingBuffers []RockBuffer
 
 	RockTileSize float32 // Base tile size for rock rendering and collision calculations
 
@@ -251,11 +252,7 @@ type RocksRenderer struct {
 	diceCollisionBuffer           []RockID
 	cursorCollisionBuffer         []RockID
 	diceCollisionDieIndexesBuffer []int
-
-	// collection during updates
-	updatingBuffers []*RockBuffer
-
-	diceCollisionDataBuffer []dieCollisionData
+	diceCollisionDataBuffer       []dieCollisionData
 
 	// Image pool for temporary rendering buffers (lazily allocated and reused every frame)
 	imagePool *render.ImagePool
@@ -284,11 +281,10 @@ type RocksConfig struct {
 
 // helper func for active buffers, wrapper allows us to stack trace and reuse in the future
 func (r *RocksRenderer) AssignActiveBuffer(specificIdx int) {
-	if specificIdx > len(r.BaseColorBuffers) { // forced error fallback
+	if specificIdx < 0 || specificIdx >= len(r.BaseColorBuffers) { // forced error fallback
 		panic(fmt.Errorf("%d is not legal for the base colors that are left", specificIdx))
 	}
 	r.ActiveBaseBufferIdx = specificIdx
-	r.ActiveBaseBuffer = &r.BaseColorBuffers[r.ActiveBaseBufferIdx]
 }
 
 // NewRocksRenderer creates a sprite rendering system for
@@ -417,11 +413,11 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 
 	// Initialize empty rock buffers slice (will grow dynamically)
 	r.BaseColorBuffers = make([]RockBuffer, 0, len(config.BaseColors))
-	r.HeldColorBuffers = make(map[render.DieIdentity]*RockBuffer)
-	r.ExplosionBuffers = make(map[render.DieIdentity]*RockBuffer)
-	r.TransitionBuffers = make([]*RockBuffer, 0, 10)
+	r.HeldColorBuffers = make(map[render.DieIdentity]RockBuffer)
+	r.ExplosionBuffers = make(map[render.DieIdentity]RockBuffer)
+	r.TransitionBuffers = make([]RockBuffer, 0, 10)
 	r.selectionOrder = make([]render.DieIdentity, 0, 7) // Track selection order for draw order
-	r.updatingBuffers = make([]*RockBuffer, 0)
+	r.updatingBuffers = make([]RockBuffer, 0)
 
 	// targetScore := config.TotalRocks // e.g., 500
 	//
@@ -450,8 +446,6 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 		TransitionColor: baseColor,
 		Transition:      0,
 	})
-	r.ActiveBaseBuffer = &r.BaseColorBuffers[r.ActiveBaseBufferIdx]
-
 	remaining := config.TotalRocks[r.ActiveBaseBufferIdx]
 	var rockIDx RockID = 0
 
@@ -512,7 +506,7 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 			Score:        scoreType,
 		}
 		r.Rocks[r.ActiveBaseBufferIdx] = append(r.Rocks[r.ActiveBaseBufferIdx], rock)
-		r.ActiveBaseBuffer.RockIDs = append(r.ActiveBaseBuffer.RockIDs, rockIDx)
+		r.BaseColorBuffers[r.ActiveBaseBufferIdx].RockIDs = append(r.BaseColorBuffers[r.ActiveBaseBufferIdx].RockIDs, rockIDx)
 		rockIDx++
 		remaining -= scoreType.GetScore()
 	}
@@ -555,7 +549,7 @@ func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
 	// Render base color buffers with interleaving
 	// for layer := 0; layer < NUM_INTERLEAVE_LAYERS; layer++ {
 	for rockType := range len(r.BaseColorBuffers) {
-		buffer := &r.BaseColorBuffers[rockType]
+		buffer := r.BaseColorBuffers[rockType]
 
 		// Get next temp image from pool (already cleared)
 		tempImg := r.imagePool.GetNext()
@@ -589,7 +583,7 @@ func (r *RocksRenderer) DrawRocks(screen *ebiten.Image) {
 	// Render held color buffers in SELECTION ORDER (most recent = on top)
 	for _, dieIdentity := range r.selectionOrder {
 		buffer := r.HeldColorBuffers[dieIdentity]
-		if buffer == nil || len(buffer.RockIDs) == 0 {
+		if len(buffer.RockIDs) == 0 {
 			continue
 		}
 
@@ -698,6 +692,7 @@ func (r *RocksRenderer) ExplodeRocks(dieIdentity render.DieIdentity, numRocks in
 		if newRocks := r.SplitRock(rockID); len(newRocks) > 0 {
 			ownerBuffer := r.ensureHeldBuffer(ownerIdentity)
 			ownerBuffer.RockIDs = append(ownerBuffer.RockIDs, newRocks...)
+			r.HeldColorBuffers[ownerIdentity] = ownerBuffer
 		}
 	}
 }
@@ -715,48 +710,50 @@ func (r *RocksRenderer) ExplodeRocks(dieIdentity render.DieIdentity, numRocks in
 //
 // NOTE: we have the render.DieIdentity for additional functionality later if we want
 func (r *RocksRenderer) popRockForExplosion(preferredIdentity render.DieIdentity) (RockID, render.DieIdentity, bool) {
-	if buffer := r.HeldColorBuffers[preferredIdentity]; buffer != nil && len(buffer.RockIDs) > 0 {
+	if buffer := r.HeldColorBuffers[preferredIdentity]; len(buffer.RockIDs) > 0 {
 		rockID := buffer.RockIDs[0]
 		buffer.RockIDs = buffer.RockIDs[1:]
+		r.HeldColorBuffers[preferredIdentity] = buffer
 		return rockID, preferredIdentity, true
 	}
 
-	if buffer := r.ActiveBaseBuffer; buffer != nil && len(buffer.RockIDs) > 0 {
+	if buffer := r.BaseColorBuffers[r.ActiveBaseBufferIdx]; len(buffer.RockIDs) > 0 {
 		rockID := buffer.RockIDs[0]
 		buffer.RockIDs = buffer.RockIDs[1:]
+		r.BaseColorBuffers[r.ActiveBaseBufferIdx] = buffer
 		return rockID, preferredIdentity, true
 	}
 
-	for _, buffer := range r.TransitionBuffers {
-		if buffer == nil || len(buffer.RockIDs) == 0 {
+	for i, buffer := range r.TransitionBuffers {
+		if len(buffer.RockIDs) == 0 {
 			continue
 		}
 
 		rock := buffer.RockIDs[0]
 		buffer.RockIDs = buffer.RockIDs[1:]
+		r.TransitionBuffers[i] = buffer
 		return rock, preferredIdentity, true
 
 	}
 	for otherIdentity, buffer := range r.HeldColorBuffers {
-		if otherIdentity == preferredIdentity || buffer == nil || len(buffer.RockIDs) == 0 {
+		if otherIdentity == preferredIdentity || len(buffer.RockIDs) == 0 {
 			continue
 		}
 
 		rock := buffer.RockIDs[0]
 		buffer.RockIDs = buffer.RockIDs[1:]
+		r.HeldColorBuffers[otherIdentity] = buffer
 		return rock, preferredIdentity, true
 	}
 
 	return 0, 0, false
 }
 
-func (r *RocksRenderer) ensureHeldBuffer(dieIdentity render.DieIdentity) *RockBuffer {
+func (r *RocksRenderer) ensureHeldBuffer(dieIdentity render.DieIdentity) RockBuffer {
 	buffer := r.HeldColorBuffers[dieIdentity]
-	if buffer == nil {
-		buffer = &RockBuffer{
-			RockIDs: make([]RockID, 0),
-			Color:   render.RainbowColors[dieIdentity],
-		}
+	if buffer.RockIDs == nil {
+		buffer.Color = render.RainbowColors[dieIdentity]
+		buffer.RockIDs = make([]RockID, 0)
 		r.HeldColorBuffers[dieIdentity] = buffer
 	}
 	return buffer
@@ -765,6 +762,7 @@ func (r *RocksRenderer) ensureHeldBuffer(dieIdentity render.DieIdentity) *RockBu
 func (r *RocksRenderer) clearHeldBuffer(dieIdentity render.DieIdentity) {
 	buffer := r.ensureHeldBuffer(dieIdentity)
 	buffer.RockIDs = buffer.RockIDs[:0]
+	r.HeldColorBuffers[dieIdentity] = buffer
 }
 
 // addExplosionRock moves a rock into the transient explosion buffer for a die identity.
@@ -773,24 +771,23 @@ func (r *RocksRenderer) clearHeldBuffer(dieIdentity render.DieIdentity) {
 func (r *RocksRenderer) addExplosionRock(dieIdentity render.DieIdentity, rockID RockID) {
 	explosionBuffer, exists := r.ExplosionBuffers[dieIdentity]
 	if !exists {
-		explosionBuffer = &RockBuffer{
+		explosionBuffer = RockBuffer{
 			RockIDs: make([]RockID, 0),
 			Color:   render.RainbowColors[dieIdentity],
 		}
-		if heldBuffer := r.HeldColorBuffers[dieIdentity]; heldBuffer != nil {
+		if heldBuffer := r.HeldColorBuffers[dieIdentity]; len(heldBuffer.RockIDs) > 0 {
 			explosionBuffer.Color = heldBuffer.Color
 		}
-		r.ExplosionBuffers[dieIdentity] = explosionBuffer
 	}
 
 	r.Rocks[r.ActiveBaseBufferIdx][rockID].SpriteIndex = 60 // TODO: constant or modify based on what explode anim shader is going to be applied
 	explosionBuffer.RockIDs = append(explosionBuffer.RockIDs, rockID)
+	r.ExplosionBuffers[dieIdentity] = explosionBuffer
 }
 
 // updateExplosions updates all exploding rocks, decrementing their frame counters
 func (r *RocksRenderer) updateExplosions() {
 	for dieIdentity, buffer := range r.ExplosionBuffers {
-		_ = dieIdentity
 		// Process rocks in reverse order for safe removal
 		for i := len(buffer.RockIDs) - 1; i >= 0; i-- {
 			rockID := buffer.RockIDs[i]
@@ -807,6 +804,7 @@ func (r *RocksRenderer) updateExplosions() {
 				buffer.RockIDs = buffer.RockIDs[:len(buffer.RockIDs)-1]
 			}
 		}
+		r.ExplosionBuffers[dieIdentity] = buffer
 	}
 }
 
