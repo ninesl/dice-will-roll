@@ -311,17 +311,30 @@ func (l *Level) finishScoring(heldDice []*Die, rockRenderer *rocks.RocksRenderer
 		numDice := len(heldDice)
 		rocksPerDie := remainingScore / numDice
 		remainder := remainingScore % numDice
+		rocksByIdentity := make(map[render.DieIdentity]int, numDice)
 
-		for _, d := range heldDice {
+		for _, die := range heldDice {
 			if rocksPerDie > 0 {
-				rockRenderer.ExplodeRocks(d.Identifier, rocksPerDie)
+				rocksByIdentity[die.Identifier] += rocksPerDie
 			}
 		}
 
 		for i := 0; remainder > 0; i++ {
 			die := heldDice[i%numDice]
-			rockRenderer.ExplodeRocks(die.Identifier, 1)
+			rocksByIdentity[die.Identifier]++
 			remainder--
+		}
+
+		identities := make([]render.DieIdentity, 0, len(rocksByIdentity))
+		for identity := range rocksByIdentity {
+			identities = append(identities, identity)
+		}
+		sort.Slice(identities, func(i, j int) bool {
+			return identities[i] < identities[j]
+		})
+
+		for _, identity := range identities {
+			rockRenderer.ExplodeRocks(identity, rocksByIdentity[identity])
 		}
 	}
 

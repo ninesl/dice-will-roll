@@ -18,6 +18,8 @@ func (g *Game) Update() error {
 	g.UpdateMouseInput()
 	g.SetActiveDieIndex(g.Dice...)
 
+	g.RocksRenderer.UpdatePendingExplosionBatches()
+
 	g.UpdateDice()
 
 	g.PlayerInput()

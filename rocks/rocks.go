@@ -243,6 +243,10 @@ type RocksRenderer struct {
 	TransitionBuffers []RockBuffer                      // Rocks transitioning back to base colors
 	ExplosionBuffers  map[render.DieIdentity]RockBuffer // Rocks currently exploding
 	selectionOrder    []render.DieIdentity              // Tracks order dice were selected (for draw order)
+
+	pendingExplosionBatches  []pendingExplosionBatch
+	pendingExplosionBatchIdx int
+
 	// collection during updates
 	updatingBuffers []RockBuffer
 
@@ -267,6 +271,11 @@ type RocksRenderer struct {
 	gridCounts   []uint16 // Number of rocks in each cell
 
 	config RocksConfig
+}
+
+type pendingExplosionBatch struct {
+	dieIdentity render.DieIdentity
+	rockIDs     []RockID
 }
 
 // RocksConfig holds configuration for rock system
@@ -673,7 +682,8 @@ func randomRockTypeForScore(score int) RockScoreType {
 	}
 }
 
-// ExplodeRocks explodes up to numRocks rocks into the initiating die's color.
+// ExplodeRocks batches up to numRocks rocks into the initiating die's color.
+// The visual explosion starts on a later frame via UpdatePendingExplosionBatches.
 func (r *RocksRenderer) ExplodeRocks(dieIdentity render.DieIdentity, numRocks int) {
 	if numRocks <= 0 {
 		return
@@ -684,13 +694,39 @@ func (r *RocksRenderer) ExplodeRocks(dieIdentity render.DieIdentity, numRocks in
 		return
 	}
 
-	r.addExplosionRocks(dieIdentity, rockIDs)
+	r.pendingExplosionBatches = append(r.pendingExplosionBatches, pendingExplosionBatch{
+		dieIdentity: dieIdentity,
+		rockIDs:     rockIDs,
+	})
+}
 
-	newRockIDs := r.SplitRocks(rockIDs)
+// UpdatePendingExplosionBatches starts at most one queued explosion batch.
+// Call this before same-frame scoring code can queue new batches, so batching and
+// visual explosion never happen in the same frame.
+func (r *RocksRenderer) UpdatePendingExplosionBatches() {
+	if r.pendingExplosionBatchIdx >= len(r.pendingExplosionBatches) {
+		if len(r.pendingExplosionBatches) > 0 {
+			r.pendingExplosionBatches = r.pendingExplosionBatches[:0]
+			r.pendingExplosionBatchIdx = 0
+		}
+		return
+	}
+
+	batch := r.pendingExplosionBatches[r.pendingExplosionBatchIdx]
+	r.pendingExplosionBatchIdx++
+
+	r.addExplosionRocks(batch.dieIdentity, batch.rockIDs)
+
+	newRockIDs := r.SplitRocks(batch.rockIDs)
 	if len(newRockIDs) > 0 {
-		ownerBuffer := r.ensureHeldBuffer(dieIdentity)
+		ownerBuffer := r.ensureHeldBuffer(batch.dieIdentity)
 		ownerBuffer.RockIDs = append(ownerBuffer.RockIDs, newRockIDs...)
-		r.HeldColorBuffers[dieIdentity] = ownerBuffer
+		r.HeldColorBuffers[batch.dieIdentity] = ownerBuffer
+	}
+
+	if r.pendingExplosionBatchIdx >= len(r.pendingExplosionBatches) {
+		r.pendingExplosionBatches = r.pendingExplosionBatches[:0]
+		r.pendingExplosionBatchIdx = 0
 	}
 }
 
