@@ -6,12 +6,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Versioned wasm filename without .wasm, for example 0.0.1"
+        description: "Version for the wasm filename, for example 0.0.1"
         required: false
         type: string
 
 jobs:
-  image:
+  deploy:
     runs-on: ubuntu-26.04
     environment: production
 
