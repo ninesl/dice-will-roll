@@ -346,7 +346,6 @@ func (l *Level) finishScoring(heldDice []*Die, rockRenderer *rocks.RocksRenderer
 		die.Direction = render.DirectionArr[render.DOWN]
 	}
 
-	rockRenderer.DeselectAllAfterPendingExplosions()
 	l.ScoringHand = l.ScoringHand[:0]
 	l.scoringState = SCORING_IDLE
 }

@@ -246,7 +246,6 @@ type RocksRenderer struct {
 
 	pendingExplosionBatches  []pendingExplosionBatch
 	pendingExplosionBatchIdx int
-	deselectAfterExplosions  bool
 
 	// collection during updates
 	updatingBuffers []RockBuffer
@@ -709,10 +708,6 @@ func (r *RocksRenderer) UpdatePendingExplosionBatches() {
 		if len(r.pendingExplosionBatches) > 0 {
 			r.pendingExplosionBatches = r.pendingExplosionBatches[:0]
 			r.pendingExplosionBatchIdx = 0
-			if r.deselectAfterExplosions {
-				r.DeselectAll()
-				r.deselectAfterExplosions = false
-			}
 		}
 		return
 	}
@@ -732,19 +727,8 @@ func (r *RocksRenderer) UpdatePendingExplosionBatches() {
 	if r.pendingExplosionBatchIdx >= len(r.pendingExplosionBatches) {
 		r.pendingExplosionBatches = r.pendingExplosionBatches[:0]
 		r.pendingExplosionBatchIdx = 0
-		if r.deselectAfterExplosions {
-			r.DeselectAll()
-			r.deselectAfterExplosions = false
-		}
-	}
-}
-
-func (r *RocksRenderer) DeselectAllAfterPendingExplosions() {
-	if len(r.pendingExplosionBatches) == 0 {
 		r.DeselectAll()
-		return
 	}
-	r.deselectAfterExplosions = true
 }
 
 func takeRockIDs(buffer *RockBuffer, needed int, collected []RockID) (int, []RockID) {
