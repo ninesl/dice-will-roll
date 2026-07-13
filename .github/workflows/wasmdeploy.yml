@@ -53,4 +53,4 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: ./build/${{ steps.wasm.outputs.filename }}
           target: ~/prod/ebiten-wasm/wasms/dicewillroll
-          strip_components: 1
+          strip_components: 2
