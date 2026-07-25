@@ -264,10 +264,10 @@ func pipColors(originalDieSurfaceColor vec3, finalHitPos vec3, normal vec3) vec3
 
             // 6. Calculate lighting
             // Simple Lambertian lighting model. The light comes from above and slightly to the left.
-            if Height > 0 {
-                lightDir = normalize(vec3(sin(Time), cos(Time), -1.0)) // from above, z towards you
+            //if Height > 0 {
+                //lightDir = normalize(vec3(sin(Time), cos(Time), -1.0)) // from above, z towards you
                 // lightDir = normalize(vec3(0,-.5,-.5))
-            }
+            //}
             // } else if Height < 0 {
                 // lightDir = normalize(vec3(.5,.5, .5)) //top right
             // } else {
@@ -290,7 +290,7 @@ func pipColors(originalDieSurfaceColor vec3, finalHitPos vec3, normal vec3) vec3
 func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
 // 1. Setup ray
     uv := (srcPos*2.0 - imageDstSize().xy) / imageDstSize().y
-    ro := vec3(0.0, 0.0, Height - 4.0)
+    ro := vec3(0.0, 0.0, Height - 5.0)
     rd := normalize(vec3(uv*0.5, 1.0))
 
     // 2. Raymarch to find the surface

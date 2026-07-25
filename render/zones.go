@@ -4,6 +4,7 @@ import (
 	"image/color"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ninesl/dice-will-roll/settings"
 )
 
 // A zone contains the bounds of an arbitrary defined area on the screen
@@ -63,19 +64,19 @@ var (
 )
 
 func SetZones() {
-	minWidth := GAME_BOUNDS_X / 12
-	minHeight := GAME_BOUNDS_Y / 7
+	minWidth := float32(settings.Screen.ResolutionX / 12)
+	minHeight := float32(settings.Screen.ResolutionY / 7)
 
 	BigRollZone = ZoneRenderable{
 		Zone: Zone{
 			MinWidth:  0,
-			MaxWidth:  GAME_BOUNDS_X,
+			MaxWidth:  float32(settings.Screen.ResolutionX),
 			MinHeight: 0, // minHeight,
-			MaxHeight: GAME_BOUNDS_Y,
+			MaxHeight: float32(settings.Screen.ResolutionY),
 		},
 		Image: CreateImage(
-			int((GAME_BOUNDS_X)),
-			int((GAME_BOUNDS_Y /* - minHeight*/)),
+			settings.Screen.ResolutionX,
+			settings.Screen.ResolutionY,
 			color.RGBA{R: 123, G: 123, B: 123, A: 128},
 		),
 	}
@@ -83,14 +84,14 @@ func SetZones() {
 	SmallRollZone = ZoneRenderable{
 		Zone: Zone{
 			MinWidth:  minWidth,
-			MaxWidth:  GAME_BOUNDS_X - minWidth,
+			MaxWidth:  float32(settings.Screen.ResolutionX) - minWidth,
 			MinHeight: minHeight,
 			// MinHeight: 0,
-			MaxHeight: GAME_BOUNDS_Y - minHeight,
+			MaxHeight: float32(settings.Screen.ResolutionY) - minHeight,
 		},
 		Image: CreateImage(
-			int(GAME_BOUNDS_X-minWidth-minWidth),
-			int(GAME_BOUNDS_Y-minHeight-minHeight),
+			settings.Screen.ResolutionX-int(minWidth-minWidth),
+			settings.Screen.ResolutionY-int(minHeight-minHeight),
 			// int((GAME_BOUNDS_Y-minHeight)-minHeight),
 			color.RGBA{R: 50, G: 50, B: 50, A: 128},
 		),
@@ -102,13 +103,13 @@ func SetZones() {
 	SCOREZONE = ZoneRenderable{
 		Zone: Zone{
 			MinWidth:  0,
-			MaxWidth:  GAME_BOUNDS_X,
+			MaxWidth:  float32(settings.Screen.ResolutionX),
 			MinHeight: 0,
 			MaxHeight: minHeight,
 			// MaxHeight: SmallRollZone.MinHeight,
 		},
 		Image: CreateImage(
-			int(GAME_BOUNDS_X),
+			int(settings.Screen.ResolutionX),
 			int(minHeight),
 			// int(SmallRollZone.MinHeight),
 			color.RGBA{R: 100, G: 150, B: 80, A: 140},

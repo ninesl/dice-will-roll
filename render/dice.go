@@ -6,6 +6,8 @@ import (
 	"image"
 	"math"
 	"sort"
+
+	"github.com/ninesl/dice-will-roll/settings"
 )
 
 var (
@@ -15,11 +17,11 @@ var (
 )
 
 // Pre-computed die collision constants (computed once at init time)
-var (
-	EffectiveDieTileSize float32
-	DieTileInset         float32
-	HalfEffectiveDie     float32 // EffectiveDieTileSize / 2, for computing bounds from center
-)
+// var (
+// EffectiveDieTileSize float32
+// DieTileInset         float32
+// HalfEffectiveDie     float32 // EffectiveDieTileSize / 2, for computing bounds from center
+// )
 
 // used to identify dice in indexing, etc.
 type DieIdentity uint8
@@ -51,20 +53,20 @@ type DieRenderable struct {
 func (d *DieRenderable) Rect() image.Rectangle {
 	// Inset each side by a small amount, e.g., 5% of DieTileSize
 	// This makes the total width and height smaller by 10% of DieTileSize
-	insetAmount := float32(DieTileSize * 0.15)
+	insetAmount := float32(settings.Screen.Tiles.DieTileSize * 0.15)
 
 	minX := int(d.Vec2.X + insetAmount)
 	minY := int(d.Vec2.Y + insetAmount)
-	maxX := int(d.Vec2.X + DieTileSize - insetAmount)
-	maxY := int(d.Vec2.Y + DieTileSize - insetAmount)
+	maxX := int(d.Vec2.X + settings.Screen.Tiles.DieTileSize - insetAmount)
+	maxY := int(d.Vec2.Y + settings.Screen.Tiles.DieTileSize - insetAmount)
 
 	// Ensure min is not greater than max, which can happen if DieTileSize is very small or insetAmount is too large
 	if minX > maxX {
-		minX = int(math.Round(float64(d.Vec2.X + HalfDieTileSize)))
+		minX = int(math.Round(float64(d.Vec2.X + settings.Screen.Tiles.HalfDieTileSize)))
 		maxX = minX
 	}
 	if minY > maxY {
-		minY = int(math.Round(float64(d.Vec2.Y + HalfDieTileSize)))
+		minY = int(math.Round(float64(d.Vec2.Y + settings.Screen.Tiles.HalfDieTileSize)))
 		maxY = minY
 	}
 
@@ -113,10 +115,10 @@ func HandleMovingHeldDice(dice []*DieRenderable) {
 
 	// positioning
 	var x, y float32
-	x = GAME_BOUNDS_X/2 - HalfDieTileSize
-	y = SCOREZONE.MinHeight/2 + DieTileSize/5
+	x = float32(settings.Screen.ResolutionX)*0.5 - settings.Screen.Tiles.HalfDieTileSize
+	y = SCOREZONE.MinHeight/2 + settings.Screen.Tiles.DieTileSize/5
 	if num > 1 {
-		x -= DieTileSize * (float32(num) - 1.0)
+		x -= settings.Screen.Tiles.DieTileSize * (float32(num) - 1.0)
 	}
 
 	// find where the moving dice should be going towards
@@ -126,7 +128,7 @@ func HandleMovingHeldDice(dice []*DieRenderable) {
 		die.Fixed.X = x
 		die.Fixed.Y = y
 
-		x += DieTileSize * 2
+		x += settings.Screen.Tiles.DieTileSize * 2
 	}
 
 	for i := 0; i < num; i++ {
@@ -174,8 +176,8 @@ func HandleResettingDice(dice []*DieRenderable) {
 // centerX, centerY specify where the CENTER of the die should end up
 func AnimateDieToPosition(die *DieRenderable, centerX, centerY float32) {
 	// Convert center position to top-left corner (since Vec2 is top-left)
-	die.Fixed.X = centerX - HalfDieTileSize
-	die.Fixed.Y = centerY - HalfDieTileSize
+	die.Fixed.X = centerX - settings.Screen.Tiles.HalfDieTileSize
+	die.Fixed.Y = centerY - settings.Screen.Tiles.HalfDieTileSize
 }
 
 // gross code
@@ -205,12 +207,12 @@ func HandleDiceCollisions(dice []*DieRenderable) {
 // TODO: make this just better entirely lmao
 func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
 	// Calculate distance and collision normal vector
-	collNormalX := (die1.Vec2.X + HalfDieTileSize) - (die2.Vec2.X + HalfDieTileSize)
-	collNormalY := (die1.Vec2.Y + HalfDieTileSize) - (die2.Vec2.Y + HalfDieTileSize)
+	collNormalX := (die1.Vec2.X + settings.Screen.Tiles.HalfDieTileSize) - (die2.Vec2.X + settings.Screen.Tiles.HalfDieTileSize)
+	collNormalY := (die1.Vec2.Y + settings.Screen.Tiles.HalfTileSize32) - (die2.Vec2.Y + settings.Screen.Tiles.HalfDieTileSize)
 	distSq := collNormalX*collNormalX + collNormalY*collNormalY
 
 	// Check if they are actually overlapping
-	if distSq < DieTileSize*DieTileSize {
+	if distSq < settings.Screen.Tiles.DieTileSize*settings.Screen.Tiles.DieTileSize {
 		dist := float32(math.Sqrt(float64(distSq)))
 
 		// Avoid division by zero if dice are perfectly on top of each other
@@ -222,7 +224,7 @@ func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
 		}
 
 		// Move dice apart so they no longer overlap
-		overlap := (DieTileSize - dist) * 0.5
+		overlap := (settings.Screen.Tiles.DieTileSize - dist) * 0.5
 		correctionX := (collNormalX / dist) * overlap
 		correctionY := (collNormalY / dist) * overlap
 		die1.Vec2.X += correctionX
@@ -269,14 +271,14 @@ func BounceOffEachother(die1 *DieRenderable, die2 *DieRenderable) {
 // does not modify velocity, only Vec2 positioning
 func ClampInZone(die *DieRenderable, zone ZoneRenderable) {
 	// Handle X-axis collisions
-	if die.Vec2.X+DieTileSize >= zone.MaxWidth {
-		die.Vec2.X = zone.MaxWidth - DieTileSize - 1
+	if die.Vec2.X+settings.Screen.Tiles.DieTileSize >= zone.MaxWidth {
+		die.Vec2.X = zone.MaxWidth - settings.Screen.Tiles.DieTileSize - 1
 	} else if die.Vec2.X < zone.MinWidth {
 		die.Vec2.X = zone.MinWidth + 1
 	}
 
-	if die.Vec2.Y+DieTileSize >= zone.MaxHeight {
-		die.Vec2.Y = zone.MaxHeight - DieTileSize - 1
+	if die.Vec2.Y+settings.Screen.Tiles.DieTileSize >= zone.MaxHeight {
+		die.Vec2.Y = zone.MaxHeight - settings.Screen.Tiles.DieTileSize - 1
 	} else if die.Vec2.Y < zone.MinHeight {
 		die.Vec2.Y = zone.MinWidth + 1
 	}
@@ -285,10 +287,10 @@ func ClampInZone(die *DieRenderable, zone ZoneRenderable) {
 func BounceAndClamp(dice []*DieRenderable) {
 	for _, die := range dice {
 		// Handle X-axis collisions
-		if (die.Vec2.X+DieTileSize >= ROLLZONE.MaxWidth && die.Velocity.X > 0) || (die.Vec2.X < ROLLZONE.MinWidth && die.Velocity.X < 0) {
+		if (die.Vec2.X+settings.Screen.Tiles.DieTileSize >= ROLLZONE.MaxWidth && die.Velocity.X > 0) || (die.Vec2.X < ROLLZONE.MinWidth && die.Velocity.X < 0) {
 			// Correct position to be just inside the boundary
 			if die.Velocity.X > 0 {
-				die.Vec2.X = ROLLZONE.MaxWidth - DieTileSize - 1
+				die.Vec2.X = ROLLZONE.MaxWidth - settings.Screen.Tiles.DieTileSize - 1
 			} else {
 				die.Vec2.X = ROLLZONE.MinWidth + 1
 			}
@@ -299,10 +301,10 @@ func BounceAndClamp(dice []*DieRenderable) {
 		}
 
 		// Handle Y-axis collisions
-		if (die.Vec2.Y+DieTileSize >= ROLLZONE.MaxHeight && die.Velocity.Y > 0) || (die.Vec2.Y < ROLLZONE.MinHeight && die.Velocity.Y < 0) {
+		if (die.Vec2.Y+settings.Screen.Tiles.DieTileSize >= ROLLZONE.MaxHeight && die.Velocity.Y > 0) || (die.Vec2.Y < ROLLZONE.MinHeight && die.Velocity.Y < 0) {
 			// Correct position to be just inside the boundary
 			if die.Velocity.Y > 0 {
-				die.Vec2.Y = ROLLZONE.MaxHeight - DieTileSize - 1
+				die.Vec2.Y = ROLLZONE.MaxHeight - settings.Screen.Tiles.DieTileSize - 1
 			} else {
 				die.Vec2.Y = ROLLZONE.MinHeight + 1
 			}

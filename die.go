@@ -8,6 +8,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ninesl/dice-will-roll/dice"
 	"github.com/ninesl/dice-will-roll/render"
+	"github.com/ninesl/dice-will-roll/settings"
 )
 
 type Die struct {
@@ -47,8 +48,8 @@ func SetupNewDie(color render.Vec3) *Die {
 
 	// random position
 	pos := render.Vec2{
-		X: render.ROLLZONE.MinWidth + render.DieTileSize*float32(rand.IntN(6))*2.0,
-		Y: render.ROLLZONE.MaxHeight/2 - render.HalfDieTileSize,
+		X: render.ROLLZONE.MinWidth + settings.Screen.Tiles.DieTileSize*float32(rand.IntN(6))*2.0,
+		Y: render.ROLLZONE.MaxHeight/2 - settings.Screen.Tiles.HalfDieTileSize,
 	}
 
 	dieRenderable := render.DieRenderable{
@@ -62,7 +63,7 @@ func SetupNewDie(color render.Vec3) *Die {
 		Color:     color,
 		// ColorSpot: 1 * 6,
 	}
-	image := ebiten.NewImage(int(render.DieTileSize), int(render.DieTileSize))
+	image := ebiten.NewImage(int(settings.Screen.Tiles.DieTileSize), int(settings.Screen.Tiles.DieTileSize))
 
 	// set pips randomly 1-9
 	// values := [6]int{}
@@ -122,8 +123,8 @@ func (d *Die) Roll() {
 		// random direction
 		direction := render.DirectionArr[render.Direction(rand.IntN(len(render.DirectionArr)))]
 
-		d.Velocity.X = render.DieTileSize * rand.Float32() * direction.X
-		d.Velocity.Y = render.DieTileSize * rand.Float32() * direction.Y
+		d.Velocity.X = settings.Screen.Tiles.DieTileSize * rand.Float32() * direction.X
+		d.Velocity.Y = settings.Screen.Tiles.DieTileSize * rand.Float32() * direction.Y
 		d.Direction = direction
 
 		d.ZRotation = rand.Float32()

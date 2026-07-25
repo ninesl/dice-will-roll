@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/ninesl/dice-will-roll/render"
+	"github.com/ninesl/dice-will-roll/settings"
 )
 
 // dieCollisionData holds pre-computed collision data for a die
@@ -148,16 +149,16 @@ func (r *RocksRenderer) CollideAndAnimateRocks(cursorX, cursorY float32, diceCen
 			sizeData := rock.SizeData()
 
 			// Wall bouncing
-			if rock.Position.X+sizeData.Size >= render.GAME_BOUNDS_X {
-				rock.Position.X = render.GAME_BOUNDS_X - sizeData.Size
+			if rock.Position.X+sizeData.Size >= float32(settings.Screen.ResolutionX) {
+				rock.Position.X = float32(settings.Screen.ResolutionX) - sizeData.Size
 				rock.BounceX()
 			} else if rock.Position.X <= 0 {
 				rock.Position.X = 0
 				rock.BounceX()
 			}
 
-			if rock.Position.Y+sizeData.Size >= render.GAME_BOUNDS_Y {
-				rock.Position.Y = render.GAME_BOUNDS_Y - sizeData.Size
+			if rock.Position.Y+sizeData.Size >= float32(settings.Screen.ResolutionY) {
+				rock.Position.Y = float32(settings.Screen.ResolutionY) - sizeData.Size
 				rock.BounceY()
 			} else if rock.Position.Y <= 0 {
 				rock.Position.Y = 0
@@ -231,7 +232,7 @@ func (r *RocksRenderer) preprocessDiceCollisionData(diceCenters []render.Vec3, d
 		// At 45°: halfExtent = h × √2 (corners extend further) FIXME: this isn't good here at all, not accurate enough
 		cosR := math.Abs(math.Cos(rotationRad))
 		sinR := math.Abs(math.Sin(rotationRad))
-		halfExtent := float32(float64(render.HalfEffectiveDie) * (cosR + sinR))
+		halfExtent := float32(float64(settings.Screen.Tiles.HalfEffectiveDie) * (cosR + sinR))
 
 		r.diceCollisionDataBuffer[i] = dieCollisionData{
 			left:      center.X - halfExtent,
@@ -263,17 +264,16 @@ func (r *RocksRenderer) preprocessDiceCollisionData(diceCenters []render.Vec3, d
 // AABB (Axis-Aligned Bounding Box) collision detection with 0.75 multiplier for tighter collision
 // Checks if rock's bounding box overlaps with die's bounding box
 func (r *SimpleRock) RockWithinDie(die *render.DieRenderable, rockSize float32) bool {
-	effectiveDieTileSize := render.DieTileSize * 0.75
 	effectiveRockSize := rockSize * 0.75
 
 	// Center the effective collision boxes
-	dieInset := (render.DieTileSize - effectiveDieTileSize) / 2
+	//dieInset := (render.DieTileSize - settings.Screen.Tiles.EffectiveDieTileSize) / 2
 	rockInset := (rockSize - effectiveRockSize) / 2
 
-	return (r.Position.X+rockInset+effectiveRockSize > die.Vec2.X+dieInset &&
-		r.Position.X+rockInset < die.Vec2.X+dieInset+effectiveDieTileSize) &&
-		(r.Position.Y+rockInset+effectiveRockSize > die.Vec2.Y+dieInset &&
-			r.Position.Y+rockInset < die.Vec2.Y+dieInset+effectiveDieTileSize)
+	return (r.Position.X+rockInset+effectiveRockSize > die.Vec2.X+settings.Screen.Tiles.DieTileInset &&
+		r.Position.X+rockInset < die.Vec2.X+settings.Screen.Tiles.DieTileInset+settings.Screen.Tiles.EffectiveDieTileSize) &&
+		(r.Position.Y+rockInset+effectiveRockSize > die.Vec2.Y+settings.Screen.Tiles.DieTileInset &&
+			r.Position.Y+rockInset < die.Vec2.Y+settings.Screen.Tiles.DieTileInset+settings.Screen.Tiles.EffectiveDieTileSize)
 }
 
 // XYWithinRock checks if a point (X, Y) is within the rock's bounding box
@@ -530,10 +530,9 @@ func (r *RocksRenderer) handleDieCollisions(diceCenters []render.Vec3, diceVeloc
 
 		// Calculate distance from die center to edge of rotated square at this angle
 		// For a square: edgeDistance = halfSize / max(|cos(θ)|, |sin(θ)|)
-		halfSize := float64(render.HalfEffectiveDie)
 		cosA := math.Abs(math.Cos(relativeAngle))
 		sinA := math.Abs(math.Sin(relativeAngle))
-		edgeDistance := halfSize / math.Max(cosA, sinA)
+		edgeDistance := float64(settings.Screen.Tiles.HalfEffectiveDie) / math.Max(cosA, sinA)
 
 		// TRUE NARROW PHASE: Verify rock is actually colliding with rotated square
 		// (AABB is an over-approximation, this catches false positives in corner regions)
@@ -617,7 +616,7 @@ func RandomXORRockJitter(xSeed, ySeed float32, jitterRange int8) (int8, int8) {
 // initSpatialGrid initializes the hybrid offset+count spatial grid
 // Cell size is render.DieTileSize for optimal collision detection with dice
 func (r *RocksRenderer) initSpatialGrid(config RocksConfig) {
-	r.gridCellSize = render.DieTileSize
+	r.gridCellSize = settings.Screen.Tiles.TileSize32
 	r.gridCols = int(math.Ceil(float64(config.WorldBoundsX) / float64(r.gridCellSize)))
 	r.gridRows = int(math.Ceil(float64(config.WorldBoundsY) / float64(r.gridCellSize)))
 

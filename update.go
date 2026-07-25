@@ -10,6 +10,7 @@ import (
 	"github.com/ninesl/dice-will-roll/dice"
 	"github.com/ninesl/dice-will-roll/music"
 	"github.com/ninesl/dice-will-roll/render"
+	"github.com/ninesl/dice-will-roll/settings"
 )
 
 func (g *Game) Update() error {
@@ -128,13 +129,13 @@ func (g *Game) ClosestDieToPoint(point render.Vec2, dice ...*Die) (int, *Die) {
 	}
 
 	idxOfClosest := 0
-	dx := point.X - (dice[idxOfClosest].Vec2.X + render.HalfDieTileSize)
-	dy := point.Y - (dice[idxOfClosest].Vec2.Y + render.HalfDieTileSize)
+	dx := point.X - (dice[idxOfClosest].Vec2.X + settings.Screen.Tiles.HalfDieTileSize)
+	dy := point.Y - (dice[idxOfClosest].Vec2.Y + settings.Screen.Tiles.HalfDieTileSize)
 	closestDistance := dx*dx + dy*dy
 
 	for i := 1; i < len(dice); i++ {
-		dx = point.X - (dice[i].Vec2.X + render.HalfDieTileSize)
-		dy = point.Y - (dice[i].Vec2.Y + render.HalfDieTileSize)
+		dx = point.X - (dice[i].Vec2.X + settings.Screen.Tiles.HalfDieTileSize)
+		dy = point.Y - (dice[i].Vec2.Y + settings.Screen.Tiles.HalfDieTileSize)
 		distance := dx*dx + dy*dy
 		if distance < closestDistance {
 			idxOfClosest = i
@@ -180,8 +181,8 @@ func (g *Game) AnimateDice() {
 
 			rolling = append(rolling, d)
 		} else if die.Mode == DRAG {
-			d.Fixed.X = g.Mouse.Position.X - render.HalfDieTileSize
-			d.Fixed.Y = g.Mouse.Position.Y - render.HalfDieTileSize
+			d.Fixed.X = g.Mouse.Position.X - settings.Screen.Tiles.HalfDieTileSize
+			d.Fixed.Y = g.Mouse.Position.Y - settings.Screen.Tiles.HalfDieTileSize
 
 			d.Velocity.X = (d.Fixed.X - d.Vec2.X) * render.MoveFactor
 			d.Velocity.Y = (d.Fixed.Y - d.Vec2.Y) * render.MoveFactor
@@ -216,8 +217,8 @@ func (g *Game) AnimateDice() {
 	for _, d := range g.Dice {
 		// Die center positions
 		g.diceCenterBuffer = append(g.diceCenterBuffer, render.Vec3{
-			X: d.Vec2.X + render.HalfDieTileSize,
-			Y: d.Vec2.Y + render.HalfDieTileSize,
+			X: d.Vec2.X + settings.Screen.Tiles.HalfDieTileSize,
+			Y: d.Vec2.Y + settings.Screen.Tiles.HalfDieTileSize,
 			Z: d.ZRotation,
 		})
 
@@ -418,7 +419,7 @@ func wrapZRotation(rotation float32) float32 {
 
 // cursorWithinDie checks the cursor against the die's current screen bounds.
 func (g *Game) cursorWithinDie(die *Die) bool {
-	return g.Mouse.Position.X > die.Vec2.X && g.Mouse.Position.X < die.Vec2.X+render.DieTileSize && g.Mouse.Position.Y > die.Vec2.Y && g.Mouse.Position.Y < die.Vec2.Y+render.DieTileSize
+	return g.Mouse.Position.X > die.Vec2.X && g.Mouse.Position.X < die.Vec2.X+settings.Screen.Tiles.DieTileSize && g.Mouse.Position.Y > die.Vec2.Y && g.Mouse.Position.Y < die.Vec2.Y+settings.Screen.Tiles.DieTileSize
 }
 
 // atan2f keeps callsites in float32 even though Go's math package uses float64.

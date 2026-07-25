@@ -12,6 +12,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/ninesl/dice-will-roll/music"
 	"github.com/ninesl/dice-will-roll/render"
+	"github.com/ninesl/dice-will-roll/settings"
 )
 
 var (
@@ -27,7 +28,7 @@ func SetFonts() {
 	DEBUG_FONT = s
 	DEBUG_FONTFACE = &text.GoTextFace{
 		Source: DEBUG_FONT,
-		Size:   FONT_SIZE,
+		Size:   settings.Screen.FontSize,
 	}
 }
 
@@ -52,9 +53,9 @@ const (
 
 func DEBUGView(screen *ebiten.Image, g *Game, textOpts *text.DrawOptions, viewMode DEBUGViewMode) {
 	DEBUGDrawMessage(screen, textOpts, g.ActiveLevel.String(), 0.0)
-	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%.2f fps / %.2f tps\n", ebiten.ActualFPS(), ebiten.ActualTPS()), FONT_SIZE)
+	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%.2f fps / %.2f tps\n", ebiten.ActualFPS(), ebiten.ActualTPS()), settings.Screen.FontSize)
 	DEBUGMusic(screen, textOpts, g.Music)
-	DEBUGDrawMessage(screen, textOpts, "<space> to ROLL, <q> to SCORE\n", FONT_SIZE*3)
+	DEBUGDrawMessage(screen, textOpts, "<space> to ROLL, <q> to SCORE\n", settings.Screen.FontSize*3)
 	DEBUGDiceValues(screen, textOpts, g.Dice)
 
 }
@@ -69,7 +70,7 @@ func DEBUGMusic(screen *ebiten.Image, textOpts *text.DrawOptions, musicState *mu
 		upcoming[lane] = musicState.UpcomingMS(music.HookLane(lane))
 	}
 
-	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("music ms=%d upcoming=%#v", musicState.MS(), upcoming), FONT_SIZE*2)
+	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("music ms=%d upcoming=%#v", musicState.MS(), upcoming), settings.Screen.FontSize*2)
 }
 
 func DEBUGDrawMessage(screen *ebiten.Image, textOpts *text.DrawOptions, msg string, y float64) {
@@ -111,10 +112,10 @@ func DEBUGDiceValues(screen *ebiten.Image, textOpts *text.DrawOptions, dice []*D
 			Scoring = append(Scoring, d)
 		}
 	}
-	y := (float64(render.GAME_BOUNDS_Y) - FONT_SIZE)
+	y := (float64(settings.Screen.ResolutionY) - settings.Screen.FontSize)
 	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "roll", DEBUGValuesFromDice(Rolling)), y)
-	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "held", DEBUGValuesFromDice(Held)), y-FONT_SIZE)
-	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "score", DEBUGValuesFromDice(Scoring)), y-FONT_SIZE*2)
+	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "held", DEBUGValuesFromDice(Held)), y-settings.Screen.FontSize)
+	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "score", DEBUGValuesFromDice(Scoring)), y-settings.Screen.FontSize*2)
 }
 
 var (
@@ -126,7 +127,7 @@ var (
 //		textOpts.ColorScale.ScaleWithColor(color.White)
 //		text.Draw(screen, msg, &text.GoTextFace{
 //			Source: DEBUG_FONT,
-//			Size:   FONT_SIZE,
+//			Size:   settings.Screen.FontSize,
 //		}, textOpts)
 //		textOpts.GeoM.Reset()
 //		textOpts.ColorScale.Reset()

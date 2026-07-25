@@ -5,6 +5,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ninesl/dice-will-roll/render"
+	"github.com/ninesl/dice-will-roll/settings"
 )
 
 // updateAllBufferTransitions decrements transition counters for all buffer types
@@ -252,5 +253,5 @@ func (r *RocksRenderer) drawBufferWithColorShader(
 			"TransitionAmount": transitionAmount,                  // 1.0 at start, 0.0 at end
 		},
 	}
-	screen.DrawRectShader(int(render.GAME_BOUNDS_X), int(render.GAME_BOUNDS_Y), r.colorShader, colorOpts)
+	screen.DrawRectShader(settings.Screen.ResolutionX, settings.Screen.ResolutionY, r.colorShader, colorOpts)
 }

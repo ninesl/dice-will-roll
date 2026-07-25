@@ -6,6 +6,7 @@ import (
 	"github.com/ninesl/dice-will-roll/music"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
+	"github.com/ninesl/dice-will-roll/settings"
 )
 
 // var screen = ebiten.NewImage(GAME_BOUNDS_X, GAME_BOUNDS_Y)
@@ -33,7 +34,7 @@ func (g *Game) Draw(s *ebiten.Image) {
 	// likely redundant
 	g.opts.image.GeoM.Reset()
 
-	s.DrawRectShader(GAME_BOUNDS_X, GAME_BOUNDS_Y,
+	s.DrawRectShader(settings.Screen.ResolutionX, settings.Screen.ResolutionY,
 		g.Shaders[shaders.BackgroundShaderKey],
 		g.opts.shader)
 
@@ -74,7 +75,7 @@ func DrawROLLZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
 
 func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOptions, tileSize float32, dieImgTransparent *ebiten.Image) {
 	opts.GeoM.Translate(
-		float64(render.GAME_BOUNDS_X/2.0-tileSize/2.0),
+		float64(float32(settings.Screen.ResolutionX)/2.0-tileSize/2.0),
 		float64(render.SCOREZONE.MaxHeight/2.0-tileSize/2.0),
 	)
 	screen.DrawImage(
@@ -85,7 +86,6 @@ func DEBUGDrawCenterSCOREZONE(screen *ebiten.Image, opts *ebiten.DrawImageOption
 
 func (g *Game) DrawDice(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
 	//sideLen := int(g.Dice[0].image.Bounds().Dx())
-	shader := g.Shaders[shaders.DieShaderKey]
 
 	g.opts.shader.Uniforms = map[string]any{
 		"Time":            g.time,
@@ -95,7 +95,7 @@ func (g *Game) DrawDice(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
 		// "Cursor": []float32{float32(cx), float32(cy)},
 	}
 
-	for i := 0; i < len(g.Dice); i++ {
+	for i := range len(g.Dice) {
 		g.Dice[i].image.Clear()
 
 		if g.Dice[i].Mode == DRAG && g.cursorWithin(render.SCOREZONE) {
@@ -114,12 +114,16 @@ func (g *Game) DrawDice(screen *ebiten.Image, opts *ebiten.DrawImageOptions) {
 		g.opts.shader.Uniforms["ZRotation"] = g.Dice[i].ZRotation
 		g.opts.shader.Uniforms["Mode"] = int(g.Dice[i].Mode)
 
-		g.Dice[i].image.DrawRectShader(TILE_SIZE, TILE_SIZE, shader, g.opts.shader)
+		g.Dice[i].image.DrawRectShader(
+			settings.Screen.Tiles.TileSize,
+			settings.Screen.Tiles.TileSize,
+			g.Shaders[shaders.DieShaderKey],
+			g.opts.shader,
+		)
 
-		ops := &ebiten.DrawImageOptions{}
-		ops.GeoM.Translate(float64(g.Dice[i].Vec2.X), float64(g.Dice[i].Vec2.Y))
-		screen.DrawImage(g.Dice[i].image, ops)
-		ops.GeoM.Reset()
+		g.opts.image.GeoM.Translate(float64(g.Dice[i].Vec2.X), float64(g.Dice[i].Vec2.Y))
+		screen.DrawImage(g.Dice[i].image, g.opts.image)
+		g.opts.image.GeoM.Reset()
 	}
 }
 

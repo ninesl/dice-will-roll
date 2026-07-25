@@ -9,6 +9,7 @@ import (
 	"github.com/ninesl/dice-will-roll/music"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/rocks"
+	"github.com/ninesl/dice-will-roll/settings"
 )
 
 // ScoringState defines the states for the scoring animation sequence.
@@ -241,12 +242,12 @@ func upcomingHookMSAfter(musicState *music.NowPlaying, lane music.HookLane, coun
 
 func (l *Level) scoringTargetPosition(heldDice []*Die, index int) (float32, float32) {
 	num := len(heldDice)
-	x := float32(GAME_BOUNDS_X)/2 - render.HalfDieTileSize
-	y := render.SmallRollZone.MaxHeight + render.SCOREZONE.MinHeight/2 + render.DieTileSize/5
+	x := float32(settings.Screen.ResolutionX)/2 - settings.Screen.Tiles.HalfDieTileSize
+	y := render.SmallRollZone.MaxHeight + render.SCOREZONE.MinHeight/2 + settings.Screen.Tiles.DieTileSize/5
 	if num > 1 {
-		x -= render.DieTileSize * (float32(num) - 1.0)
+		x -= settings.Screen.Tiles.DieTileSize * (float32(num) - 1.0)
 	}
-	x += render.DieTileSize * 2 * float32(index)
+	x += settings.Screen.Tiles.DieTileSize * 2 * float32(index)
 	return x, y
 }
 
@@ -342,7 +343,7 @@ func (l *Level) finishScoring(heldDice []*Die, rockRenderer *rocks.RocksRenderer
 	for _, die := range heldDice {
 		die.Mode = ROLLING
 		die.Roll()
-		die.Velocity.Y = render.DieTileSize * 2
+		die.Velocity.Y = settings.Screen.Tiles.DieTileSize * 2
 		die.Direction = render.DirectionArr[render.DOWN]
 	}
 

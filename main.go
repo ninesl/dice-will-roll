@@ -20,18 +20,10 @@ import (
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
 	"github.com/ninesl/dice-will-roll/rocks"
+	"github.com/ninesl/dice-will-roll/settings"
 )
 
-// will need a way to update these in settings
 var (
-	GAME_BOUNDS_X, GAME_BOUNDS_Y int     = ebiten.Monitor().Size()
-	ResolutionX                  int     = GAME_BOUNDS_X // placeholder, options later
-	ResolutionY                  int     = GAME_BOUNDS_Y
-	TILE_SIZE                    int     = GAME_BOUNDS_Y / 9 //Base tile size, roughly the size of the Die
-	FONT_SIZE                    float64 = float64(ResolutionY / 64)
-	// tile size is always the width and height of the die image
-	TileSize float32 = float32(TILE_SIZE)
-
 	ClickTime = time.Millisecond * 250
 
 	NUM_PLAYER_DICE int = 7
@@ -43,23 +35,21 @@ var (
 )
 
 func init() {
-	render.GAME_BOUNDS_X = float32(GAME_BOUNDS_X)
-	render.GAME_BOUNDS_Y = float32(GAME_BOUNDS_Y)
-
-	// render.TileSize = TileSize
-	// render.HalfTileSize = float32(TILE_SIZE / 2)
-	render.DieTileSize = TileSize                   // Die-specific tile size, same as base TileSize
-	render.HalfDieTileSize = float32(TILE_SIZE / 2) // Half of DieTileSize for die center calculations
-
-	// Pre-compute die collision constants (used for rock-die collision detection)
-	render.EffectiveDieTileSize = render.DieTileSize * 0.75
-	render.DieTileInset = (render.DieTileSize - render.EffectiveDieTileSize) / 2
-	render.HalfEffectiveDie = render.EffectiveDieTileSize / 2
-
-	FONT_SIZE = float64(GAME_BOUNDS_Y / 64)
-
-	ebiten.SetFullscreen(true)
-
+	// render.GAME_BOUNDS_X = float32(GAME_BOUNDS_X)
+	// render.GAME_BOUNDS_Y = float32(GAME_BOUNDS_Y)
+	//
+	// // render.TileSize = TileSize
+	// // render.HalfTileSize = float32(TILE_SIZE / 2)
+	// render.DieTileSize = TileSize                   // Die-specific tile size, same as base TileSize
+	// render.HalfDieTileSize = float32(TILE_SIZE / 2) // Half of DieTileSize for die center calculations
+	//
+	// // Pre-compute die collision constants (used for rock-die collision detection)
+	// render.EffectiveDieTileSize = render.DieTileSize * 0.75
+	// render.DieTileInset = (render.DieTileSize - render.EffectiveDieTileSize) / 2
+	// render.HalfEffectiveDie = render.EffectiveDieTileSize / 2
+	//
+	// FONT_SIZE = float64(GAME_BOUNDS_Y / 64)
+	//
 }
 
 // TODO: last position...?
@@ -78,7 +68,7 @@ type Game struct {
 	Shaders map[shaders.ShaderKey]*ebiten.Shader
 	UIState *PlayerUIState
 
-	RocksImage    *ebiten.Image
+	// RocksImage    *ebiten.Image
 	RocksRenderer *rocks.RocksRenderer // New rocks rendering system,
 	opts          *DrawOptions
 
@@ -155,9 +145,10 @@ func LoadGame() *Game {
 			// render.RainbowColors[5],
 			// render.RainbowColors[6],
 		},
-		RockTileSize:          rocks.CalculateRockTileSize(TileSize, rockAmount), // Dynamically scaled based on rock amount
-		WorldBoundsX:          float32(render.GAME_BOUNDS_X),
-		WorldBoundsY:          float32(render.GAME_BOUNDS_Y),
+		RockTileSize: rocks.CalculateRockTileSize(settings.Screen.Tiles.TileSize32, rockAmount),
+		// Dynamically scaled based on rock amount
+		WorldBoundsX:          float32(settings.Screen.ResolutionX),
+		WorldBoundsY:          float32(settings.Screen.ResolutionY),
 		ColorTransitionFrames: 30, // 30 frames (~0.5 seconds at 60fps)
 	}
 
@@ -183,9 +174,9 @@ func LoadGame() *Game {
 		}),
 	}
 
-	var rocksImage *ebiten.Image = ebiten.NewImage(g.Bounds())
-	g.RocksImage = rocksImage
-
+	// var rocksImage *ebiten.Image = ebiten.NewImage(g.Bounds())
+	// g.RocksImage = rocksImage
+	//
 	// g.DEBUG.dieImgTransparent = render.CreateImage(dieImgSize, dieImgSize, color.RGBA{56, 56, 56, 100})
 
 	return g
@@ -230,29 +221,30 @@ func loadGameMusic() (*music.NowPlaying, error) {
 }
 
 func (g *Game) String() string {
-	return fmt.Sprintf("GAMEBOUNDS X %d\nGAMEBOUNDS Y %ds\nROLLZONE %#v\n", GAME_BOUNDS_X, GAME_BOUNDS_Y, render.ROLLZONE)
+	return fmt.Sprintf("(%d.%d)\nROLLZONE %#v\n",
+		settings.Screen.ResolutionX,
+		settings.Screen.ResolutionY, render.ROLLZONE)
 }
 
-// interface impl
-func (g *Game) Bounds() (int, int) {
-	return GAME_BOUNDS_X, GAME_BOUNDS_Y
-}
-
+// // interface impl
+//
+//	func (g *Game) Bounds() (int, int) {
+//		return settings.Screen.ResolutionX, settings.Screen.ResolutionY
+//	}
+//
 // return the pixels in the game
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return GAME_BOUNDS_X, GAME_BOUNDS_Y
+	return settings.Screen.ResolutionX, settings.Screen.ResolutionY
 }
 
 func main() {
 	// Parse command-line flags
 	flag.Parse()
 
-	ebiten.SetWindowSize(ResolutionX, ResolutionY)
-	ebiten.SetWindowTitle("Dice Will Roll")
+	settings.InitScreenSettings(ebiten.Monitor())
+	ebiten.SetFullscreen(true)
 
-	//TODO:FIXME: this is how we determine the max perf for a given device.
-	// ebiten.SetTPS(ebiten.SyncWithFPS)
-	// ebiten.SetVsyncEnabled(false)
+	fmt.Printf("%#+v\n", settings.Screen)
 
 	game := LoadGame()
 	if err := ebiten.RunGame(game); err != nil {

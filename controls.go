@@ -7,6 +7,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/ninesl/dice-will-roll/render"
+	"github.com/ninesl/dice-will-roll/settings"
 )
 
 // returns an Action based on player input
@@ -60,12 +61,12 @@ func (g *Game) SetDiceToScore() {
 			die.Fixed.Y = 0
 			die.Height = 0
 			// Set velocity straight down to bounce into rollzone
-			die.Velocity.Y = render.DieTileSize * 2 // downward velocity
+			die.Velocity.Y = settings.Screen.Tiles.DieTileSize * 2 // downward velocity
 
-			if die.Vec2.X < render.GAME_BOUNDS_X/2 {
-				die.Velocity.X = render.DieTileSize * 2 // push right
+			if die.Vec2.X < float32(settings.Screen.ResolutionX)*0.5 {
+				die.Velocity.X = settings.Screen.Tiles.DieTileSize * 2 // push right
 			} else {
-				die.Velocity.X = render.DieTileSize * -2 // push left
+				die.Velocity.X = settings.Screen.Tiles.DieTileSize * -2 // push left
 			}
 
 			die.Direction = render.DirectionArr[render.DOWN]

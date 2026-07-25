@@ -7,15 +7,15 @@ import (
 )
 
 // assigned during main init()
-var (
-	GAME_BOUNDS_X float32
-	GAME_BOUNDS_Y float32
-
-	TileSize        float32
-	HalfTileSize    float32
-	DieTileSize     float32 // Die-specific tile size for rendering and collisions
-	HalfDieTileSize float32 // Half of DieTileSize for die center calculations
-)
+// var (
+// GAME_BOUNDS_X float32
+// GAME_BOUNDS_Y float32
+//
+// TileSize        float32
+// HalfTileSize    float32
+// DieTileSize     float32 // Die-specific tile size for rendering and collisions
+// HalfDieTileSize float32 // Half of DieTileSize for die center calculations
+// )
 
 // generally used to make a die move into a direction.
 //
@@ -62,11 +62,6 @@ type Vec2 struct {
 // used for determining color values
 type Vec3 struct {
 	X, Y, Z float32
-}
-
-// makes it 0.0 - 1.0 for Kage
-func normalize(v int) float32 {
-	return float32(v) / 255.0
 }
 
 // give 0-255 for r g b values return normalized to kages 0.0 - 1.0
