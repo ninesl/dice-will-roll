@@ -3,7 +3,6 @@ package main
 import (
 	"math/rand/v2"
 	"slices"
-	"sort"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ninesl/dice-will-roll/dice"
@@ -321,9 +320,7 @@ func bestValues(dice []*Die, x int) []*Die {
 		}
 	}
 
-	sort.Slice(uniqueValues, func(i, j int) bool {
-		return uniqueValues[i] < uniqueValues[j]
-	})
+	slices.Sort(uniqueValues)
 
 	uniqueValues = uniqueValues[:x] // 0 - x exclusive
 

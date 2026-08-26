@@ -6,6 +6,7 @@ import (
 	"math/rand"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ninesl/dice-will-roll/controls"
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
 )
@@ -208,6 +209,83 @@ type SimpleRock struct {
 
 	transitionSteps uint8 // Bit-packed: lower 4 bits = X remaining steps, upper 4 bits = Y remaining steps
 	frameCount      uint8 // this could be used for the timer? independent animations
+}
+
+const ROCK_GROUP_MAX = 1024
+
+// logic, update loop only, simd things here
+type RocksGroupPosition struct {
+	X [ROCK_GROUP_MAX]float32 // x position
+	Y [ROCK_GROUP_MAX]float32 // y position
+	// Transition system for smooth sprite rotation during direction changes
+}
+
+type RockGroupSlope struct {
+	X [ROCK_GROUP_MAX]int8 // Current X speed component (-4 to +4)
+	Y [ROCK_GROUP_MAX]int8 // Current Y speed component (-4 to +4)
+}
+
+type RocksGroupUpdate struct {
+	Position *RocksGroupPosition
+	Slope    *RockGroupSlope
+}
+
+// TODO: bitpack these
+// actually we just would need to know the deltas?
+type RocksGroupSprite struct {
+	SpriteSlopeX [ROCK_GROUP_MAX]int8  // Visual speed X used during transition (gradually moves toward SpeedX)
+	SpriteSlopeY [ROCK_GROUP_MAX]int8  // Visual speed Y used during transition (gradually moves toward SpeedY)
+	SpriteIndex  [ROCK_GROUP_MAX]uint8 // Current rotation frame index (0-71)
+}
+
+// Rocks group score keeps track of sizes, etc. also ends up becoming the cannocial list of IDs for rocks via index. 0 is n/a
+// FIXME: this literally needs to be enums that aren't anything.
+// maybe we hack this by doing specific types on each, and force compiler optimized thing? like each type
+// we know will be a whatever, and this is better than interface
+// maybe this is a case for generics? I don't want ot force this paradigm, seems retarded
+type RocksGroupScore struct {
+	Score [ROCK_GROUP_MAX]RockScoreType //  how many 'rocks' this rock counts for during scoring. also determines size, etc
+}
+
+type RocksGroupManager struct {
+	update *RocksGroupUpdate
+	sprite *RocksGroupSprite
+	score  *RocksGroupScore
+}
+
+var (
+	rockGroupArenaX [ROCK_GROUP_MAX]*float32
+	rockGroupArenaY [ROCK_GROUP_MAX]*float32
+)
+
+// WARN: do not go any further without looking at the chatjibidti log on chatgpt iphone app
+
+func (rgm RocksGroupManager) UpdateFrame(mouseInfo controls.MouseInfo) {
+	for i := range ROCK_GROUP_MAX {
+		if rgm.update.Position.X[i] == 0 {
+			// it's gone
+			continue
+		}
+
+		mouseDist := mouseInfo.Position.X - rgm.update.Position.X[i]
+		// TODO: account for rock size
+		if mouseDist < float32(MAX_SLOPE) && mouseDist > float32(MIN_SLOPE) {
+			//scoreType := rgm.score[i]
+
+			// FIXME: this could be simd as well against the mouse position distance abs delta?
+			rgm.update.Slope.X[i] = -rgm.update.Slope.X[i]
+			rgm.update.Slope.Y[i] = -rgm.update.Slope.Y[i]
+
+		}
+
+		// TODO: account for dice center calculations (or collect them?)
+	}
+
+	for i := range ROCK_GROUP_MAX {
+		// FIXME: this is the simd part
+		rgm.update.Position.X[i] = rgm.update.Position.X[i] + BaseVelocity*float32(rgm.update.Slope.X[i])
+		rgm.update.Position.Y[i] = rgm.update.Position.Y[i] + BaseVelocity*float32(rgm.update.Slope.Y[i])
+	}
 }
 
 const BaseVelocity = 1.0

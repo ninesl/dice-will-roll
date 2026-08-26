@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -132,15 +133,8 @@ func (l *Level) startScoringDie(heldDice []*Die, musicState *music.NowPlaying) {
 	die.Fixed.X = x
 	die.Fixed.Y = y
 
-	durationMS := upcomingHookDeltaMS(musicState, music.LaneOne, 1)
-
-	if durationMS < 1 {
-		durationMS = 1
-	}
-	frames := int(durationMS * int64(ebiten.TPS()) / 1000)
-	if frames < 1 {
-		frames = 1
-	}
+	durationMS := max(upcomingHookDeltaMS(musicState, music.LaneOne, 1), 1)
+	frames := max(int(durationMS*int64(ebiten.TPS())/1000), 1)
 
 	l.scoringMoves = append(l.scoringMoves, scoringMove{
 		die:    die,
@@ -330,9 +324,7 @@ func (l *Level) finishScoring(heldDice []*Die, rockRenderer *rocks.RocksRenderer
 		for identity := range rocksByIdentity {
 			identities = append(identities, identity)
 		}
-		sort.Slice(identities, func(i, j int) bool {
-			return identities[i] < identities[j]
-		})
+		slices.Sort(identities)
 
 		for _, identity := range identities {
 			rockRenderer.ExplodeRocks(identity, rocksByIdentity[identity])

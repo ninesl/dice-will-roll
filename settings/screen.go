@@ -12,6 +12,7 @@ type ScreenSettings struct {
 	ResolutionX, ResolutionY       int
 	Fullscreen                     bool
 	FontSize                       float64 //= float64(ResolutionY / 64)
+	LineSpacing                    float64
 	Tiles                          TileSettings
 }
 
@@ -56,6 +57,7 @@ func (ss *ScreenSettings) SetScale(scale int) {
 
 	ss.Tiles.DieTileSize = ss.Tiles.TileSize32
 	ss.FontSize = float64(ss.ResolutionY) / float64(scale*8.0)
+	ss.LineSpacing = ss.FontSize * 1.25
 
 	// Pre-compute die collision constants (used for rock-die collision detection)
 	ss.Tiles.EffectiveDieTileSize = ss.Tiles.DieTileSize * 0.75

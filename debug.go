@@ -12,12 +12,10 @@ var (
 			{
 				Fmt:  "%.2fFPS",
 				Args: func() []any { return []any{ebiten.ActualFPS()} },
-				Inner: []DebugItem{
-					{
-						Fmt:  "%.2fTPS",
-						Args: func() []any { return []any{ebiten.ActualTPS()} },
-					},
-				},
+				Inner: []DebugItem{{
+					Fmt:  "%.2fTPS",
+					Args: func() []any { return []any{ebiten.ActualTPS()} },
+				}},
 			},
 		},
 	}

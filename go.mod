@@ -1,11 +1,12 @@
 module github.com/ninesl/dice-will-roll
 
-go 1.26.3
+go 1.27
 
 require (
 	github.com/guigui-gui/guigui v0.0.0-20260629081920-fc128e4daae1
 	github.com/hajimehoshi/ebiten v1.12.13
 	github.com/hajimehoshi/ebiten/v2 v2.10.0-alpha.11.0.20260629081344-79c74959e7ab
+	golang.org/x/image v0.43.0
 )
 
 require (
@@ -20,7 +21,6 @@ require (
 	github.com/jfreymuth/oggvorbis v1.0.5 // indirect
 	github.com/jfreymuth/pulse v0.1.1 // indirect
 	github.com/jfreymuth/vorbis v1.0.2 // indirect
-	golang.org/x/image v0.43.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.38.0 // indirect

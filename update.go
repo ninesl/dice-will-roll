@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"slices"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -169,14 +170,14 @@ func (g *Game) AnimateDice() {
 		// when logic for a d.Mode gets too complex put it in render/
 		if die.Mode == ROLLING {
 			// Check if this die has a Fixed position set (meaning it's resetting)
-			if d.Fixed.X != 0 || d.Fixed.Y != 0 {
-				resetting = append(resetting, d)
-			} else {
+			if d.Fixed.X == 0 && d.Fixed.Y == 0 {
 				// Normal rolling behavior
 				d.Velocity.X *= render.BounceFactor
 				d.Velocity.Y *= render.BounceFactor
 				d.Vec2.X += d.Velocity.X
 				d.Vec2.Y += d.Velocity.Y
+			} else {
+				resetting = append(resetting, d)
 			}
 
 			rolling = append(rolling, d)
@@ -257,12 +258,7 @@ func (g *Game) dieInActiveHand(die *Die) bool {
 	if g.ActiveLevel == nil {
 		return false
 	}
-	for _, activeDie := range g.ActiveLevel.ScoringHand {
-		if activeDie == die {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(g.ActiveLevel.ScoringHand, die)
 }
 
 func (g *Game) updatePrimaryHoverSwing(die *Die) {

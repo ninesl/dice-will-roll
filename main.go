@@ -31,7 +31,9 @@ var (
 
 // Command-line flags
 var (
-	numRocks = flag.Int("rocks", 10000, "Number of rocks to generate")
+	numRocks       = flag.Int("rocks", 10000, "Number of rocks to generate")
+	cpuProfilePath = flag.String("cpuprofile", "", "Write a CPU profile to this file")
+	memProfilePath = flag.String("memprofile", "", "Write a heap profile to this file on exit")
 )
 
 func init() {
@@ -159,8 +161,10 @@ func LoadGame() *Game {
 		RocksRenderer: rocks.NewRocksRenderer(rocksConfig),
 		Music:         nowPlaying,
 		opts: &DrawOptions{
-			image:  &ebiten.DrawImageOptions{},
-			text:   &text.DrawOptions{},
+			image: &ebiten.DrawImageOptions{},
+			text: &text.DrawOptions{
+				LayoutOptions: text.LayoutOptions{LineSpacing: settings.Screen.LineSpacing},
+			},
 			shader: &ebiten.DrawRectShaderOptions{}},
 		diceCenterBuffer:   make([]render.Vec3, 0, NUM_PLAYER_DICE),
 		diceVelocityBuffer: make([]render.Vec2, 0, NUM_PLAYER_DICE),
@@ -238,18 +242,21 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 }
 
 func main() {
-	// Parse command-line flags
-	flag.Parse()
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
 
+func run() error {
+	flag.Parse()
 	settings.InitScreenSettings(ebiten.Monitor())
+	rocks.Init(settings.Screen)
 	ebiten.SetFullscreen(true)
 
 	fmt.Printf("%#+v\n", settings.Screen)
 
 	game := LoadGame()
-	if err := ebiten.RunGame(game); err != nil {
-		log.Fatal(err)
-	}
+	return ebiten.RunGame(game)
 }
 
 func (a Action) String() string {

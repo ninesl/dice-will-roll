@@ -14,7 +14,9 @@ var (
     RotationX float
     RotationY float
     RotationZ float  // Z-axis rotation for spinning animation
-    
+   
+    LightSource vec3
+
     // Grayscale uniforms (0.0-1.0 range) for generating base white/gray sprites
     // These create depth/lighting variations that will be colored later via color_filter shader
     InnerColorDark vec3  // Dark gray for inner/crater areas
@@ -172,7 +174,7 @@ func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
     mr = mat3(vec3(cosZ,-sinZ,0.0),vec3(sinZ,cosZ,0.0),vec3(0.0,0.0,1.0))*mr;                 // Z rotation
     var ray vec3 = normalize(vec3(p,2.0))
     
-    var light vec3 = vec3(-30.0,0.0,-30.0)
+    var light vec3 = LightSource
     // Early test with primary ray to check if we hit the object
     var rt vec3 = distObj(pos*mr,ray*mr,pradius,mradius)
     

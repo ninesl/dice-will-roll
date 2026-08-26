@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/color"
 	"log"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -52,17 +53,22 @@ const (
 )
 
 func DEBUGView(screen *ebiten.Image, g *Game, textOpts *text.DrawOptions, viewMode DEBUGViewMode) {
-	DEBUGDrawMessage(screen, textOpts, g.ActiveLevel.String(), 0.0)
-	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%.2f fps / %.2f tps\n", ebiten.ActualFPS(), ebiten.ActualTPS()), settings.Screen.FontSize)
-	DEBUGMusic(screen, textOpts, g.Music)
-	DEBUGDrawMessage(screen, textOpts, "<space> to ROLL, <q> to SCORE\n", settings.Screen.FontSize*3)
+	debugLines := []string{
+		g.ActiveLevel.String(),
+		fmt.Sprintf("%.2f fps / %.2f tps", ebiten.ActualFPS(), ebiten.ActualTPS()),
+	}
+	if musicMessage := DEBUGMusic(g.Music); musicMessage != "" {
+		debugLines = append(debugLines, musicMessage)
+	}
+	debugLines = append(debugLines, "<space> to ROLL, <q> to SCORE")
+	DEBUGDrawMessage(screen, textOpts, strings.Join(debugLines, "\n"), 0)
 	DEBUGDiceValues(screen, textOpts, g.Dice)
 
 }
 
-func DEBUGMusic(screen *ebiten.Image, textOpts *text.DrawOptions, musicState *music.NowPlaying) {
+func DEBUGMusic(musicState *music.NowPlaying) string {
 	if musicState == nil {
-		return
+		return ""
 	}
 
 	upcoming := [10]int64{}
@@ -70,7 +76,7 @@ func DEBUGMusic(screen *ebiten.Image, textOpts *text.DrawOptions, musicState *mu
 		upcoming[lane] = musicState.UpcomingMS(music.HookLane(lane))
 	}
 
-	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("music ms=%d upcoming=%#v", musicState.MS(), upcoming), settings.Screen.FontSize*2)
+	return fmt.Sprintf("music ms=%d upcoming=%#v", musicState.MS(), upcoming)
 }
 
 func DEBUGDrawMessage(screen *ebiten.Image, textOpts *text.DrawOptions, msg string, y float64) {
@@ -89,7 +95,7 @@ func DEBUGInitTextElements() []textElement {
 
 func DEBUGValuesFromDice(dice []*Die) []int {
 	var track []int
-	for i := 0; i < len(dice); i++ {
+	for i := range dice {
 		track = append(track, dice[i].ActiveFace().NumPips())
 	}
 	return track
@@ -101,7 +107,7 @@ func DEBUGDiceValues(screen *ebiten.Image, textOpts *text.DrawOptions, dice []*D
 		Held    []*Die
 		Scoring []*Die
 	)
-	for i := 0; i < len(dice); i++ {
+	for i := range dice {
 		d := dice[i]
 		switch d.Mode {
 		case ROLLING:
@@ -112,10 +118,11 @@ func DEBUGDiceValues(screen *ebiten.Image, textOpts *text.DrawOptions, dice []*D
 			Scoring = append(Scoring, d)
 		}
 	}
-	y := (float64(settings.Screen.ResolutionY) - settings.Screen.FontSize)
-	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "roll", DEBUGValuesFromDice(Rolling)), y)
-	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "held", DEBUGValuesFromDice(Held)), y-settings.Screen.FontSize)
-	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v", "score", DEBUGValuesFromDice(Scoring)), y-settings.Screen.FontSize*2)
+	y := float64(settings.Screen.ResolutionY) - settings.Screen.FontSize - settings.Screen.LineSpacing*2
+	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v\n%5s%v\n%5s%v",
+		"roll", DEBUGValuesFromDice(Rolling),
+		"held", DEBUGValuesFromDice(Held),
+		"score", DEBUGValuesFromDice(Scoring)), y)
 }
 
 var (
