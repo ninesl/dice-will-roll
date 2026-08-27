@@ -161,7 +161,7 @@ CLEAR DISABLED LANES    inputValues.Masked(enabledLanes)
 // RockPositions stores packed uint32 values with layout [SX:4][SY:4][X:12][Y:12].
 type RockPositions []uint32
 
-// RockSprites stores packed uint32 values with layout [SX:4][SY:4][Rotation:4][Size:4][Unused:16].
+// RockSprites stores packed sprite orientation, size, and animation state.
 type RockSprites []uint32
 
 const (
@@ -171,27 +171,32 @@ const (
 	packedPositionYMask  uint32 = 0x0000_0FFF
 	spriteRotationMask32 uint32 = 0x00F0_0000
 	spriteRockSizeMask32 uint32 = 0x000F_0000
+	rotationStepsXMask32 uint32 = 0x0000_0F00
+	rotationStepsYMask32 uint32 = 0x0000_F000
+	animationTickMask32  uint32 = 0x0000_00F0
 )
 
 type Rocks struct {
 	Positions RockPositions
 	Sprites   RockSprites
-
-	Atlas *RockSpriteAtlas
+	Atlas     *RockSpriteAtlas
 }
 
 var (
 	SIMDVectorSize int
 
-	slopeXMask, slopeYMask                 simd.Uint32s
-	positionXMask, positionYMask           simd.Uint32s
-	spriteRockSizeMask, spriteRotationMask simd.Uint32s
-	oneCoordinates, zeroCoordinates        simd.Uint32s
-	maximumPixelX, maximumPixelY           simd.Uint32s
-	zeroSlope, oneSlope                    simd.Int32s
-	minimumSlope, maximumSlope             simd.Int32s
-	slopeOffset, halfSlopeCycle            simd.Int32s
-	negativeHalfSlopeCycle                 simd.Int32s
+	slopeXMask, slopeYMask                  simd.Uint32s
+	positionXMask, positionYMask            simd.Uint32s
+	spriteRockSizeMask, spriteRotationMask  simd.Uint32s
+	rotationStepsXMask, rotationStepsYMask  simd.Uint32s
+	animationTickMask                       simd.Uint32s
+	oneCoordinates, zeroCoordinates         simd.Uint32s
+	maximumRockSize, rotationFrameCount     simd.Uint32s
+	maximumRotationFrame                    simd.Uint32s
+	maximumPixelX, maximumPixelY            simd.Uint32s
+	zeroSlope, oneSlope                     simd.Int32s
+	minimumSlope, maximumSlope              simd.Int32s
+	slopeOffset, slopeCycle, halfSlopeCycle simd.Int32s
 )
 
 func init() {
@@ -206,20 +211,25 @@ func init() {
 	positionXMask = simd.BroadcastUint32s(packedPositionXMask)
 	positionYMask = simd.BroadcastUint32s(packedPositionYMask)
 
-	// Sprite: [ SX:4 ][ SY:4 ][ Rotation:4 ][ Size:4 ][ Unused:16 ]
+	// Sprite: [ SpriteSlopes:8 ][ RotationFrame:4 ][ SizeCode:4 ][ RotationStepsY:4 ][ RotationStepsX:4 ][ AnimationTick:4 ][ Unused:4 ]
 	spriteRotationMask = simd.BroadcastUint32s(spriteRotationMask32)
 	spriteRockSizeMask = simd.BroadcastUint32s(spriteRockSizeMask32)
+	rotationStepsXMask = simd.BroadcastUint32s(rotationStepsXMask32)
+	rotationStepsYMask = simd.BroadcastUint32s(rotationStepsYMask32)
+	animationTickMask = simd.BroadcastUint32s(animationTickMask32)
 
 	zeroCoordinates = simd.BroadcastUint32s(0)
 	oneCoordinates = simd.BroadcastUint32s(1)
+	maximumRockSize = simd.BroadcastUint32s(BitSpriteSlopeCodeCount - 1)
+	rotationFrameCount = simd.BroadcastUint32s(AtlasRotationFrames)
+	maximumRotationFrame = simd.BroadcastUint32s(AtlasRotationFrames - 1)
 	zeroSlope = simd.BroadcastInt32s(0)
 	oneSlope = simd.BroadcastInt32s(1)
 	minimumSlope = simd.BroadcastInt32s(-7)
 	maximumSlope = simd.BroadcastInt32s(7)
 	slopeOffset = simd.BroadcastInt32s(8)
+	slopeCycle = simd.BroadcastInt32s(atlasSlopeStates)
 	halfSlopeCycle = simd.BroadcastInt32s(7)
-	negativeHalfSlopeCycle = simd.BroadcastInt32s(-7)
-	debugRotationFrameCount = simd.BroadcastUint32s(BitSpriteRotationFrames)
 }
 
 // Init precomputes screen-dependent SIMD values after settings initializes the
@@ -251,14 +261,12 @@ func Init(screen settings.ScreenSettings) {
 func unpackSlopes(packed simd.Uint32s) (slopeX, slopeY simd.Int32s) {
 	/*
 		Position and sprite slopes use the same biased four-bit representation:
-
 		0000 = unused
 		0001 = -7
 		0111 = -1
 		1000 =  0
 		1001 = +1
 		1111 = +7
-
 		SX and SY occupy the same high eight bits in packed positions and sprites:
 
 		    [ SX:4 ][ SY:4 ][ remaining 24 bits ]
@@ -283,7 +291,6 @@ func unpackPositions(packedPositions simd.Uint32s) (
 	slopeX, slopeY = unpackSlopes(packedPositions)
 	positionX = packedPositions.And(positionXMask).ShiftAllRight(12)
 	positionY = packedPositions.And(positionYMask)
-
 	return positionX, positionY, slopeX, slopeY
 }
 
@@ -298,86 +305,117 @@ func packSlopes(slopeX, slopeY simd.Int32s) simd.Uint32s {
 func packPositions(positionX, positionY simd.Uint32s, slopeX, slopeY simd.Int32s) simd.Uint32s {
 	positionXBits := positionX.ShiftAllLeft(12).And(positionXMask)
 	positionYBits := positionY.And(positionYMask)
-
 	return packSlopes(slopeX, slopeY).Or(positionXBits).Or(positionYBits)
 }
 
 // UnpackPosition decodes one packed position.
-func UnpackPosition(packedPosition uint32) (positionX, positionY uint32, slopeX, slopeY int32) {
-	slopeX, slopeY = UnpackSlope(packedPosition)
-	positionX = (packedPosition & packedPositionXMask) >> 12
-	positionY = packedPosition & packedPositionYMask
+func UnpackPosition(pos uint32) (positionX, positionY, slopeX, slopeY int) {
+	slopeX, slopeY = UnpackSlope(pos)
+	positionX = int((pos & packedPositionXMask) >> 12)
+	positionY = int(pos & packedPositionYMask)
 	return positionX, positionY, slopeX, slopeY
 }
 
 // UnpackSlope decodes the shared slope fields in one packed value.
-func UnpackSlope(packed uint32) (slopeX, slopeY int32) {
-	slopeXCode := (packed & packedSlopeXMask) >> 28
-	slopeYCode := (packed & packedSlopeYMask) >> 24
+func UnpackSlope(slope uint32) (slopeX, slopeY int) {
+	slopeXCode := (slope & packedSlopeXMask) >> 28
+	slopeYCode := (slope & packedSlopeYMask) >> 24
 	if slopeXCode != 0 {
-		slopeX = int32(slopeXCode) - 8
+		slopeX = int(slopeXCode) - 8
 	}
 	if slopeYCode != 0 {
-		slopeY = int32(slopeYCode) - 8
+		slopeY = int(slopeYCode) - 8
 	}
 	return slopeX, slopeY
 }
 
 // PackPosition encodes one packed position.
 func PackPosition(positionX, positionY uint32, slopeX, slopeY int32) uint32 {
-	return PackSlope(slopeX, slopeY) |
+	return packSlope(slopeX, slopeY) |
 		(positionX<<12)&packedPositionXMask |
 		positionY&packedPositionYMask
 }
 
-// PackSlope encodes scalar slopes into their shared packed fields.
-func PackSlope(slopeX, slopeY int32) uint32 {
-	slopeXCode := uint32(slopeX + 8)
-	slopeYCode := uint32(slopeY + 8)
+// packSlope encodes scalar slopes into their shared packed fields.
+func packSlope(slopeX, slopeY int32) uint32 {
+	slopeXCode := uint32(slopeX + 0b1000)
+	slopeYCode := uint32(slopeY + 0b1000)
 	return (slopeXCode<<28)&packedSlopeXMask |
 		(slopeYCode<<24)&packedSlopeYMask
 }
 
-// [ SX:4 ][ SY:4 ][ Rotation:4 ][ rockSize:4 ][ Unused:16 ]
+// [ SpriteSlopeX:4 ][ SpriteSlopeY:4 ][ RotationFrame:4 ][ SizeCode:4 ][ RotationStepsY:4 ][ RotationStepsX:4 ][ AnimationTick:4 ][ Unused:4 ]
 //
-//	31..28   27..24      23..20       19..16       15..0
+//	31..28          27..24          23..20             19..16        15..12              11..8              7..4              3..0
 //
 // TODO: add metadata in 16 unused bits, explosion mask, etc.
 // unpackSprites returns unsigned size/rotation and signed slopes.
 func unpackSprites(sprite simd.Uint32s) (
-	rockSize, rotation simd.Uint32s,
+	rockSize, rotationFrame simd.Uint32s,
+	rotationStepsX, rotationStepsY, animationTick simd.Uint32s,
 	slopeX, slopeY simd.Int32s,
 ) {
 	slopeX, slopeY = unpackSlopes(sprite)
-	rotation = sprite.And(spriteRotationMask).ShiftAllRight(20)
-	//  FIXME: exploding, we don't need it here we do it a different way?
-
+	rotationFrame = sprite.And(spriteRotationMask).ShiftAllRight(20)
 	rockSize = sprite.And(spriteRockSizeMask).ShiftAllRight(16)
+	rotationStepsY = sprite.And(rotationStepsYMask).ShiftAllRight(12)
+	rotationStepsX = sprite.And(rotationStepsXMask).ShiftAllRight(8)
+	animationTick = sprite.And(animationTickMask).ShiftAllRight(4)
 
-	return rockSize, rotation, slopeX, slopeY
+	return rockSize, rotationFrame,
+		rotationStepsX, rotationStepsY, animationTick,
+		slopeX, slopeY
 }
 
-// packSprites packs unsigned size/rotation with signed X/Y slopes.
-func packSprites(rockSize, rotation simd.Uint32s, slopeX, slopeY simd.Int32s) simd.Uint32s {
-	rotationBits := rotation.ShiftAllLeft(20).And(spriteRotationMask)
+// packSprites packs visual orientation, size, and animation state.
+func packSprites(
+	rockSize, rotationFrame simd.Uint32s,
+	rotationStepsX, rotationStepsY, animationTick simd.Uint32s,
+	slopeX, slopeY simd.Int32s,
+) simd.Uint32s {
+	rotationBits := rotationFrame.ShiftAllLeft(20).And(spriteRotationMask)
 	rockSizeBits := rockSize.ShiftAllLeft(16).And(spriteRockSizeMask)
+	rotationStepsYBits := rotationStepsY.ShiftAllLeft(12).And(rotationStepsYMask)
+	rotationStepsXBits := rotationStepsX.ShiftAllLeft(8).And(rotationStepsXMask)
+	animationTickBits := animationTick.ShiftAllLeft(4).And(animationTickMask)
 
-	return packSlopes(slopeX, slopeY).Or(rotationBits).Or(rockSizeBits)
+	return packSlopes(slopeX, slopeY).
+		Or(rotationBits).
+		Or(rockSizeBits).
+		Or(rotationStepsYBits).
+		Or(rotationStepsXBits).
+		Or(animationTickBits)
 }
 
 // UnpackSprite decodes one packed sprite.
-func UnpackSprite(packedSprite uint32) (rockSize, rotation uint32, slopeX, slopeY int32) {
+func UnpackSprite(packedSprite uint32) (
+	rockSize, rotationFrame,
+	rotationStepsX, rotationStepsY, animationTick,
+	slopeX, slopeY int,
+) {
 	slopeX, slopeY = UnpackSlope(packedSprite)
-	rockSize = (packedSprite & spriteRockSizeMask32) >> 16
-	rotation = (packedSprite & spriteRotationMask32) >> 20
-	return rockSize, rotation, slopeX, slopeY
+	rockSize = int((packedSprite & spriteRockSizeMask32) >> 16)
+	rotationFrame = int((packedSprite & spriteRotationMask32) >> 20)
+	rotationStepsY = int((packedSprite & rotationStepsYMask32) >> 12)
+	rotationStepsX = int((packedSprite & rotationStepsXMask32) >> 8)
+	animationTick = int((packedSprite & animationTickMask32) >> 4)
+	return rockSize, rotationFrame,
+		rotationStepsX, rotationStepsY, animationTick,
+		slopeX, slopeY
 }
 
 // PackSprite encodes one packed sprite.
-func PackSprite(rockSize, rotation uint32, slopeX, slopeY int32) uint32 {
-	return PackSlope(slopeX, slopeY) |
-		(rotation<<20)&spriteRotationMask32 |
-		(rockSize<<16)&spriteRockSizeMask32
+func PackSprite(
+	rockSize, rotationFrame,
+	rotationStepsX, rotationStepsY, animationTick uint32,
+	slopeX, slopeY int32,
+) uint32 {
+	return packSlope(slopeX, slopeY) |
+		(rotationFrame<<20)&spriteRotationMask32 |
+		(rockSize<<16)&spriteRockSizeMask32 |
+		(rotationStepsY<<12)&rotationStepsYMask32 |
+		(rotationStepsX<<8)&rotationStepsXMask32 |
+		(animationTick<<4)&animationTickMask32
 }
 
 func incrementSpriteSlope(spriteSlope simd.Int32s) simd.Int32s {
@@ -385,78 +423,117 @@ func incrementSpriteSlope(spriteSlope simd.Int32s) simd.Int32s {
 	return minimumSlope.IfElse(incrementedSlope.Greater(maximumSlope), incrementedSlope)
 }
 
-func decrementSpriteSlope(spriteSlope simd.Int32s) simd.Int32s {
-	decrementedSlope := spriteSlope.Sub(oneSlope)
-	return maximumSlope.IfElse(decrementedSlope.Less(minimumSlope), decrementedSlope)
+// updateRotationFrame matches SimpleRock.UpdateAnimation's Z rotation direction.
+func updateRotationFrame(rotationFrame simd.Uint32s, slopeX, slopeY simd.Int32s) simd.Uint32s {
+	isMoving := slopeX.NotEqual(zeroSlope).And(slopeY.NotEqual(zeroSlope))
+	incrementFrame := isMoving.And(slopeX.GreaterEqual(zeroSlope))
+	decrementFrame := isMoving.And(slopeX.Less(zeroSlope))
+
+	decremented := rotationFrame.Sub(oneCoordinates)
+	decremented = maximumRotationFrame.IfElse(rotationFrame.Equal(zeroCoordinates), decremented)
+
+	incremented := rotationFrame.Add(oneCoordinates)
+	incremented = zeroCoordinates.IfElse(incremented.GreaterEqual(rotationFrameCount), incremented)
+
+	rotationFrame = incremented.IfElse(incrementFrame, rotationFrame)
+	return decremented.IfElse(decrementFrame, rotationFrame)
 }
 
-// trailSpriteSlope moves one state toward the position slope with direct -7/+7 rollover.
-func trailSpriteSlope(spriteSlope, positionSlope simd.Int32s) simd.Int32s {
-	difference := positionSlope.Sub(spriteSlope)
-	moveForward := difference.Greater(zeroSlope).
-		And(difference.LessEqual(halfSlopeCycle)).
-		Or(difference.Less(negativeHalfSlopeCycle))
-	trailedSlope := incrementSpriteSlope(spriteSlope).IfElse(
-		moveForward,
-		decrementSpriteSlope(spriteSlope),
-	)
-	return spriteSlope.IfElse(spriteSlope.Equal(positionSlope), trailedSlope)
+func updateAnimationTick(
+	animationTick, rockSize simd.Uint32s,
+	slopeX, slopeY simd.Int32s,
+) (simd.Uint32s, simd.Mask32s) {
+	isMoving := slopeX.NotEqual(zeroSlope).Or(slopeY.NotEqual(zeroSlope))
+	animationTick = animationTick.Add(oneCoordinates.Masked(isMoving))
+	rotationDue := animationTick.GreaterEqual(rockSize).
+		And(rockSize.NotEqual(zeroCoordinates)).
+		And(isMoving)
+	animationTick = zeroCoordinates.IfElse(rotationDue, animationTick)
+	return animationTick, rotationDue
+}
+
+func spriteSlopeDistance(spriteSlope, positionSlope simd.Int32s) simd.Uint32s {
+	difference := positionSlope.Sub(spriteSlope).Abs()
+	wrappedDistance := slopeCycle.Sub(difference)
+	return wrappedDistance.IfElse(
+		difference.Greater(halfSlopeCycle), difference,
+	).ConvertToUint32()
+}
+
+func updateRotationSteps(
+	spriteSlopeX, spriteSlopeY, slopeX, slopeY simd.Int32s,
+	rotationStepsX, rotationStepsY simd.Uint32s,
+	hitX, hitY, animationDue simd.Mask32s,
+) (simd.Int32s, simd.Int32s, simd.Uint32s, simd.Uint32s) {
+	tumbleStepsX := slopeX.Abs().ConvertToUint32()
+	tumbleStepsY := slopeY.Abs().ConvertToUint32()
+	rotationStepsX = spriteSlopeDistance(spriteSlopeX, slopeX).IfElse(hitX, rotationStepsX)
+	rotationStepsY = tumbleStepsY.Add(tumbleStepsY).IfElse(hitX, rotationStepsY)
+	rotationStepsX = tumbleStepsX.Add(tumbleStepsX).IfElse(hitY, rotationStepsX)
+	rotationStepsY = spriteSlopeDistance(spriteSlopeY, slopeY).IfElse(hitY, rotationStepsY)
+
+	rotateX := rotationStepsX.NotEqual(zeroCoordinates).And(animationDue)
+	rotateY := rotationStepsY.NotEqual(zeroCoordinates).And(animationDue)
+	spriteSlopeX = incrementSpriteSlope(spriteSlopeX).IfElse(rotateX, spriteSlopeX)
+	spriteSlopeY = incrementSpriteSlope(spriteSlopeY).IfElse(rotateY, spriteSlopeY)
+	rotationStepsX = rotationStepsX.Sub(oneCoordinates.Masked(rotateX))
+	rotationStepsY = rotationStepsY.Sub(oneCoordinates.Masked(rotateY))
+	return spriteSlopeX, spriteSlopeY, rotationStepsX, rotationStepsY
 }
 
 // update loads matching batches from the two global rock slices, unpacks their
 // fields into SIMD registers, updates them, repacks them, and writes them back.
-func update(positions RockPositions, sprites RockSprites) {
-	if len(positions) != len(sprites) {
+func UpdateRocks(rocks *Rocks) {
+	if len(rocks.Positions) != len(rocks.Sprites) {
 		panic("positions and sprites must have equal lengths")
 	}
 
-	for firstRockIndex := 0; firstRockIndex < len(positions); firstRockIndex += SIMDVectorSize {
-		packedPositionLanes, loadedRockCount := simd.LoadUint32sPart(positions[firstRockIndex:])
-		packedSpriteLanes, _ := simd.LoadUint32sPart(sprites[firstRockIndex:])
+	for firstRockIndex := 0; firstRockIndex < len(rocks.Positions); firstRockIndex += SIMDVectorSize {
+		packedPositionLanes, loadedRockCount := simd.LoadUint32sPart(rocks.Positions[firstRockIndex:])
+		packedSpriteLanes, _ := simd.LoadUint32sPart(rocks.Sprites[firstRockIndex:])
 
-		rockSize, spriteRotation, spriteSlopeX, spriteSlopeY := unpackSprites(packedSpriteLanes)
+		rockSize, rotationFrame,
+			rotationStepsX, rotationStepsY, animationTick,
+			spriteSlopeX, spriteSlopeY := unpackSprites(packedSpriteLanes)
 		positionX, positionY, slopeX, slopeY := unpackPositions(packedPositionLanes)
 
 		// Zero out everything if positionX or positionY is 0.
 		// 0 means dead rock
 		// TODO: show 0001_000_000 example
-		rockWasVisible := positionX.NotEqual(zeroCoordinates).
-			And(positionY.NotEqual(zeroCoordinates))
+		//rockWasVisible := positionX.NotEqual(zeroCoordinates).
+		//	And(positionY.NotEqual(zeroCoordinates))
 
 		positionX = positionX.ConvertToInt32().Add(slopeX).ConvertToUint32()
 		positionY = positionY.ConvertToInt32().Add(slopeY).ConvertToUint32()
 
-		spriteSlopeX = trailSpriteSlope(spriteSlopeX, slopeX)
-		spriteSlopeY = trailSpriteSlope(spriteSlopeY, slopeY)
+		positionX, positionY, slopeX, slopeY, hitX, hitY := collideWalls(
+			positionX, positionY,
+			slopeX, slopeY)
 
-		// FIXME: clamp, will need to think about bc of cetnerin
-		// if positionX is beyond maximumPixelX, set it to maximumPixelX or 1,
-		//	set xSlope to .Neg.
-		// same for positionY, maximumPixelY, and ySlope
+		animationTick, animationDue := updateAnimationTick(animationTick, rockSize, slopeX, slopeY)
+		nextRotationFrame := updateRotationFrame(rotationFrame, slopeX, slopeY)
+		rotationFrame = nextRotationFrame.IfElse(animationDue, rotationFrame)
+		spriteSlopeX, spriteSlopeY,
+			rotationStepsX, rotationStepsY = updateRotationSteps(
+			spriteSlopeX, spriteSlopeY,
+			slopeX, slopeY,
+			rotationStepsX, rotationStepsY,
+			hitX, hitY, animationDue)
 
 		updatedPackedPositions := packPositions(
-			positionX,
-			positionY,
-			slopeX,
-			slopeY,
-		)
+			positionX, positionY,
+			slopeX, slopeY)
 		// updatedPackedPositions = updatedPackedPositions.Masked(rockWasVisible)
 
 		updatedPackedSprites := packSprites(
-			rockSize,
-			spriteRotation,
-			spriteSlopeX,
-			spriteSlopeY,
-		)
-		updatedPackedSprites = updatedPackedSprites.Masked(rockWasVisible)
+			rockSize, rotationFrame,
+			rotationStepsX, rotationStepsY, animationTick,
+			spriteSlopeX, spriteSlopeY)
+		//updatedPackedSprites = updatedPackedSprites.Masked(rockWasVisible)
 
 		// StorePart writes only the lanes loaded for this batch. For a short
 		// final batch, padded zero lanes are not written past the slice end.
-		updatedPackedPositions.StorePart(
-			positions[firstRockIndex : firstRockIndex+loadedRockCount],
-		)
-		updatedPackedSprites.StorePart(
-			sprites[firstRockIndex : firstRockIndex+loadedRockCount],
-		)
+		updatedPackedPositions.StorePart(rocks.Positions[firstRockIndex : firstRockIndex+loadedRockCount])
+		updatedPackedSprites.StorePart(rocks.Sprites[firstRockIndex : firstRockIndex+loadedRockCount])
 	}
 }
