@@ -161,7 +161,10 @@ func LoadGame() *Game {
 		RocksRenderer: rocks.NewRocksRenderer(rocksConfig),
 		Music:         nowPlaying,
 		opts: &DrawOptions{
-			image: &ebiten.DrawImageOptions{},
+			image: &ebiten.DrawImageOptions{
+				DisableMipmaps: false,
+				Filter:         ebiten.FilterNearest,
+			},
 			text: &text.DrawOptions{
 				LayoutOptions: text.LayoutOptions{LineSpacing: settings.Screen.LineSpacing},
 			},

@@ -5,14 +5,11 @@ import (
 	"fmt"
 	"image/color"
 	"log"
-	"strings"
 
 	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/ninesl/dice-will-roll/music"
-	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/settings"
 )
 
@@ -33,40 +30,46 @@ func SetFonts() {
 	}
 }
 
-type SceneID int
-
 type PlayerUIState struct {
-	Scenes         [SceneNum]*Scene
-	ActiveScreenID SceneID // the index of the Screen that is currently being used
+	DebugLines []string
 }
 
-type textElement struct {
-	xy   render.Vec2
-	size render.Vec2
-	msg  func(...any) string
+func NewUIState() *PlayerUIState {
+	SetFonts()
+	return &PlayerUIState{
+		DebugLines: make([]string, 0),
+	}
 }
 
-type DEBUGViewMode int
+func (g *Game) UpdateDebugLines() {
+	var (
+		rolling []*Die
+		held    []*Die
+		scoring []*Die
+	)
+	for _, d := range g.Dice {
+		switch d.Mode {
+		case ROLLING:
+			rolling = append(rolling, d)
+		case HELD:
+			held = append(held, d)
+		case SCORING:
+			scoring = append(scoring, d)
+		}
+	}
 
-const (
-	DEBUGPLAYView DEBUGViewMode = iota
-)
-
-func DEBUGView(screen *ebiten.Image, g *Game, textOpts *text.DrawOptions, viewMode DEBUGViewMode) {
-	debugLines := []string{
-		g.ActiveLevel.String(),
+	g.UIState.DebugLines = []string{
 		fmt.Sprintf("%.2f fps / %.2f tps", ebiten.ActualFPS(), ebiten.ActualTPS()),
+		g.ActiveLevel.String(),
+		DEBUGMusicLine(g.Music),
+		fmt.Sprintf("%5s%v", "roll", DEBUGValuesFromDice(rolling)),
+		fmt.Sprintf("%5s%v", "held", DEBUGValuesFromDice(held)),
+		fmt.Sprintf("%5s%v", "score", DEBUGValuesFromDice(scoring)),
+		"<space> to ROLL, <q> to SCORE",
 	}
-	if musicMessage := DEBUGMusic(g.Music); musicMessage != "" {
-		debugLines = append(debugLines, musicMessage)
-	}
-	debugLines = append(debugLines, "<space> to ROLL, <q> to SCORE")
-	DEBUGDrawMessage(screen, textOpts, strings.Join(debugLines, "\n"), 0)
-	DEBUGDiceValues(screen, textOpts, g.Dice)
-
 }
 
-func DEBUGMusic(musicState *music.NowPlaying) string {
+func DEBUGMusicLine(musicState *music.NowPlaying) string {
 	if musicState == nil {
 		return ""
 	}
@@ -87,12 +90,6 @@ func DEBUGDrawMessage(screen *ebiten.Image, textOpts *text.DrawOptions, msg stri
 	textOpts.ColorScale.Reset()
 }
 
-func DEBUGInitTextElements() []textElement {
-	var debugTxts = make([]textElement, 0)
-
-	return debugTxts
-}
-
 func DEBUGValuesFromDice(dice []*Die) []int {
 	var track []int
 	for i := range dice {
@@ -101,49 +98,10 @@ func DEBUGValuesFromDice(dice []*Die) []int {
 	return track
 }
 
-func DEBUGDiceValues(screen *ebiten.Image, textOpts *text.DrawOptions, dice []*Die) {
-	var (
-		Rolling []*Die
-		Held    []*Die
-		Scoring []*Die
-	)
-	for i := range dice {
-		d := dice[i]
-		switch d.Mode {
-		case ROLLING:
-			Rolling = append(Rolling, d)
-		case HELD:
-			Held = append(Held, d)
-		case SCORING:
-			Scoring = append(Scoring, d)
-		}
-	}
-	y := float64(settings.Screen.ResolutionY) - settings.Screen.FontSize - settings.Screen.LineSpacing*2
-	DEBUGDrawMessage(screen, textOpts, fmt.Sprintf("%5s%v\n%5s%v\n%5s%v",
-		"roll", DEBUGValuesFromDice(Rolling),
-		"held", DEBUGValuesFromDice(Held),
-		"score", DEBUGValuesFromDice(Scoring)), y)
-}
+// TODO: this will be UI hot/active state, not impl rn
+// will need to figure out how to have text elements
 
-var (
-	FPStext = textElement{}
-)
-
-//	func (t textElement) Draw(*ebiten.Image, *DrawOptions) {
-//		textOpts.GeoM.Translate(0, float64(y))
-//		textOpts.ColorScale.ScaleWithColor(color.White)
-//		text.Draw(screen, msg, &text.GoTextFace{
-//			Source: DEBUG_FONT,
-//			Size:   settings.Screen.FontSize,
-//		}, textOpts)
-//		textOpts.GeoM.Reset()
-//		textOpts.ColorScale.Reset()
-//	}
-func (t textElement) DrawActive(*ebiten.Image, *DrawOptions) {}
-func (t textElement) DrawHot(*ebiten.Image, *DrawOptions)    {}
-func (t textElement) XY() render.Vec2                        { return t.xy }   // top left
-func (t textElement) Size() render.Vec2                      { return t.size } // X is width, Y is Height
-
+/*
 type Element interface {
 	Draw(*ebiten.Image, *DrawOptions)
 	DrawActive(*ebiten.Image, *DrawOptions)
@@ -245,3 +203,4 @@ func (g *Game) updateHotElement(cursor render.Vec2) {
 		_ = e
 	}
 }
+*/

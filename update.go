@@ -29,6 +29,8 @@ func (g *Game) Update() error {
 	g.AnimateDice()
 	g.AnimateRocks()
 
+	g.UpdateDebugLines()
+
 	return nil
 }
 

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/ninesl/dice-will-roll/music"
@@ -34,18 +36,18 @@ func (g *Game) Draw(s *ebiten.Image) {
 	// likely redundant
 	g.opts.image.GeoM.Reset()
 
-	s.DrawRectShader(settings.Screen.ResolutionX, settings.Screen.ResolutionY,
+	s.DrawRectShader(
+		settings.Screen.ResolutionX,
+		settings.Screen.ResolutionY,
 		g.Shaders[shaders.BackgroundShaderKey],
 		g.opts.shader)
 
 	DrawROLLZONE(s, g.opts.image)
 
 	g.RocksRenderer.DrawRocks(s)
-
-	DEBUGView(s, g, g.opts.text, DEBUGPLAYView)
-
 	g.DrawDice(s, g.opts.image)
 
+	DEBUGDrawMessage(s, g.opts.text, strings.Join(g.UIState.DebugLines, "\n"), 0)
 	//g.DrawUI(s, g.opts)
 	// g.DrawUI(s)
 
