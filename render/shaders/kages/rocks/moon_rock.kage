@@ -156,7 +156,7 @@ func Fragment(dstPos vec4, srcPos vec2, _ vec4) vec4 {
     // )
     
     //. eyeball pos
-    var pos vec3 = vec3(0.0,0.0,2.25)
+    var pos vec3 = vec3(0.0,0.0,2.2)
     
     // NEW: Use explicit rotation uniforms for sprite sheet generation
     var rotate vec3 = vec3(RotationX, RotationY, RotationZ)

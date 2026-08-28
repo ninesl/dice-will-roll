@@ -3,7 +3,7 @@ package rocks
 import (
 	"fmt"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ninesl/dice-will-roll/controls"
@@ -545,16 +545,16 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 		switch {
 		case remaining >= HugeScore && rand.Float32() < 0.15: // 15% chance for Huge
 			// Pick random Huge variant (10, 11, or 12)
-			scoreType = HugeLarge + RockScoreType(rand.Intn(rockScoreVariants))
+			scoreType = HugeLarge + RockScoreType(rand.N(rockScoreVariants))
 		case remaining >= BigScore && rand.Float32() < 0.25: // 25% chance for Big
 			// Pick random Big variant (7, 8, or 9)
-			scoreType = BigLarge + RockScoreType(rand.Intn(rockScoreVariants))
+			scoreType = BigLarge + RockScoreType(rand.N(rockScoreVariants))
 		case remaining >= MediumScore && rand.Float32() < 0.35: // 35% chance for Medium
 			// Pick random Medium variant (4, 5, or 6)
-			scoreType = MediumLarge + RockScoreType(rand.Intn(rockScoreVariants))
+			scoreType = MediumLarge + RockScoreType(rand.N(rockScoreVariants))
 		default: // Otherwise Small
 			// Pick random Small variant (1, 2, or 3)
-			scoreType = SmallLarge + RockScoreType(rand.Intn(rockScoreVariants))
+			scoreType = SmallLarge + RockScoreType(rand.N(rockScoreVariants))
 		}
 
 		// Random position
@@ -564,11 +564,11 @@ func (r *RocksRenderer) generateRocks(config RocksConfig) {
 		}
 
 		// Pick random rotation frame
-		spriteIndex := uint8(rand.Intn(ROTATION_FRAMES))
+		spriteIndex := uint8(rand.N(ROTATION_FRAMES))
 
 		// Generate slope values
-		slopeX := int8(rand.Intn(int(DIRECTIONS_TO_SNAP)+1)) - MAX_SLOPE
-		slopeY := int8(rand.Intn(int(DIRECTIONS_TO_SNAP)+1)) - MAX_SLOPE
+		slopeX := int8(rand.N(int(DIRECTIONS_TO_SNAP)+1)) - MAX_SLOPE
+		slopeY := int8(rand.N(int(DIRECTIONS_TO_SNAP)+1)) - MAX_SLOPE
 
 		// Convert slopes to sprite indices
 		spriteSlopeX := slopeX + MAX_SLOPE
@@ -748,13 +748,13 @@ func splitRockScores(score int) []int {
 func randomRockTypeForScore(score int) RockScoreType {
 	switch score {
 	case SmallScore:
-		return SmallLarge + RockScoreType(rand.Intn(rockScoreVariants))
+		return SmallLarge + RockScoreType(rand.N(rockScoreVariants))
 	case MediumScore:
-		return MediumLarge + RockScoreType(rand.Intn(rockScoreVariants))
+		return MediumLarge + RockScoreType(rand.N(rockScoreVariants))
 	case BigScore:
-		return BigLarge + RockScoreType(rand.Intn(rockScoreVariants))
+		return BigLarge + RockScoreType(rand.N(rockScoreVariants))
 	case HugeScore:
-		return HugeLarge + RockScoreType(rand.Intn(rockScoreVariants))
+		return HugeLarge + RockScoreType(rand.N(rockScoreVariants))
 	default:
 		panic(fmt.Errorf("invalid rock score %d", score))
 	}

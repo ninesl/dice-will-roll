@@ -3,7 +3,7 @@ package dice
 import (
 	"fmt"
 	"log"
-	"math/rand"
+	"math/rand/v2"
 	"strings"
 )
 
@@ -205,7 +205,7 @@ func (d *Die) ActiveFaceIndex() int {
 //
 // SHOULD NOT BE USED TO MODIFY THE FACE IT RETURNS! (except in specific cases)
 func (d *Die) Roll() *Face {
-	d.activeFace = rand.Intn(len(d.faces))
+	d.activeFace = rand.N(len(d.faces))
 	return d.ActiveFace()
 }
 

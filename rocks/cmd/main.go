@@ -32,35 +32,39 @@ type game struct {
 	Debug                   *rocks.RockDebug
 	animTick, ticksPerFrame int
 	fontFace                *text.GoTextFace
-	textOpts                *text.DrawOptions
 	input                   rocks.DebugInput
 }
 
 func main() {
 	settings.InitScreenSettings(ebiten.Monitor())
-	textOptions := &text.DrawOptions{}
-	textOptions.GeoM.Translate(settings.Screen.FontSize, settings.Screen.FontSize)
-	textOptions.ColorScale.ScaleWithColor(color.White)
-	textOptions.LayoutOptions.LineSpacing = settings.Screen.FontSize * 1.25
 
 	shaderMap := shaders.LoadShaders()
 	packedPosition := rocks.PackPosition(
-		uint32(settings.Screen.ResolutionX/4),
+		uint32(settings.Screen.ResolutionX/2),
 		uint32(settings.Screen.ResolutionY/2),
 		0, 0)
 	packedPosition2 := rocks.PackPosition(
 		uint32(settings.Screen.ResolutionX/4*3),
 		uint32(settings.Screen.ResolutionY/2),
-		8, 8)
-	packedSprite := uint32(0b0001_0001_0000_1000_0000000000000000)
+		7, 7)
+	packedSprite := rocks.PackSprite(rocks.InputSprite{
+		SlopeX:    -0x7,
+		SlopeY:    -0x7,
+		SlopeZ:    0x0,
+		SizeScore: 0x8,
+		StepY:     0x0,
+		StepX:     0x0,
+		StepZ:     0x0,
+		StepTick:  0x0,
+		PermaSpin: 0x0,
+		SpinAgain: 0x0,
+	})
 
 	positions := rocks.RockPositions{packedPosition, packedPosition2}
 	sprites := rocks.RockSprites{packedSprite, packedSprite}
 
 	rockAtlas := rocks.InitRockAtlas(
-		shaderMap[shaders.RocksShaderKey],
-		settings.Screen.Tiles.HalfTileSize32,
-		len(positions))
+		shaderMap[shaders.RocksShaderKey])
 	fontSource, err := text.NewGoTextFaceSource(bytes.NewReader(fonts.ArcadeN_ttf))
 	if err != nil {
 		log.Fatal(err)
@@ -69,10 +73,15 @@ func main() {
 	ebiten.SetWindowTitle("Packed Rock Sprite Rotations")
 
 	game := &game{
-		Rocks: &rocks.Rocks{Positions: positions, Sprites: sprites, Atlas: rockAtlas},
+		Rocks: &rocks.Rocks{
+			Positions:   positions,
+			Sprites:     sprites,
+			Atlas:       rockAtlas,
+			DrawOptions: &settings.Screen.DrawOptions.DrawImageOptions,
+			AmountScale: rocks.RockAmountScaleIndex(len(positions)),
+		},
 		fontFace: &text.GoTextFace{
 			Source: fontSource, Size: settings.Screen.FontSize},
-		textOpts:      textOptions,
 		ticksPerFrame: 2,
 	}
 
@@ -97,7 +106,6 @@ func (g *game) Update() error {
 	g.input.DecrementAmountScale = !g.input.IncrementAmountScale && inpututil.IsKeyJustPressed(ebiten.KeyArrowDown)
 
 	g.animTick++
-
 	if g.animTick >= g.ticksPerFrame {
 		g.animTick = 0
 		if g.Debug.VisitedFrames == g.Debug.TotalFrames {
@@ -118,7 +126,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 
 func (g *game) drawDebugInfo(screen *ebiten.Image) {
 	message := fmt.Sprintf(
-		"FPS: %.2f\nTPS: %.2f\nTicksPerFrame: %d\nVisitedFrames: %d/%d\nSpriteSheetMemory: %.2f MB\nPositionsMemory: %.4f KB\nSpritesMemory: %.4f KB\nSpriteSlopes: [%d][%d]\nRotationFrame: %d\nRotationSteps: [%d][%d]\nAnimationTick: %d\nPackedSlopes: [%04b][%04b]\nSizeCode: %04b (%d)\nDrawScale: %.3f\nDrawSize: %.0fx%.0f\nPackedPosition: %032b\nPackedSprite: %032b\n\n1-9: ticks per frame",
+		"FPS: %.2f\nTPS: %.2f\nTicksPerFrame: %d\nVisitedFrames: %d/%d\nSpriteSheetMemory: %.2f MB\nPositionsMemory: %.4f KB\nSpritesMemory: %.4f KB\nSlopes: [%d][%d][%d]\nVelocities: [%d][%d]\nSteps: [%d][%d][%d]\nStepTick: %d\nPermaSpin: %d\nSpinAgain: %d\nPackedSlopes: [%04b][%04b]\nSizeScore: %04b (%d)\nDrawScale: %.3f\nDrawSize: %.0fx%.0f\nPackedPosition: %032b\nPackedSprite: %032b\n\n1-9: ticks per frame",
 		g.Debug.FPS,
 		g.Debug.TPS,
 		g.ticksPerFrame,
@@ -129,21 +137,32 @@ func (g *game) drawDebugInfo(screen *ebiten.Image) {
 		g.Debug.SpritesKB,
 		g.Debug.SlopeX,
 		g.Debug.SlopeY,
-		g.Debug.RotationFrame,
-		g.Debug.RotationStepsX,
-		g.Debug.RotationStepsY,
-		g.Debug.AnimationTick,
+		g.Debug.SlopeZ,
+		g.Debug.VelocityX,
+		g.Debug.VelocityY,
+		g.Debug.StepX,
+		g.Debug.StepY,
+		g.Debug.StepZ,
+		g.Debug.StepTick,
+		g.Debug.PermaSpin,
+		g.Debug.SpinAgain,
 		g.Debug.SlopeX+8,
 		g.Debug.SlopeY+8,
-		g.Debug.Size,
-		g.Debug.Size,
+		g.Debug.SizeScore,
+		g.Debug.SizeScore,
 		g.Debug.Scale,
 		g.Debug.DrawSize,
 		g.Debug.DrawSize,
 		g.Debug.PackedPosition,
 		g.Debug.PackedSprite,
 	)
-	text.Draw(screen, message, g.fontFace, g.textOpts)
+
+	drawOptions := settings.Screen.DrawOptions
+	drawOptions.GeoM.Reset()
+	drawOptions.GeoM.Translate(settings.Screen.FontSize, settings.Screen.FontSize)
+	drawOptions.ColorScale.Reset()
+	drawOptions.ColorScale.SetWithColor(color.White)
+	text.Draw(screen, message, g.fontFace, drawOptions)
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {

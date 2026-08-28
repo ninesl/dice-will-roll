@@ -2,7 +2,7 @@ package dice
 
 import (
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"reflect"
 	"sort"
 	"testing"
@@ -52,7 +52,7 @@ func generateDiceValues(values []int, maxValue int) []Die {
 
 func randDiceHand(x, n int) {
 	perms := generatePermutations(x, n)
-	index := rand.Intn(len(perms))
+	index := rand.N(len(perms))
 	values := perms[index]
 	dice := generateDiceValues(values, x)
 

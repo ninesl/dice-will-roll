@@ -1,6 +1,9 @@
 package settings
 
-import "github.com/hajimehoshi/ebiten/v2"
+import (
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
+)
 
 var (
 	Screen ScreenSettings
@@ -14,6 +17,7 @@ type ScreenSettings struct {
 	FontSize                       float64 //= float64(ResolutionY / 64)
 	LineSpacing                    float64
 	Tiles                          TileSettings
+	DrawOptions                    *text.DrawOptions
 }
 
 type TileSettings struct {
@@ -41,6 +45,9 @@ func InitScreenSettings(monitor *ebiten.MonitorType) {
 		Monitor:        monitor,
 		MaxResolutionX: bX, MaxResolutionY: bY,
 		Fullscreen: true,
+		DrawOptions: &text.DrawOptions{
+			DrawImageOptions: ebiten.DrawImageOptions{DisableMipmaps: true},
+		},
 	}
 	Screen.SetResolution(
 		Screen.MaxResolutionX,
@@ -58,6 +65,7 @@ func (ss *ScreenSettings) SetScale(scale int) {
 	ss.Tiles.DieTileSize = ss.Tiles.TileSize32
 	ss.FontSize = float64(ss.ResolutionY) / float64(scale*8.0)
 	ss.LineSpacing = ss.FontSize * 1.25
+	ss.DrawOptions.LayoutOptions.LineSpacing = ss.LineSpacing
 
 	// Pre-compute die collision constants (used for rock-die collision detection)
 	ss.Tiles.EffectiveDieTileSize = ss.Tiles.DieTileSize * 0.75

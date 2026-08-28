@@ -2,6 +2,7 @@ package rocks
 
 import (
 	"math"
+	"simd"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ninesl/dice-will-roll/render"
@@ -10,25 +11,27 @@ import (
 const (
 	BitSpriteSlopeCodeCount = 16
 	atlasSlopeStates        = 15
-
-	bitSpriteDegreesPerFrame = 24
-	AtlasRotationFrames      = 360 / bitSpriteDegreesPerFrame
+	AtlasSlopeZFrames       = 16
+	PackedRockSpritePixels  = 128
+	nativeRockSizeScore     = 6
+	maximumRockSizeScale    = 1.8
 )
 
-type rockSpriteLookup [atlasSlopeStates * atlasSlopeStates * AtlasRotationFrames]*ebiten.Image
+type rockSpriteLookup [atlasSlopeStates * atlasSlopeStates * AtlasSlopeZFrames]*ebiten.Image
 type rockScaleLookup [len(rockAmountScales)][BitSpriteSlopeCodeCount]float64
+type rockCollisionLookup [len(rockAmountScales)][BitSpriteSlopeCodeCount]uint32
 
 var rockAmountScales = [...]float64{2.0, 1.5, 1.0}
 
-// Gets intialized with flat lookup for every combo of packed slope/rotation for a sprite for full 360 degrees
+// Gets initialized with a flat lookup for every packed X/Y slope and Z slope frame.
 type RockSpriteAtlas struct {
 	*render.Sprite
 
-	// TODO: benchmark *rockSpriteLookup
-	Frames        rockSpriteLookup
-	Scales        rockScaleLookup
-	HalfDrawSizes rockScaleLookup
-	AmountScale   int
+	Frames           rockSpriteLookup
+	Scales           rockScaleLookup
+	HalfDrawSizes    rockScaleLookup
+	CollisionLookups rockCollisionLookup
+	MouseRadius      uint32
 }
 
 func atlasSlopeRadians(slopeCode uint8) float32 {
@@ -37,16 +40,14 @@ func atlasSlopeRadians(slopeCode uint8) float32 {
 	return float32(angleDegrees) * (math.Pi / 180)
 }
 
-// filterIndex maps slopes -7..7 and rotations 0..14 to the dense frame range
-// 0..3374. Adding 7 maps each slope to 0..14. Each X slope contains 225
-// frames, and each Y slope contains 15 rotation frames.
-func filterIndex(slopeX, slopeY, rotation int) int {
-	return ((slopeX+7)*atlasSlopeStates+slopeY+7)*AtlasRotationFrames + rotation
+// filterIndex maps X/Y slopes -7..7 and Z slope frames 0..15 to the dense frame range.
+// Adding 7 maps each slope to 0..14.
+func filterIndex(slopeX, slopeY, slopeZ int) int {
+	return ((slopeX+7)*atlasSlopeStates+slopeY+7)*AtlasSlopeZFrames + slopeZ
 }
 
-// rockAmountScaleIndex derives the global scale tier from the initial requested
-// rock amount. The tier remains fixed as rocks are removed or split.
-func rockAmountScaleIndex(rockNum int) int {
+// RockAmountScaleIndex derives a collection's scale tier from its rock count.
+func RockAmountScaleIndex(rockNum int) int {
 	switch {
 	case rockNum <= 100:
 		return 0
@@ -57,18 +58,23 @@ func rockAmountScaleIndex(rockNum int) int {
 	}
 }
 
+func rockSizeScale(sizeScore int) float64 {
+	const scaleStep = (maximumRockSizeScale - 1.0) / (BitSpriteSlopeCodeCount - 1 - nativeRockSizeScore)
+	return 1.0 + float64(sizeScore-nativeRockSizeScore)*scaleStep
+}
+
 // InitRockAtlas paints one atlas, then indexes shared subimages in dense frame order.
-func InitRockAtlas(shader *ebiten.Shader, tileSize float32, rockNum int) *RockSpriteAtlas {
-	frameCount := atlasSlopeStates * atlasSlopeStates * AtlasRotationFrames
+func InitRockAtlas(shader *ebiten.Shader) *RockSpriteAtlas {
+	frameCount := atlasSlopeStates * atlasSlopeStates * AtlasSlopeZFrames
 	sheetColumns := calculateSheetCols(frameCount)
 	sheetRows := (frameCount + sheetColumns - 1) / sheetColumns
-	pixelSize := int(tileSize)
+	pixelSize := PackedRockSpritePixels
 	sheetImage := ebiten.NewImage(pixelSize*sheetColumns, pixelSize*sheetRows)
 	frameImage := ebiten.NewImage(pixelSize, pixelSize)
 
 	uniforms := map[string]interface{}{
 		"Time":            0.0,
-		"Resolution":      []float32{tileSize, tileSize},
+		"Resolution":      []float32{float32(pixelSize), float32(pixelSize)},
 		"Mouse":           render.Vec2{}.KageVec2(),
 		"RotationX":       float32(0),
 		"RotationY":       float32(0),
@@ -87,13 +93,13 @@ func InitRockAtlas(shader *ebiten.Shader, tileSize float32, rockNum int) *RockSp
 		for slopeY := uint8(1); slopeY < BitSpriteSlopeCodeCount; slopeY++ {
 			uniforms["RotationY"] = atlasSlopeRadians(slopeY)
 
-			for rotationFrame := range AtlasRotationFrames {
-				uniforms["RotationZ"] = float32(rotationFrame*bitSpriteDegreesPerFrame) * (math.Pi / 180)
+			for slopeZ := range AtlasSlopeZFrames {
+				uniforms["RotationZ"] = float32(slopeZ) * (2 * math.Pi / AtlasSlopeZFrames)
 				frameImage.Clear()
 				frameImage.DrawRectShader(pixelSize, pixelSize, shader, shaderOptions)
 
 				slopeIndex := (int(slopeX)-1)*atlasSlopeStates + int(slopeY) - 1
-				frameIndex := slopeIndex*AtlasRotationFrames + rotationFrame
+				frameIndex := slopeIndex*AtlasSlopeZFrames + slopeZ
 				column := frameIndex % sheetColumns
 				row := frameIndex / sheetColumns
 				drawOptions.GeoM.Reset()
@@ -110,25 +116,45 @@ func InitRockAtlas(shader *ebiten.Shader, tileSize float32, rockNum int) *RockSp
 		frames[frameIndex] = sheetImage.SubImage(spriteSheet.Rect(frameIndex)).(*ebiten.Image)
 	}
 
-	var scales rockScaleLookup
-	var halfDrawSizes rockScaleLookup
-	for amountScaleIndex, amountScale := range rockAmountScales {
-		for sizeCode := 1; sizeCode < BitSpriteSlopeCodeCount; sizeCode++ {
-			sizeScale := 0.2 + float64(sizeCode-1)/14
-			drawScale := sizeScale * amountScale
-			scales[amountScaleIndex][sizeCode] = drawScale
-			halfDrawSizes[amountScaleIndex][sizeCode] = float64(pixelSize) * drawScale / 2
-		}
-	}
-
-	return &RockSpriteAtlas{
+	atlas := &RockSpriteAtlas{
 		Sprite: &render.Sprite{
 			Image:       sheetImage,
 			SpriteSheet: spriteSheet,
 		},
-		Frames:        frames,
-		Scales:        scales,
-		HalfDrawSizes: halfDrawSizes,
-		AmountScale:   rockAmountScaleIndex(rockNum),
+		Frames: frames,
+	}
+	initializeScaleLookups(atlas, pixelSize)
+	initializeCollisionLookups(atlas)
+	initializeMouseRadius(atlas)
+	return atlas
+}
+
+func initializeMouseRadius(atlas *RockSpriteAtlas) {
+	oneXAmountScaleIndex := len(rockAmountScales) - 1
+	atlas.MouseRadius = uint32(math.Ceil(
+		atlas.HalfDrawSizes[oneXAmountScaleIndex][BitSpriteSlopeCodeCount-1] * 2.0))
+	mouseRadius = simd.BroadcastUint32s(atlas.MouseRadius)
+}
+
+func initializeScaleLookups(atlas *RockSpriteAtlas, pixelSize int) {
+	for amountScaleIndex, amountScale := range rockAmountScales {
+		for sizeScore := 1; sizeScore < BitSpriteSlopeCodeCount; sizeScore++ {
+			drawScale := rockSizeScale(sizeScore) * amountScale
+			atlas.Scales[amountScaleIndex][sizeScore] = drawScale
+			atlas.HalfDrawSizes[amountScaleIndex][sizeScore] = float64(pixelSize) * drawScale / 2
+			hoverRadiusLookups[amountScaleIndex][sizeScore] = simd.BroadcastFloat32s(float32(
+				atlas.HalfDrawSizes[amountScaleIndex][sizeScore]))
+		}
+	}
+}
+
+func initializeCollisionLookups(atlas *RockSpriteAtlas) {
+	for amountScaleIndex := range rockAmountScales {
+		for sizeScore := 1; sizeScore < BitSpriteSlopeCodeCount; sizeScore++ {
+			atlas.CollisionLookups[amountScaleIndex][sizeScore] = uint32(math.Ceil(
+				atlas.HalfDrawSizes[amountScaleIndex][sizeScore] * 2.0 / 3.0))
+			collisionLookups[amountScaleIndex][sizeScore] = simd.BroadcastUint32s(
+				atlas.CollisionLookups[amountScaleIndex][sizeScore])
+		}
 	}
 }

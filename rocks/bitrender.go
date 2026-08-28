@@ -2,21 +2,30 @@ package rocks
 
 import "github.com/hajimehoshi/ebiten/v2"
 
-var drawOptions = &ebiten.DrawImageOptions{Filter: ebiten.FilterPixelated}
-
-// Draw renders every packed rock in slice order through the shared atlas.
-func Draw(rocks *Rocks, screen *ebiten.Image) {
-	if len(rocks.Positions) != len(rocks.Sprites) {
-		panic("positions and sprites must have equal lengths")
+func FilterName(filter ebiten.Filter) string {
+	switch filter {
+	case ebiten.FilterNearest:
+		return "Nearest"
+	case ebiten.FilterLinear:
+		return "Linear"
+	case ebiten.FilterPixelated:
+		return "Pixelated"
+	default:
+		return "Unknown"
 	}
-	scales := rocks.Atlas.Scales[rocks.Atlas.AmountScale]
-	halfDrawSizes := rocks.Atlas.HalfDrawSizes[rocks.Atlas.AmountScale]
+}
+
+// Draw renders every packed rock in slice order using atlas
+func Draw(rocks *Rocks, screen *ebiten.Image) {
+	drawOptions := rocks.DrawOptions
+	scales := rocks.Atlas.Scales[rocks.AmountScale]
+	halfDrawSizes := rocks.Atlas.HalfDrawSizes[rocks.AmountScale]
 
 	for i, pos := range rocks.Positions {
 		positionX, positionY, _, _ := UnpackPosition(pos)
-		size, rotation, _, _, _, slopeX, slopeY := UnpackSprite(rocks.Sprites[i])
-		scale := scales[size]
-		halfDrawSize := halfDrawSizes[size]
+		sizeScore, slopeZ, _, _, _, _, _, _, slopeX, slopeY := UnpackSprite(rocks.Sprites[i])
+		scale := scales[sizeScore]
+		halfDrawSize := halfDrawSizes[sizeScore]
 
 		drawOptions.GeoM.Reset()
 		drawOptions.GeoM.Scale(scale, scale)
@@ -24,6 +33,6 @@ func Draw(rocks *Rocks, screen *ebiten.Image) {
 			float64(positionX)-halfDrawSize,
 			float64(positionY)-halfDrawSize,
 		)
-		screen.DrawImage(rocks.Atlas.Frames[filterIndex(slopeX, slopeY, rotation)], drawOptions)
+		screen.DrawImage(rocks.Atlas.Frames[filterIndex(slopeX, slopeY, slopeZ)], drawOptions)
 	}
 }

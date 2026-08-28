@@ -36,8 +36,8 @@ type DieWiggleState struct {
 }
 
 func SetupNewDie(color render.Vec3) *Die {
-	directionX := float64(rand.IntN(2)) + 1
-	directionY := float64(rand.IntN(2)) + 1
+	directionX := float64(rand.N(2)) + 1
+	directionY := float64(rand.N(2)) + 1
 	if directionX == 2 {
 		directionX = -1.0
 	}
@@ -47,7 +47,7 @@ func SetupNewDie(color render.Vec3) *Die {
 
 	// random position
 	pos := render.Vec2{
-		X: render.ROLLZONE.MinWidth + settings.Screen.Tiles.DieTileSize*float32(rand.IntN(6))*2.0,
+		X: render.ROLLZONE.MinWidth + settings.Screen.Tiles.DieTileSize*float32(rand.N(6))*2.0,
 		Y: render.ROLLZONE.MaxHeight/2 - settings.Screen.Tiles.HalfDieTileSize,
 	}
 
@@ -67,7 +67,7 @@ func SetupNewDie(color render.Vec3) *Die {
 	// set pips randomly 1-9
 	// values := [6]int{}
 	// for i := range len(values) {
-	// 	// values[i] = rand.IntN(8) + 1
+	// 	// values[i] = rand.N(8) + 1
 	// 	values[i] = 9
 	// }
 
@@ -95,9 +95,9 @@ func SetupPlayerDice() []*Die {
 		die.Identifier = render.DieIdentity(i)
 		dice = append(dice, die)
 		// dice = append(dice, SetupNewDie(render.KageColor(
-		// 	max(rand.IntN(255), 150),
-		// 	max(rand.IntN(255), 150),
-		// 	max(rand.IntN(255), 150),
+		// 	max(rand.N(255), 150),
+		// 	max(rand.N(255), 150),
+		// 	max(rand.N(255), 150),
 		// )))
 	}
 
@@ -120,7 +120,7 @@ func (d *Die) Roll() {
 
 		d.Die.Roll()
 		// random direction
-		direction := render.DirectionArr[render.Direction(rand.IntN(len(render.DirectionArr)))]
+		direction := render.DirectionArr[render.Direction(rand.N(len(render.DirectionArr)))]
 
 		d.Velocity.X = settings.Screen.Tiles.DieTileSize * rand.Float32() * direction.X
 		d.Velocity.Y = settings.Screen.Tiles.DieTileSize * rand.Float32() * direction.Y
