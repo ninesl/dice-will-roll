@@ -135,7 +135,7 @@ func InitRockAtlas(shader *ebiten.Shader) *RockSpriteAtlas {
 func initializeMouseRadius(atlas *RockSpriteAtlas) {
 	for amountScaleIndex := range rockAmountScales {
 		atlas.MouseRadius[amountScaleIndex] = uint32(math.Ceil(
-			float64(atlas.HalfDrawSizes[amountScaleIndex][BitSpriteSlopeCodeCount-1] * 2.0)))
+			float64(atlas.HalfDrawSizes[amountScaleIndex][BitSpriteSlopeCodeCount-1])))
 		if atlas.MouseRadius[amountScaleIndex] > 181 {
 			panic("rock mouse radius exceeds safe 16-bit squared-distance range")
 		}

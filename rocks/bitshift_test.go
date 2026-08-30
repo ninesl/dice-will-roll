@@ -30,7 +30,7 @@ func newBenchmarkRocks() Rocks {
 		collisionLookups[0][size] = simd.BroadcastUint16s(uint16(8 + size))
 		hoverRadiusLookups[0][size] = simd.BroadcastUint16s(uint16(30 + size*4))
 	}
-	mouseRadii[0] = simd.BroadcastUint16s(180)
+	mouseRadii[0] = simd.BroadcastUint16s(90)
 	return rocks
 }
 
@@ -59,5 +59,20 @@ func BenchmarkUpdateRocksMouseDown(b *testing.B) {
 	benchmarkUpdateRocks(b, controls.MouseInfo{
 		CursorInfo: controls.CursorInfo{Position: render.Vec2{X: 2000, Y: 2000}},
 		Down:       true,
+	})
+}
+
+func BenchmarkUpdateRocksRightDown(b *testing.B) {
+	benchmarkUpdateRocks(b, controls.MouseInfo{
+		CursorInfo: controls.CursorInfo{Position: render.Vec2{X: 2000, Y: 2000}},
+		RightDown:  true,
+	})
+}
+
+func BenchmarkUpdateRocksBothDown(b *testing.B) {
+	benchmarkUpdateRocks(b, controls.MouseInfo{
+		CursorInfo: controls.CursorInfo{Position: render.Vec2{X: 2000, Y: 2000}},
+		Down:       true,
+		RightDown:  true,
 	})
 }

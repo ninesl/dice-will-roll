@@ -24,9 +24,19 @@ velocity, collision, animation, damping, and repacking all stay in 16-bit SIMD
 lanes. There is no byte-lane transpose, 32-bit expansion, or scratch buffer.
 
 Mouse hover first applies an amount-scale X/Y broad phase. Its maximum radius
-is 180 pixels, which bounds `dx*dx + dy*dy` to 64,800 and permits an exact
+is 90 pixels, which bounds `dx*dx + dy*dy` to 16,200 and permits an exact
 16-bit circular narrow phase against each rock's hover radius. Mouse-down uses
 the broad phase directly. Walls clamp and reflect in signed 16-bit lanes.
+
+Mouse force components use independent seven-band axis distances. Left pushes
+away with stronger force farther from the pointer, right and hover push away
+with stronger force near the pointer, and both buttons pull toward it with the
+near-pointer magnitude. Button-hit lanes retain their assigned direction at
+walls while the wall continues driving spin animation.
+
+Every hover or button hit queues `spinAgain` independently from wall hits.
+Repeated contact does not reset active `stepZ`; it only keeps the next full
+spin queued.
 
 Each update checks mouse and projected wall collisions first. Collision lanes
 keep their full assigned or reflected velocity; other finite-spin lanes damp

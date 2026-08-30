@@ -3,9 +3,11 @@ package rocks
 import "simd"
 
 const (
-	mouseRadiusDisabled uint8 = iota
-	mouseRadiusHover
-	mouseRadiusDown
+	mouseModeDisabled uint8 = iota
+	mouseModeHover
+	mouseModeLeftDown
+	mouseModeRightDown
+	mouseModeBothDown
 )
 
 func collisionRadius(size simd.Uint16s, amountScale int) simd.Uint16s {
@@ -42,30 +44,43 @@ func setMouseVelocity16(
 	broadHit := absX.LessEqual(broadRadius).And(absY.LessEqual(broadRadius)).
 		And(broadRadius.NotEqual(zeroUint16))
 
-	distanceSquared := deltaX.Mul(deltaX).ToBits().Add(deltaY.Mul(deltaY).ToBits())
 	hit := broadHit
 	interactionRadius := broadRadius
-	if mode == mouseRadiusHover {
+	if mode == mouseModeHover {
 		interactionRadius = hoverRadius(size, amountScale)
+		distanceSquared := deltaX.Mul(deltaX).ToBits().Add(deltaY.Mul(deltaY).ToBits())
 		hit = hit.And(distanceSquared.LessEqual(interactionRadius.Mul(interactionRadius)))
 		hit = hit.And(interactionRadius.NotEqual(zeroUint16))
 	}
 
-	falloff := radialFalloff16(distanceSquared, interactionRadius.Mul(interactionRadius))
-	impulse := maximumSlopeU16.Sub(falloff).BitsToInt16()
-	impulseX := impulse.IfElse(deltaX.Greater(zeroInt16), impulse.Neg()).Masked(deltaX.NotEqual(zeroInt16))
-	impulseY := impulse.IfElse(deltaY.Greater(zeroInt16), impulse.Neg()).Masked(deltaY.NotEqual(zeroInt16))
+	magnitudeX := closeMouseMagnitude16(absX, interactionRadius)
+	magnitudeY := closeMouseMagnitude16(absY, interactionRadius)
+	if mode == mouseModeLeftDown {
+		magnitudeX = nibbleValues16[8].Sub(magnitudeX)
+		magnitudeY = nibbleValues16[8].Sub(magnitudeY)
+	}
+	impulseX := signedMouseMagnitude16(magnitudeX, deltaX)
+	impulseY := signedMouseMagnitude16(magnitudeY, deltaY)
+	if mode == mouseModeBothDown {
+		impulseX = impulseX.Neg()
+		impulseY = impulseY.Neg()
+	}
 	return impulseX.IfElse(hit, velocityX), impulseY.IfElse(hit, velocityY), hit
 }
 
-func radialFalloff16(distanceSquared, radiusSquared simd.Uint16s) simd.Uint16s {
-	falloff := oneUint16.IfElse(distanceSquared.GreaterEqual(radiusSquared.ShiftAllRight(5)), zeroUint16)
-	falloff = nibbleValues16[2].IfElse(distanceSquared.GreaterEqual(radiusSquared.ShiftAllRight(3)), falloff)
-	falloff = nibbleValues16[3].IfElse(distanceSquared.GreaterEqual(radiusSquared.ShiftAllRight(2)), falloff)
-	falloff = nibbleValues16[4].IfElse(distanceSquared.GreaterEqual(radiusSquared.ShiftAllRight(1)), falloff)
-	threeQuarters := radiusSquared.ShiftAllRight(1).Add(radiusSquared.ShiftAllRight(2))
-	falloff = nibbleValues16[5].IfElse(distanceSquared.GreaterEqual(threeQuarters), falloff)
-	return nibbleValues16[6].IfElse(distanceSquared.GreaterEqual(radiusSquared), falloff)
+func closeMouseMagnitude16(distance, radius simd.Uint16s) simd.Uint16s {
+	scaledDistance := distance.Mul(nibbleValues16[7])
+	magnitude := nibbleValues16[7]
+	for band := 1; band <= 6; band++ {
+		threshold := radius.Mul(nibbleValues16[band])
+		magnitude = nibbleValues16[7-band].IfElse(scaledDistance.GreaterEqual(threshold), magnitude)
+	}
+	return magnitude
+}
+
+func signedMouseMagnitude16(magnitude simd.Uint16s, delta simd.Int16s) simd.Int16s {
+	signed := magnitude.BitsToInt16()
+	return signed.IfElse(delta.Greater(zeroInt16), signed.Neg()).Masked(delta.NotEqual(zeroInt16))
 }
 
 func collideWall16(position, velocity, extent, radius simd.Int16s) (simd.Int16s, simd.Mask16s) {
@@ -109,7 +124,6 @@ func scheduleCollision16(
 	stepX, stepY, stepZ, permaSpin, spinAgain simd.Uint16s,
 	slopeX, slopeY, velocityX, velocityY, previousX, previousY simd.Int16s,
 	impact, wallHit simd.Mask16s,
-	mouseDown bool,
 	mouseHit simd.Mask16s,
 ) (simd.Uint16s, simd.Uint16s, simd.Uint16s, simd.Uint16s, simd.Int16s, simd.Int16s, simd.Mask16s) {
 	changedX := velocityX.NotEqual(previousX)
@@ -143,11 +157,9 @@ func scheduleCollision16(
 	slopeY = velocityY.IfElse(changedImpact, slopeY)
 	spinAgain = zeroUint16.IfElse(finiteImpact, spinAgain).Masked(inactive)
 
-	// A wall impact always requests another finite spin, but permanent-spin
-	// rocks keep their canonical animation state.
+	// Mouse and wall contact independently queue another finite spin. Repeated
+	// contact leaves an active stepZ untouched and only keeps this bit queued.
 	spinAgain = oneUint16.IfElse(wallHit.And(inactive), spinAgain)
-	if mouseDown {
-		spinAgain = oneUint16.IfElse(mouseHit.And(inactive), spinAgain)
-	}
+	spinAgain = oneUint16.IfElse(mouseHit.And(inactive), spinAgain)
 	return stepX, stepY, stepZ, spinAgain, slopeX, slopeY, changed
 }

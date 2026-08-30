@@ -9,12 +9,16 @@ import (
 const UpdateStride = 2
 
 func UpdateRocks(rocks *Rocks, amountScale, phase int, mouse controls.MouseInfo) {
-	mode := mouseRadiusHover
-	if mouse.Down {
-		mode = mouseRadiusDown
+	mode := mouseModeHover
+	if mouse.Down && mouse.RightDown {
+		mode = mouseModeBothDown
+	} else if mouse.Down {
+		mode = mouseModeLeftDown
+	} else if mouse.RightDown {
+		mode = mouseModeRightDown
 	}
-	if mouse.Position.X == 0 && mouse.Position.Y == 0 && !mouse.Down {
-		mode = mouseRadiusDisabled
+	if !mouse.Active && mouse.Position.X == 0 && mouse.Position.Y == 0 && !mouse.Down && !mouse.RightDown {
+		mode = mouseModeDisabled
 	}
 	groups := (rocks.Len() + RocksPerPackedVector - 1) / RocksPerPackedVector
 	start := min(rocks.Len(), groups*phase/UpdateStride*RocksPerPackedVector)
@@ -82,7 +86,7 @@ func updateRockGroup16(
 
 	falseMask := zeroUint16.NotEqual(zeroUint16)
 	mouseHit := falseMask
-	if mode != mouseRadiusDisabled {
+	if mode != mouseModeDisabled {
 		velocityX, velocityY, mouseHit = setMouseVelocity16(
 			positionX, positionY, velocityX, velocityY, size,
 			amountScale, mode, mouseX, mouseY)
@@ -90,7 +94,8 @@ func updateRockGroup16(
 
 	radius := collisionRadius(size, amountScale).BitsToInt16()
 	bounce := oneUint16.Equal(oneUint16)
-	if mode == mouseRadiusDown {
+	buttonDown := mode == mouseModeLeftDown || mode == mouseModeRightDown || mode == mouseModeBothDown
+	if buttonDown {
 		// A rock actively pushed into a wall keeps the mouse-assigned direction.
 		// The wall still clamps it and drives the queued spin animation.
 		bounce = mouseHit.ToInt16s().Equal(zeroInt16)
@@ -123,7 +128,7 @@ func updateRockGroup16(
 	stepX, stepY, stepZ, spinAgain, slopeX, slopeY, _ = scheduleCollision16(
 		stepX, stepY, stepZ, permaSpin, spinAgain,
 		slopeX, slopeY, collisionVelocityX, collisionVelocityY, previousX, previousY,
-		impact, wallHit, mode == mouseRadiusDown, mouseHit)
+		impact, wallHit, mouseHit)
 
 	return packPositionAxis16(positionX, velocityX), packPositionAxis16(positionY, velocityY),
 		packSlope16(size, slopeZ, slopeX, slopeY),
