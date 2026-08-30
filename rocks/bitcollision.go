@@ -11,21 +11,33 @@ const (
 )
 
 func collisionRadius(size simd.Uint16s, amountScale int) simd.Uint16s {
-	radius := zeroUint16
-	for score := 1; score < BitSpriteSlopeCodeCount; score++ {
-		radius = collisionLookups[amountScale][score].IfElse(
-			size.Equal(nibbleValues16[score]), radius)
+	// These affine forms exactly reproduce the atlas's ceil-scaled radii for
+	// every size score while avoiding a 15-way vector lookup.
+	value := size.Mul(collisionRadiusMultiplier[amountScale]).Add(collisionRadiusBias[amountScale])
+	switch amountScale {
+	case 0, 3:
+		value = value.ShiftAllRight(4)
+	case 1, 2, 4:
+		value = value.ShiftAllRight(5)
+	case 5:
+		value = value.ShiftAllRight(2)
 	}
-	return radius
+	return value.Masked(size.NotEqual(zeroUint16))
 }
 
 func hoverRadius(size simd.Uint16s, amountScale int) simd.Uint16s {
-	radius := zeroUint16
-	for score := 1; score < BitSpriteSlopeCodeCount; score++ {
-		radius = hoverRadiusLookups[amountScale][score].IfElse(
-			size.Equal(nibbleValues16[score]), radius)
+	value := size.Mul(hoverRadiusMultiplier[amountScale]).Add(hoverRadiusBias[amountScale])
+	switch amountScale {
+	case 0, 1, 2:
+		value = value.ShiftAllRight(4)
+	case 3:
+		value = value.ShiftAllRight(5)
+	case 4:
+		value = value.ShiftAllRight(6)
+	case 5:
+		value = value.ShiftAllRight(3)
 	}
-	return radius
+	return value.Masked(size.NotEqual(zeroUint16))
 }
 
 func setMouseVelocity16(

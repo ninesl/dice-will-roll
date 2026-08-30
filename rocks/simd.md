@@ -22,6 +22,13 @@ not read `Animate`.
 One update batch loads one `Uint16s` vector from each stream. Position,
 velocity, collision, animation, damping, and repacking all stay in 16-bit SIMD
 lanes. There is no byte-lane transpose, 32-bit expansion, or scratch buffer.
+Groups whose packed `Animate` words are all zero bypass animation SIMD work.
+This is detected directly from the existing stream and requires no activity
+metadata or fifth stream.
+
+Collision and hover radii use amount-scale-specific integer affine formulas.
+They exactly reproduce all atlas radius values for size scores 1 through 15,
+without scanning 15 broadcast lookup vectors for each batch.
 
 Mouse hover first applies an amount-scale X/Y broad phase. Its maximum radius
 is 90 pixels, which bounds `dx*dx + dy*dy` to 16,200 and permits an exact

@@ -40,7 +40,8 @@ func updateMovement16(
 		slope := simd.LoadUint16s(rocks.Slope[i:])
 		animate := simd.LoadUint16s(rocks.Animate[i:])
 		positionX, positionY, slope, animate = updateRockGroup16(
-			positionX, positionY, slope, animate, amountScale, mode, mouseX, mouseY)
+			positionX, positionY, slope, animate, amountScale, mode, mouseX, mouseY,
+			animationGroupActive(rocks.Animate[i:i+RocksPerPackedVector]))
 		positionX.Store(rocks.PosX[i:])
 		positionY.Store(rocks.PosY[i:])
 		slope.Store(rocks.Slope[i:])
@@ -54,7 +55,8 @@ func updateMovement16(
 	slope, _ := simd.LoadUint16sPart(rocks.Slope[fullEnd:end])
 	animate, _ := simd.LoadUint16sPart(rocks.Animate[fullEnd:end])
 	positionX, positionY, slope, animate = updateRockGroup16(
-		positionX, positionY, slope, animate, amountScale, mode, mouseX, mouseY)
+		positionX, positionY, slope, animate, amountScale, mode, mouseX, mouseY,
+		animationGroupActive(rocks.Animate[fullEnd:end]))
 	positionX.StorePart(rocks.PosX[fullEnd:end])
 	positionY.StorePart(rocks.PosY[fullEnd:end])
 	slope.StorePart(rocks.Slope[fullEnd:end])
@@ -66,6 +68,7 @@ func updateRockGroup16(
 	amountScale int,
 	mode uint8,
 	mouseX, mouseY simd.Int16s,
+	hasAnimation bool,
 ) (simd.Uint16s, simd.Uint16s, simd.Uint16s, simd.Uint16s) {
 	positionX := packedX.And(coordinateMask16).ConvertToInt16()
 	positionY := packedY.And(coordinateMask16).ConvertToInt16()
@@ -74,16 +77,6 @@ func updateRockGroup16(
 	previousX, previousY := velocityX, velocityY
 
 	size := packedSlope.And(nibbleMask16)
-	slopeZ := packedSlope.ShiftAllRight(4).And(nibbleMask16)
-	slopeX := packedSlope.BitsToInt16().ShiftAllRight(12)
-	slopeY := packedSlope.ShiftAllLeft(4).BitsToInt16().ShiftAllRight(12)
-	stepY := packedAnimate.ShiftAllRight(13).And(nibbleValues16[7])
-	stepX := packedAnimate.ShiftAllRight(10).And(nibbleValues16[7])
-	stepZ := packedAnimate.ShiftAllRight(6).And(nibbleMask16)
-	stepTick := packedAnimate.ShiftAllRight(2).And(nibbleMask16)
-	permaSpin := packedAnimate.ShiftAllRight(1).And(oneUint16)
-	spinAgain := packedAnimate.And(oneUint16)
-
 	falseMask := zeroUint16.NotEqual(zeroUint16)
 	mouseHit := falseMask
 	if mode != mouseModeDisabled {
@@ -104,6 +97,7 @@ func updateRockGroup16(
 		positionX, positionY, velocityX, velocityY, radius, bounce)
 	impact := mouseHit.Or(wallHit)
 	collisionVelocityX, collisionVelocityY := velocityX, velocityY
+	permaSpin := packedAnimate.ShiftAllRight(1).And(oneUint16)
 
 	// Collision velocities move once at full strength. Every other finite
 	// velocity damps exactly once before this update's movement.
@@ -115,11 +109,22 @@ func updateRockGroup16(
 	positionX = positionX.Max(radius).Min(screenWidth16.Sub(radius))
 	positionY = positionY.Max(radius).Min(screenHeight16.Sub(radius))
 
+	slopeZ := packedSlope.ShiftAllRight(4).And(nibbleMask16)
+	slopeX := packedSlope.BitsToInt16().ShiftAllRight(12)
+	slopeY := packedSlope.ShiftAllLeft(4).BitsToInt16().ShiftAllRight(12)
+	stepY := packedAnimate.ShiftAllRight(13).And(nibbleValues16[7])
+	stepX := packedAnimate.ShiftAllRight(10).And(nibbleValues16[7])
+	stepZ := packedAnimate.ShiftAllRight(6).And(nibbleMask16)
+	stepTick := packedAnimate.ShiftAllRight(2).And(nibbleMask16)
+	spinAgain := packedAnimate.And(oneUint16)
+
 	// Existing animation advances after movement and collision handling. New
 	// collision state is scheduled afterward, so it starts on the next update.
-	size, slopeZ, stepX, stepY, stepZ, stepTick, permaSpin, spinAgain, slopeX, slopeY =
-		advanceAnimation16(size, slopeZ, stepX, stepY, stepZ, stepTick,
-			permaSpin, spinAgain, slopeX, slopeY, previousX, previousY)
+	if hasAnimation {
+		size, slopeZ, stepX, stepY, stepZ, stepTick, permaSpin, spinAgain, slopeX, slopeY =
+			advanceAnimation16(size, slopeZ, stepX, stepY, stepZ, stepTick,
+				permaSpin, spinAgain, slopeX, slopeY, previousX, previousY)
+	}
 	stopped := velocityX.Equal(zeroInt16).And(velocityY.Equal(zeroInt16)).
 		And(permaSpin.Equal(zeroUint16)).And(stepZ.Equal(zeroUint16)).And(spinAgain.Equal(zeroUint16))
 	stepX = zeroUint16.IfElse(stopped, stepX)
@@ -133,6 +138,15 @@ func updateRockGroup16(
 	return packPositionAxis16(positionX, velocityX), packPositionAxis16(positionY, velocityY),
 		packSlope16(size, slopeZ, slopeX, slopeY),
 		packAnimate16(stepX, stepY, stepZ, stepTick, permaSpin, spinAgain)
+}
+
+func animationGroupActive(animate []uint16) bool {
+	for _, state := range animate {
+		if state != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func advanceAnimation16(

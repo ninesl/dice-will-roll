@@ -26,10 +26,6 @@ func newBenchmarkRocks() Rocks {
 			velocityX, velocityY, uint32(i%16), uint32(i%15+1),
 			0, 0, 0, 0, 0, 0)
 	}
-	for size := 1; size < BitSpriteSlopeCodeCount; size++ {
-		collisionLookups[0][size] = simd.BroadcastUint16s(uint16(8 + size))
-		hoverRadiusLookups[0][size] = simd.BroadcastUint16s(uint16(30 + size*4))
-	}
 	mouseRadii[0] = simd.BroadcastUint16s(90)
 	return rocks
 }
@@ -47,6 +43,19 @@ func benchmarkUpdateRocks(b *testing.B, mouse controls.MouseInfo) {
 
 func BenchmarkUpdateRocksSoA(b *testing.B) {
 	benchmarkUpdateRocks(b, controls.MouseInfo{})
+}
+
+func BenchmarkUpdateRocksAnimated(b *testing.B) {
+	rocks := newBenchmarkRocks()
+	for i := range rocks.Animate {
+		rocks.Animate[i] = permaSpinMask16
+	}
+	b.ReportAllocs()
+	b.SetBytes(benchmarkRockCount * 8)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		UpdateRocks(&rocks, 0, i%UpdateStride, controls.MouseInfo{})
+	}
 }
 
 func BenchmarkUpdateRocksHover(b *testing.B) {

@@ -154,8 +154,6 @@ func initializeScaleLookups(atlas *RockSpriteAtlas, pixelSize int) {
 			if radiusValue > 181 {
 				panic("rock hover radius exceeds safe 16-bit squared-distance range")
 			}
-			radius := uint16(radiusValue)
-			hoverRadiusLookups[amountScaleIndex][sizeScore] = simd.BroadcastUint16s(radius)
 		}
 	}
 }
@@ -168,8 +166,6 @@ func initializeCollisionLookups(atlas *RockSpriteAtlas) {
 			if atlas.CollisionLookups[amountScaleIndex][sizeScore] > math.MaxInt16 {
 				panic("rock collision radius exceeds signed 16-bit range")
 			}
-			collisionLookups[amountScaleIndex][sizeScore] = simd.BroadcastUint16s(
-				uint16(atlas.CollisionLookups[amountScaleIndex][sizeScore]))
 		}
 	}
 }

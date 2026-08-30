@@ -9,17 +9,8 @@ import (
 
 const (
 	packedCoordinateMask  uint16 = 0x0FFF
-	packedVelocityMask    uint16 = 0xF000
-	packedSlopeXMask      uint16 = 0xF000
-	packedSlopeYMask      uint16 = 0x0F00
-	spriteSlopeZMask16    uint16 = 0x00F0
 	spriteSizeScoreMask16 uint16 = 0x000F
-	stepYMask16           uint16 = 0xE000
-	stepXMask16           uint16 = 0x1C00
-	stepZMask16           uint16 = 0x03C0
-	stepTickMask16        uint16 = 0x003C
 	permaSpinMask16       uint16 = 0x0002
-	spinAgainMask16       uint16 = 0x0001
 	permaXDirectionMask32 uint32 = 0x0000_0003
 	permaYDirectionMask32 uint32 = 0x0000_000C
 )
@@ -37,7 +28,7 @@ var (
 	RocksPerPackedVector int
 
 	zeroUint16, oneUint16, maximumSizeUint16, coordinateMask16, nibbleMask16 simd.Uint16s
-	maximumStepZ16, maximumSlopeU16, slopeCycleU16, halfSlopeCycleU16        simd.Uint16s
+	maximumStepZ16, slopeCycleU16                                            simd.Uint16s
 
 	zeroInt16, oneInt16, minimumSlopeI16, maximumSlopeI16 simd.Int16s
 	slopeCycleI16, halfSlopeCycleI16                      simd.Int16s
@@ -45,9 +36,9 @@ var (
 
 	screenWidth16, screenHeight16 simd.Int16s
 
-	collisionLookups   [len(rockAmountScales)][BitSpriteSlopeCodeCount]simd.Uint16s
-	hoverRadiusLookups [len(rockAmountScales)][BitSpriteSlopeCodeCount]simd.Uint16s
-	mouseRadii         [len(rockAmountScales)]simd.Uint16s
+	hoverRadiusMultiplier, hoverRadiusBias         [len(rockAmountScales)]simd.Uint16s
+	collisionRadiusMultiplier, collisionRadiusBias [len(rockAmountScales)]simd.Uint16s
+	mouseRadii                                     [len(rockAmountScales)]simd.Uint16s
 )
 
 func init() {
@@ -58,10 +49,7 @@ func init() {
 	coordinateMask16 = simd.BroadcastUint16s(packedCoordinateMask)
 	nibbleMask16 = simd.BroadcastUint16s(0xF)
 	maximumStepZ16 = simd.BroadcastUint16s(0xF)
-	maximumSlopeU16 = simd.BroadcastUint16s(7)
 	slopeCycleU16 = simd.BroadcastUint16s(atlasSlopeStates)
-	halfSlopeCycleU16 = simd.BroadcastUint16s(7)
-
 	zeroInt16 = simd.BroadcastInt16s(0)
 	oneInt16 = simd.BroadcastInt16s(1)
 	minimumSlopeI16 = simd.BroadcastInt16s(-7)
@@ -70,6 +58,16 @@ func init() {
 	halfSlopeCycleI16 = simd.BroadcastInt16s(7)
 	for value := range nibbleValues16 {
 		nibbleValues16[value] = simd.BroadcastUint16s(uint16(value))
+	}
+	hoverMultipliers := [...]uint16{71, 57, 57, 57, 57, 3}
+	hoverBiases := [...]uint16{389, 312, 312, 327, 355, 21}
+	collisionMultipliers := [...]uint16{47, 75, 75, 19, 19, 1}
+	collisionBiases := [...]uint16{270, 435, 435, 114, 130, 8}
+	for amountScale := range rockAmountScales {
+		hoverRadiusMultiplier[amountScale] = simd.BroadcastUint16s(hoverMultipliers[amountScale])
+		hoverRadiusBias[amountScale] = simd.BroadcastUint16s(hoverBiases[amountScale])
+		collisionRadiusMultiplier[amountScale] = simd.BroadcastUint16s(collisionMultipliers[amountScale])
+		collisionRadiusBias[amountScale] = simd.BroadcastUint16s(collisionBiases[amountScale])
 	}
 }
 
