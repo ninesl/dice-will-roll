@@ -32,6 +32,7 @@ type game struct {
 	Debug                   *rocks.RockDebug
 	animTick, ticksPerFrame int
 	fontFace                *text.GoTextFace
+	drawOptions             ebiten.DrawImageOptions
 	input                   rocks.DebugInput
 }
 
@@ -77,9 +78,9 @@ func main() {
 			Positions:   positions,
 			Sprites:     sprites,
 			Atlas:       rockAtlas,
-			DrawOptions: &settings.Screen.DrawOptions.DrawImageOptions,
 			AmountScale: rocks.RockAmountScaleIndex(len(positions)),
 		},
+		drawOptions: settings.Screen.DrawOptions.DrawImageOptions,
 		fontFace: &text.GoTextFace{
 			Source: fontSource, Size: settings.Screen.FontSize},
 		ticksPerFrame: 2,
@@ -91,7 +92,7 @@ func main() {
 }
 
 func (g *game) Update() error {
-	g.Debug = g.Rocks.DebugSnapshot()
+	//g.Debug = g.Rocks.DebugSnapshot(g.drawOptions)
 
 	for intervalIndex, key := range tickIntervalKeys {
 		if inpututil.IsKeyJustPressed(key) {
@@ -112,7 +113,7 @@ func (g *game) Update() error {
 			fmt.Printf("visited all %d packed rock frames\n", g.Debug.VisitedFrames)
 			return ebiten.Termination
 		}
-		rocks.UpdateDEBUG(g.Rocks, g.input)
+		*g.Rocks, g.drawOptions = rocks.UpdateDEBUG(*g.Rocks, g.drawOptions, g.input)
 		g.input = rocks.DebugInput{}
 	}
 
@@ -120,8 +121,8 @@ func (g *game) Update() error {
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
-	rocks.Draw(g.Rocks, screen)
-	g.drawDebugInfo(screen)
+	rocks.Draw(*g.Rocks, screen, g.drawOptions)
+	//g.drawDebugInfo(screen)
 }
 
 func (g *game) drawDebugInfo(screen *ebiten.Image) {

@@ -12,16 +12,17 @@ const (
 	BitSpriteSlopeCodeCount = 16
 	atlasSlopeStates        = 15
 	AtlasSlopeZFrames       = 16
-	PackedRockSpritePixels  = 128
 	nativeRockSizeScore     = 6
 	maximumRockSizeScale    = 1.8
+	PackedRockSpritePixels  = 96
 )
 
 type rockSpriteLookup [atlasSlopeStates * atlasSlopeStates * AtlasSlopeZFrames]*ebiten.Image
-type rockScaleLookup [len(rockAmountScales)][BitSpriteSlopeCodeCount]float64
+type rockScaleLookup [len(rockAmountScales)][BitSpriteSlopeCodeCount]float32
 type rockCollisionLookup [len(rockAmountScales)][BitSpriteSlopeCodeCount]uint32
 
-var rockAmountScales = [...]float64{2.0, 1.5, 1.0}
+// 100, 1000, 10000, 10000, 1_000_000
+var rockAmountScales = [...]float32{1.25, 1.0, 1.0, .5, .25, .1}
 
 // Gets initialized with a flat lookup for every packed X/Y slope and Z slope frame.
 type RockSpriteAtlas struct {
@@ -31,7 +32,7 @@ type RockSpriteAtlas struct {
 	Scales           rockScaleLookup
 	HalfDrawSizes    rockScaleLookup
 	CollisionLookups rockCollisionLookup
-	MouseRadius      uint32
+	MouseRadius      [len(rockAmountScales)]uint32
 }
 
 func atlasSlopeRadians(slopeCode uint8) float32 {
@@ -48,19 +49,20 @@ func filterIndex(slopeX, slopeY, slopeZ int) int {
 
 // RockAmountScaleIndex derives a collection's scale tier from its rock count.
 func RockAmountScaleIndex(rockNum int) int {
-	switch {
-	case rockNum <= 100:
-		return 0
-	case rockNum <= 1000:
-		return 1
-	default:
-		return 2
+	const firstThreshold = 100
+
+	amountScale := 0
+	threshold := firstThreshold
+	for amountScale < len(rockAmountScales)-1 && rockNum > threshold {
+		amountScale++
+		threshold *= 10
 	}
+	return amountScale
 }
 
-func rockSizeScale(sizeScore int) float64 {
+func rockSizeScale(sizeScore int) float32 {
 	const scaleStep = (maximumRockSizeScale - 1.0) / (BitSpriteSlopeCodeCount - 1 - nativeRockSizeScore)
-	return 1.0 + float64(sizeScore-nativeRockSizeScore)*scaleStep
+	return 1.0 + float32(sizeScore-nativeRockSizeScore)*scaleStep
 }
 
 // InitRockAtlas paints one atlas, then indexes shared subimages in dense frame order.
@@ -130,10 +132,11 @@ func InitRockAtlas(shader *ebiten.Shader) *RockSpriteAtlas {
 }
 
 func initializeMouseRadius(atlas *RockSpriteAtlas) {
-	oneXAmountScaleIndex := len(rockAmountScales) - 1
-	atlas.MouseRadius = uint32(math.Ceil(
-		atlas.HalfDrawSizes[oneXAmountScaleIndex][BitSpriteSlopeCodeCount-1] * 2.0))
-	mouseRadius = simd.BroadcastUint32s(atlas.MouseRadius)
+	for amountScaleIndex := range rockAmountScales {
+		atlas.MouseRadius[amountScaleIndex] = uint32(math.Ceil(
+			float64(atlas.HalfDrawSizes[amountScaleIndex][BitSpriteSlopeCodeCount-1] * 2.0)))
+		mouseRadii[amountScaleIndex] = simd.BroadcastUint32s(atlas.MouseRadius[amountScaleIndex])
+	}
 }
 
 func initializeScaleLookups(atlas *RockSpriteAtlas, pixelSize int) {
@@ -141,9 +144,9 @@ func initializeScaleLookups(atlas *RockSpriteAtlas, pixelSize int) {
 		for sizeScore := 1; sizeScore < BitSpriteSlopeCodeCount; sizeScore++ {
 			drawScale := rockSizeScale(sizeScore) * amountScale
 			atlas.Scales[amountScaleIndex][sizeScore] = drawScale
-			atlas.HalfDrawSizes[amountScaleIndex][sizeScore] = float64(pixelSize) * drawScale / 2
-			hoverRadiusLookups[amountScaleIndex][sizeScore] = simd.BroadcastFloat32s(float32(
-				atlas.HalfDrawSizes[amountScaleIndex][sizeScore]))
+			atlas.HalfDrawSizes[amountScaleIndex][sizeScore] = float32(pixelSize) * drawScale / 2
+			hoverRadiusLookups[amountScaleIndex][sizeScore] = simd.BroadcastUint32s(uint32(math.Ceil(
+				float64(atlas.HalfDrawSizes[amountScaleIndex][sizeScore]))))
 		}
 	}
 }
@@ -152,7 +155,7 @@ func initializeCollisionLookups(atlas *RockSpriteAtlas) {
 	for amountScaleIndex := range rockAmountScales {
 		for sizeScore := 1; sizeScore < BitSpriteSlopeCodeCount; sizeScore++ {
 			atlas.CollisionLookups[amountScaleIndex][sizeScore] = uint32(math.Ceil(
-				atlas.HalfDrawSizes[amountScaleIndex][sizeScore] * 2.0 / 3.0))
+				float64(atlas.HalfDrawSizes[amountScaleIndex][sizeScore] * 2.0 / 3.0)))
 			collisionLookups[amountScaleIndex][sizeScore] = simd.BroadcastUint32s(
 				atlas.CollisionLookups[amountScaleIndex][sizeScore])
 		}

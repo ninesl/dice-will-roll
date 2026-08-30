@@ -9,6 +9,35 @@ b = [b0 b1 b2 b3]
 a.And(b) = [a0 & b0, a1 & b1, a2 & b2, a3 & b3]
 ```
 
+## CPU Vector Widths
+
+The portable `simd` API selects one vector width for the process at runtime.
+Vectors are always at least 128 bits. Unsupported architectures use the pure-Go
+emulation path rather than changing the program's behavior.
+
+| Runtime target | Selected width | `uint32` lanes | `uint8` lanes | Typical CPUs |
+| --- | ---: | ---: | ---: | --- |
+| amd64 with AVX but no AVX2 | 128-bit | 4 | 16 | Intel Sandy/Ivy Bridge; AMD Bulldozer/Piledriver |
+| arm64 Neon | 128-bit | 4 | 16 | Apple Silicon, Raspberry Pi ARM64, Snapdragon, AWS Graviton |
+| WebAssembly SIMD | 128-bit | 4 | 16 | Browsers/runtimes with WebAssembly SIMD |
+| amd64 with AVX2 | 256-bit | 8 | 32 | Intel Haswell and newer; AMD Excavator/Zen and newer |
+| amd64 with required AVX-512 features | 512-bit | 16 | 64 | Selected Intel AVX-512 CPUs and AMD Zen 4/Zen 5 |
+
+This Go SIMD implementation currently uses 128-bit Neon on arm64; SVE support
+is not implemented. Older amd64 CPUs without AVX still receive the portable
+128-bit API, but operations may be emulated instead of using native SIMD.
+
+`Rocks` stores positions and sprites in separate `uint32` arrays. Therefore one
+position vector and one sprite vector process 4, 8, or 16 rocks together; the
+two `uint32` values do not share one register. The nibble animation combines
+four packed groups and processes 16, 32, or 64 byte lanes per batch.
+
+AVX-512 support does not guarantee twice AVX2 throughput. Some CPUs execute a
+512-bit instruction as multiple narrower internal operations, and update speed
+also depends on clock rate, cache, memory bandwidth, collision work, and draw
+work. Vector width determines rocks per SIMD batch, not a fixed rocks-per-frame
+limit.
+
 ## Bitwise Operations
 
 ### AND

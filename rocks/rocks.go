@@ -989,8 +989,10 @@ func (r *RocksRenderer) DrawExplosions(screen *ebiten.Image) {
 //
 //	< 100 rocks    → 2.0× base tile size (large rocks)
 //	100-1000 rocks → 1.0× base tile size (normal)
-//	1000-10000     → 0.75× base tile size (smaller)
-//	> 10000 rocks  → 0.5× base tile size (tiny)
+//	1001-9999      → 1.0× base tile size (normal)
+//	10000-99999    → 0.5× base tile size (tiny)
+//	100000-999999  → 0.25× base tile size
+//	1000000+ rocks → 0.1× base tile size
 func CalculateRockTileSize(baseTileSize float32, rockAmount int) float32 {
 	var scaleFactor float32
 
@@ -1005,10 +1007,14 @@ func CalculateRockTileSize(baseTileSize float32, rockAmount int) float32 {
 		scaleFactor = 2.0
 	} else if rockAmount <= 1000 {
 		scaleFactor = 1.5
-	} else if rockAmount <= 10000 {
+	} else if rockAmount < 10000 {
 		scaleFactor = 1.0
+	} else if rockAmount < 100000 {
+		scaleFactor = 0.5
+	} else if rockAmount < 1000000 {
+		scaleFactor = 0.25
 	} else {
-		scaleFactor = 1.0
+		scaleFactor = 0.1
 	}
 
 	return baseTileSize * scaleFactor
