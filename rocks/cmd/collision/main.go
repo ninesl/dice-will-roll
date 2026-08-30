@@ -26,14 +26,18 @@ const (
 
 type game struct {
 	rocks       rocks.Rocks
+	rockAtlas   *rocks.RockSpriteAtlas
+	amountScale int
 	fontFace    *text.GoTextFace
-	drawOptions ebiten.DrawImageOptions
+
+	debugInput  rocks.DebugInput
 	pressedKeys []ebiten.Key
 	mouse       controls.MouseInfo
 	debugText   string
 
 	updateTick     int
 	rocksPerSet    int
+	FPS, TPS       int
 	dampingEnabled bool
 }
 
@@ -61,7 +65,7 @@ func main() {
 	settings.InitScreenSettings(ebiten.Monitor())
 	rocks.Init(settings.Screen)
 
-	positions, sprites := appendRandomRockSet(nil, nil, rockCount, 0)
+	rockState := appendRandomRockSet(rocks.Rocks{}, rockCount, 0)
 
 	shaderMap := shaders.LoadShaders()
 	rockAtlas := rocks.InitRockAtlas(
@@ -75,13 +79,9 @@ func main() {
 	ebiten.SetWindowTitle("Packed Rock Wall Collisions")
 	ebiten.SetVsyncEnabled(false)
 	if err := ebiten.RunGame(&game{
-		rocks: rocks.Rocks{
-			Positions:   positions,
-			Sprites:     sprites,
-			Atlas:       rockAtlas,
-			AmountScale: rocks.RockAmountScaleIndex(len(positions)),
-		},
-		drawOptions:    settings.Screen.DrawOptions.DrawImageOptions,
+		rocks:          rockState,
+		rockAtlas:      rockAtlas,
+		amountScale:    rocks.RockAmountScaleIndex(rockState.Len()),
 		rocksPerSet:    rockCount,
 		dampingEnabled: true,
 		fontFace: &text.GoTextFace{
@@ -94,33 +94,26 @@ func main() {
 }
 
 func appendRandomRockSet(
-	positions rocks.RockPositions,
-	sprites rocks.RockSprites,
+	state rocks.Rocks,
 	rockCount int,
 	permaSpin uint32,
-) (rocks.RockPositions, rocks.RockSprites) {
+) rocks.Rocks {
 	for i := range rockCount {
 		velocityX, velocityY := randomVelocities()
-		positions = append(positions, rocks.PackPosition(
+		x, y := rocks.PackPosition(
 			randomCoordinate(settings.Screen.ResolutionX),
 			randomCoordinate(settings.Screen.ResolutionY),
 			velocityX,
 			velocityY,
-		))
-		sprites = append(sprites, rocks.PackSprite(rocks.InputSprite{
-			SlopeX:    velocityX,
-			SlopeY:    velocityY,
-			SlopeZ:    uint32(rand.N(rocks.AtlasSlopeZFrames)),
-			SizeScore: uint32(i%sizeScoreCount + 0x1),
-			StepY:     0x0,
-			StepX:     0x0,
-			StepZ:     0x0,
-			StepTick:  0x0,
-			PermaSpin: permaSpin,
-			SpinAgain: 0x0,
-		}))
+		)
+		slope, animate := rocks.PackSprite(
+			velocityX, velocityY, uint32(rand.N(rocks.AtlasSlopeZFrames)),
+			uint32(i%sizeScoreCount+0x1), 0, 0, 0, 0, permaSpin, 0)
+		state.PosX, state.PosY = append(state.PosX, x), append(state.PosY, y)
+		state.Slope = append(state.Slope, slope)
+		state.Animate = append(state.Animate, animate)
 	}
-	return positions, sprites
+	return state
 }
 
 func randomCoordinate(maximum int) uint32 {
@@ -138,19 +131,15 @@ func randomVelocities() (int32, int32) {
 }
 
 func (g *game) randomizeRockSlopes() {
-	for i, packedPosition := range g.rocks.Positions {
-		positionX, positionY, _, _ := rocks.UnpackPosition(packedPosition)
-		sizeScore, _, _, _, _, _, _, _, _, _ := rocks.UnpackSprite(g.rocks.Sprites[i])
+	for i := range g.rocks.PosX {
+		positionX, positionY, _, _ := rocks.UnpackPosition(g.rocks.PosX[i], g.rocks.PosY[i])
+		sizeScore, _, _, _, _, _, _, _, _, _ := rocks.UnpackSprite(g.rocks.Slope[i], g.rocks.Animate[i])
 		velocityX, velocityY := randomVelocities()
-		g.rocks.Positions[i] = rocks.PackPosition(
+		g.rocks.PosX[i], g.rocks.PosY[i] = rocks.PackPosition(
 			uint32(positionX), uint32(positionY), velocityX, velocityY)
-		g.rocks.Sprites[i] = rocks.PackSprite(rocks.InputSprite{
-			SlopeX:    velocityX,
-			SlopeY:    velocityY,
-			SlopeZ:    uint32(rand.N(rocks.AtlasSlopeZFrames)),
-			SizeScore: uint32(sizeScore),
-			PermaSpin: g.permaSpinFlag(),
-		})
+		g.rocks.Slope[i], g.rocks.Animate[i] = rocks.PackSprite(
+			velocityX, velocityY, uint32(rand.N(rocks.AtlasSlopeZFrames)),
+			uint32(sizeScore), 0, 0, 0, 0, g.permaSpinFlag(), 0)
 	}
 }
 
@@ -163,38 +152,29 @@ func (g *game) permaSpinFlag() uint32 {
 
 func (g *game) toggleDamping() {
 	g.dampingEnabled = !g.dampingEnabled
-	for i, packedSprite := range g.rocks.Sprites {
-		sizeScore, slopeZ, _, _, _, _, _, _, slopeX, slopeY := rocks.UnpackSprite(packedSprite)
-		g.rocks.Sprites[i] = rocks.PackSprite(rocks.InputSprite{
-			SlopeX:    int32(slopeX),
-			SlopeY:    int32(slopeY),
-			SlopeZ:    uint32(slopeZ),
-			SizeScore: uint32(sizeScore),
-			PermaSpin: g.permaSpinFlag(),
-		})
+	for i, slope := range g.rocks.Slope {
+		sizeScore, slopeZ, _, _, _, _, _, _, slopeX, slopeY := rocks.UnpackSprite(slope, g.rocks.Animate[i])
+		g.rocks.Slope[i], g.rocks.Animate[i] = rocks.PackSprite(
+			int32(slopeX), int32(slopeY), uint32(slopeZ), uint32(sizeScore),
+			0, 0, 0, 0, g.permaSpinFlag(), 0)
 	}
 }
 
 func (g *game) addRandomRockSet() {
-	g.rocks.Positions, g.rocks.Sprites = appendRandomRockSet(
-		g.rocks.Positions,
-		g.rocks.Sprites,
-		g.rocksPerSet,
-		g.permaSpinFlag(),
-	)
-	g.rocks.AmountScale = rocks.RockAmountScaleIndex(len(g.rocks.Positions))
+	g.rocks = appendRandomRockSet(g.rocks, g.rocksPerSet, g.permaSpinFlag())
+	g.amountScale = rocks.RockAmountScaleIndex(g.rocks.Len())
+}
+
+func hasChanges(di rocks.DebugInput) bool {
+	return di.CycleFilter || di.DecrementAmountScale || di.DecrementSizeScale ||
+		di.IncreaseSizeScale || di.IncrementAmountScale || di.ToggleMipmaps
 }
 
 func (g *game) Update() error {
-	mouseX, mouseY := ebiten.CursorPosition()
-	g.mouse.LastPosition = g.mouse.Position
-	g.mouse.Position.X = float32(mouseX)
-	g.mouse.Position.Y = float32(mouseY)
-	g.mouse.Down = ebiten.IsMouseButtonPressed(ebiten.MouseButton0)
-	g.mouse.Clicked = inpututil.IsMouseButtonJustPressed(ebiten.MouseButton0)
-	g.mouse.Released = inpututil.IsMouseButtonJustReleased(ebiten.MouseButton0)
+	g.debugInput = rocks.DebugInput{}
+	g.mouse.Update()
+
 	g.pressedKeys = inpututil.AppendJustPressedKeys(g.pressedKeys[:0])
-	input := rocks.DebugInput{}
 	if len(g.pressedKeys) == 1 {
 		switch g.pressedKeys[0] {
 		case ebiten.KeyV:
@@ -206,92 +186,101 @@ func (g *game) Update() error {
 		case ebiten.KeyQ:
 			g.addRandomRockSet()
 		case ebiten.KeyArrowLeft:
-			input.IncreaseSizeScale = true
+			g.debugInput.IncreaseSizeScale = true
 		case ebiten.KeyArrowRight:
-			input.DecrementSizeScale = true
+			g.debugInput.DecrementSizeScale = true
 		case ebiten.KeyArrowUp:
-			input.IncrementAmountScale = true
+			g.debugInput.IncrementAmountScale = true
 		case ebiten.KeyArrowDown:
-			input.DecrementAmountScale = true
+			g.debugInput.DecrementAmountScale = true
 		case ebiten.KeyF:
-			input.CycleFilter = true
+			g.debugInput.CycleFilter = true
 		case ebiten.KeyG:
-			input.ToggleMipmaps = true
+			g.debugInput.ToggleMipmaps = true
 		}
+		//g.updateDebugText(rocks.DebugSnapshot(g.rocks, g.rockAtlas, g.amountScale, settings.Screen.DrawOptions.DrawImageOptions))
 	}
-	g.rocks, g.drawOptions = rocks.ApplyDebugInput(g.rocks, g.drawOptions, input)
+	if hasChanges(g.debugInput) {
+		if g.debugInput.IncrementAmountScale {
+			g.amountScale++
+			if g.amountScale >= len(g.rockAtlas.Scales) {
+				g.amountScale = 0
+			}
+		} else if g.debugInput.DecrementAmountScale {
+			g.amountScale--
+			if g.amountScale < 0 {
+				g.amountScale = len(g.rockAtlas.Scales) - 1
+			}
+		}
+		settings.Screen.DrawOptions.DrawImageOptions = rocks.ApplyDebugInput(
+			g.rocks, settings.Screen.DrawOptions.DrawImageOptions, g.debugInput)
+	}
 
-	rocks.UpdateRocks(g.rocks, g.updateTick, g.mouse)
-	g.updateTick = (g.updateTick + 1) % rocks.UpdateStride
-	g.updateDebugText(g.rocks.DebugSnapshot(g.drawOptions))
+	rocks.UpdateRocks(&g.rocks, g.amountScale, g.updateTick, g.mouse)
+	g.updateTick++
+	if g.updateTick >= rocks.UpdateStride {
+		g.updateTick = 0
+	}
+
+	g.debugText = fpsFormating()
 	return nil
+}
+
+const frmt = "FPS: %.2f, TPS: %.2f"
+
+func fpsFormating() string {
+	return fmt.Sprintf(frmt, ebiten.ActualFPS(), ebiten.ActualTPS())
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
 	settings.Screen.DrawOptions.ColorScale.Reset()
-	rocks.Draw(g.rocks, screen, g.drawOptions)
-	g.drawDebugInfo(screen)
+	rocks.Draw(
+		g.rocks.PosX, g.rocks.PosY, g.rocks.Slope,
+		g.rockAtlas, g.amountScale, screen, settings.Screen.DrawOptions.DrawImageOptions)
+	settings.Screen.DrawOptions.GeoM.Reset()
+	settings.Screen.DrawOptions.GeoM.Translate(settings.Screen.FontSize, settings.Screen.FontSize)
+	settings.Screen.DrawOptions.ColorScale.Reset()
+	settings.Screen.DrawOptions.ColorScale.SetWithColor(color.RGBA{R: 0xFF, G: 0xFF, A: 0xFF})
+	text.Draw(screen, g.debugText, g.fontFace, settings.Screen.DrawOptions)
 }
 
-func (g *game) drawDebugInfo(screen *ebiten.Image) {
-	drawOptions := settings.Screen.DrawOptions
+func (g *game) drawDebugtext(screen *ebiten.Image) {
 	for offsetY := -1; offsetY <= 1; offsetY++ {
 		for offsetX := -1; offsetX <= 1; offsetX++ {
 			if offsetX == 0 && offsetY == 0 {
 				continue
 			}
-			drawOptions.GeoM.Reset()
-			drawOptions.GeoM.Translate(
+			settings.Screen.DrawOptions.GeoM.Reset()
+			settings.Screen.DrawOptions.GeoM.Translate(
 				settings.Screen.FontSize+float64(offsetX),
 				settings.Screen.FontSize+float64(offsetY))
-			drawOptions.ColorScale.Reset()
-			drawOptions.ColorScale.SetWithColor(color.Black)
-			text.Draw(screen, g.debugText, g.fontFace, drawOptions)
+			settings.Screen.DrawOptions.ColorScale.Reset()
+			settings.Screen.DrawOptions.ColorScale.SetWithColor(color.Black)
+			text.Draw(screen, g.debugText, g.fontFace, settings.Screen.DrawOptions)
 		}
 	}
-	drawOptions.GeoM.Reset()
-	drawOptions.GeoM.Translate(settings.Screen.FontSize, settings.Screen.FontSize)
-	drawOptions.ColorScale.Reset()
-	drawOptions.ColorScale.SetWithColor(color.RGBA{R: 0xFF, G: 0xFF, A: 0xFF})
-	text.Draw(screen, g.debugText, g.fontFace, drawOptions)
+	settings.Screen.DrawOptions.GeoM.Reset()
+	settings.Screen.DrawOptions.GeoM.Translate(settings.Screen.FontSize, settings.Screen.FontSize)
+	settings.Screen.DrawOptions.ColorScale.Reset()
+	settings.Screen.DrawOptions.ColorScale.SetWithColor(color.RGBA{R: 0xFF, G: 0xFF, A: 0xFF})
+	text.Draw(screen, g.debugText, g.fontFace, settings.Screen.DrawOptions)
 }
 
 func (g *game) updateDebugText(debug *rocks.RockDebug) {
 	g.debugText = fmt.Sprintf(
-		"FPS: %.2f\nTPS: %.2f\nRocks: %d\nSpriteSheetMemory: %.2f MB\nPositionsMemory: %.4f KB\nSpritesMemory: %.4f KB\nAmountScaleMode: %d (%.1fx)\nFilter: %s\nMipmaps: %t\nSlopes: [%d][%d][%d]\nVelocities: [%d][%d]\nSteps: [%d][%d][%d]\nStepTick: %d\nPermaSpin: %d\nSpinAgain: %d\nPackedSlopes: [%04b][%04b]\nSizeScore: %04b (%d)\nDrawScale: %.3f\nDrawSize: %.0fx%.0f\nDrawSizeRange: %.1f-%.1f px\nCollisionRadius: %d\nPackedPosition: %032b\nPackedSprite: %032b\n\n0: toggle damping (%t)\nV: toggle VSync (%t)\nSpace: randomize rock slopes\nQ: add 1x random rock set\nF: cycle filter\nG: toggle mipmaps\nLeft/Right: size scale\nUp/Down: amount scale mode",
+		"FPS: %.2f\nTPS: %.2f\nRocks: %d\nSpriteSheetMemory: %.2f MB\nPositionsMemory: %.4f KB\nSpritesMemory: %.4f KB\n\nSize scale (Left/Right): %.1f-%.1f px\nAmount scale (Up/Down): %d (%.1fx)\nMipmaps (G): %t\nFilter (F): %s\nDamping (0): %t\nVSync (V): %t\n\nSpace: randomize rock slopes\nQ: add 1x random rock set",
 		debug.FPS,
 		debug.TPS,
-		len(g.rocks.Positions),
+		g.rocks.Len(),
 		debug.SpriteSheetMB,
 		debug.PositionsKB,
 		debug.SpritesKB,
-		debug.AmountScale,
-		debug.AmountScaleMultiplier,
-		debug.Filter,
-		debug.MipmapsEnabled,
-		debug.SlopeX,
-		debug.SlopeY,
-		debug.SlopeZ,
-		debug.VelocityX,
-		debug.VelocityY,
-		debug.StepX,
-		debug.StepY,
-		debug.StepZ,
-		debug.StepTick,
-		debug.PermaSpin,
-		debug.SpinAgain,
-		debug.SlopeX+8,
-		debug.SlopeY+8,
-		debug.SizeScore,
-		debug.SizeScore,
-		debug.Scale,
-		debug.DrawSize,
-		debug.DrawSize,
 		debug.MinDrawSize,
 		debug.MaxDrawSize,
-		debug.CollisionRadius,
-		debug.PackedPosition,
-		debug.PackedSprite,
+		debug.AmountScale,
+		debug.AmountScaleMultiplier,
+		debug.MipmapsEnabled,
+		debug.Filter,
 		g.dampingEnabled,
 		ebiten.IsVsyncEnabled(),
 	)

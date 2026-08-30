@@ -4,7 +4,6 @@ import (
 	"simd"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/ninesl/dice-will-roll/controls"
 )
 
 func FilterName(filter ebiten.Filter) string {
@@ -21,12 +20,22 @@ func FilterName(filter ebiten.Filter) string {
 }
 
 // Draw renders every packed rock in slice order using atlas.
-func Draw(rocks Rocks, screen *ebiten.Image, drawOptions ebiten.DrawImageOptions) {
-	for i, pos := range rocks.Positions {
-		positionX, positionY, _, _ := UnpackPosition(pos)
-		sizeScore, slopeZ, _, _, _, _, _, _, slopeX, slopeY := UnpackSprite(rocks.Sprites[i])
-		scale := rocks.Atlas.Scales[rocks.AmountScale][sizeScore]
-		halfDrawSize := rocks.Atlas.HalfDrawSizes[rocks.AmountScale][sizeScore]
+func Draw(
+	posX, posY, slopes []uint16,
+	atlas *RockSpriteAtlas,
+	amountScale int,
+	screen *ebiten.Image,
+	drawOptions ebiten.DrawImageOptions,
+) {
+	for i, packedX := range posX {
+		positionX, positionY, _, _ := UnpackPosition(packedX, posY[i])
+		slope := slopes[i]
+		sizeScore := int(slope & spriteSizeScoreMask16)
+		slopeZ := int(slope >> 4 & 0xF)
+		slopeX := unpackSignedNibble(slope, 12)
+		slopeY := unpackSignedNibble(slope, 8)
+		scale := atlas.Scales[amountScale][sizeScore]
+		halfDrawSize := atlas.HalfDrawSizes[amountScale][sizeScore]
 
 		drawOptions.GeoM.Reset()
 		drawOptions.GeoM.Scale(float64(scale), float64(scale))
@@ -34,7 +43,7 @@ func Draw(rocks Rocks, screen *ebiten.Image, drawOptions ebiten.DrawImageOptions
 			float64(positionX)-float64(halfDrawSize),
 			float64(positionY)-float64(halfDrawSize),
 		)
-		screen.DrawImage(rocks.Atlas.Frames[filterIndex(slopeX, slopeY, slopeZ)], &drawOptions)
+		screen.DrawImage(atlas.Frames[filterIndex(slopeX, slopeY, slopeZ)], &drawOptions)
 	}
 }
 
@@ -60,21 +69,22 @@ type RockDebug struct {
 	PackedPosition, PackedSprite uint32
 }
 
-func (rocks Rocks) DebugSnapshot(drawOptions ebiten.DrawImageOptions) *RockDebug {
-	packedPosition := rocks.Positions[0]
-	packedSprite := rocks.Sprites[0]
-	_, _, velocityX, velocityY := UnpackPosition(packedPosition)
-	sizeScore, slopeZ,
-		stepX, stepY,
-		stepZ, stepTick,
-		permaSpin,
-		spinAgain,
-		slopeX, slopeY := UnpackSprite(packedSprite)
-	scale := rocks.Atlas.Scales[rocks.AmountScale][sizeScore]
-	minScale := rocks.Atlas.Scales[rocks.AmountScale][1]
-	maxScale := rocks.Atlas.Scales[rocks.AmountScale][BitSpriteSlopeCodeCount-1]
-	tileSize := float64(rocks.Atlas.SpriteSheet.TileSize)
-	bounds := rocks.Atlas.Image.Bounds()
+func DebugSnapshot(
+	rocks Rocks,
+	atlas *RockSpriteAtlas,
+	amountScale int,
+	drawOptions ebiten.DrawImageOptions,
+) *RockDebug {
+	packedPosition := uint32(rocks.PosX[0])<<16 | uint32(rocks.PosY[0])
+	packedSprite := uint32(rocks.Slope[0])<<16 | uint32(rocks.Animate[0])
+	_, _, velocityX, velocityY := UnpackPosition(rocks.PosX[0], rocks.PosY[0])
+	sizeScore, slopeZ, stepX, stepY, stepZ, stepTick,
+		permaSpin, spinAgain, slopeX, slopeY := UnpackSprite(rocks.Slope[0], rocks.Animate[0])
+	scale := atlas.Scales[amountScale][sizeScore]
+	minScale := atlas.Scales[amountScale][1]
+	maxScale := atlas.Scales[amountScale][BitSpriteSlopeCodeCount-1]
+	tileSize := float64(atlas.SpriteSheet.TileSize)
+	bounds := atlas.Image.Bounds()
 
 	return &RockDebug{
 		Filter:                FilterName(drawOptions.Filter),
@@ -85,12 +95,12 @@ func (rocks Rocks) DebugSnapshot(drawOptions ebiten.DrawImageOptions) *RockDebug
 		DrawSize:              tileSize * float64(scale),
 		MinDrawSize:           tileSize * float64(minScale),
 		MaxDrawSize:           tileSize * float64(maxScale),
-		AmountScale:           rocks.AmountScale,
-		AmountScaleMultiplier: float64(rockAmountScales[rocks.AmountScale]),
-		CollisionRadius:       int(rocks.Atlas.CollisionLookups[rocks.AmountScale][sizeScore]),
+		AmountScale:           amountScale,
+		AmountScaleMultiplier: float64(rockAmountScales[amountScale]),
+		CollisionRadius:       int(atlas.CollisionLookups[amountScale][sizeScore]),
 		SpriteSheetMB:         float64(bounds.Dx()*bounds.Dy()*4) / (1024 * 1024),
-		PositionsKB:           float64(len(rocks.Positions)*4) / 1024,
-		SpritesKB:             float64(len(rocks.Sprites)*4) / 1024,
+		PositionsKB:           float64((len(rocks.PosX)+len(rocks.PosY))*2) / 1024,
+		SpritesKB:             float64((len(rocks.Slope)+len(rocks.Animate))*2) / 1024,
 		TotalFrames:           atlasSlopeStates * atlasSlopeStates * AtlasSlopeZFrames,
 		VisitedFrames:         filterIndex(slopeX, slopeY, slopeZ) + 1,
 		SizeScore:             sizeScore,
@@ -120,7 +130,7 @@ type DebugInput struct {
 }
 
 // ApplyDebugInput changes debug-controlled scale settings without advancing the simulation.
-func ApplyDebugInput(rocks Rocks, drawOptions ebiten.DrawImageOptions, in DebugInput) (Rocks, ebiten.DrawImageOptions) {
+func ApplyDebugInput(rocks Rocks, drawOptions ebiten.DrawImageOptions, in DebugInput) ebiten.DrawImageOptions {
 	if in.CycleFilter {
 		switch drawOptions.Filter {
 		case ebiten.FilterPixelated:
@@ -143,88 +153,25 @@ func ApplyDebugInput(rocks Rocks, drawOptions ebiten.DrawImageOptions, in DebugI
 		}
 	}
 
-	if in.IncrementAmountScale {
-		rocks.AmountScale++
-		if rocks.AmountScale >= len(rocks.Atlas.Scales) {
-			rocks.AmountScale = 0
-		}
-	} else if in.DecrementAmountScale {
-		rocks.AmountScale--
-		if rocks.AmountScale < 0 {
-			rocks.AmountScale = len(rocks.Atlas.Scales) - 1
-		}
-	}
 	if !in.IncreaseSizeScale && !in.DecrementSizeScale {
-		return rocks, drawOptions
+		return drawOptions
 	}
 
-	increaseSize := simd.BroadcastUint32s(inputValue(in.IncreaseSizeScale))
-	decreaseSize := simd.BroadcastUint32s(inputValue(in.DecrementSizeScale))
-	for startIndex := 0; startIndex < len(rocks.Sprites); startIndex += RocksPerPackedVector {
-		sprite, numRocksLoaded := simd.LoadUint32sPart(rocks.Sprites[startIndex:])
-		sizeScore, slopeZ,
-			stepX, stepY,
-			stepZ, stepTick,
-			permaSpin,
-			spinAgain,
-			slopeX, slopeY := unpackSpritesSIMD(sprite)
-
+	increaseSize, decreaseSize := zeroUint16, zeroUint16
+	if in.IncreaseSizeScale {
+		increaseSize = oneUint16
+	}
+	if in.DecrementSizeScale {
+		decreaseSize = oneUint16
+	}
+	for startIndex := 0; startIndex < len(rocks.Slope); startIndex += RocksPerPackedVector {
+		slope, numRocksLoaded := simd.LoadUint16sPart(rocks.Slope[startIndex:])
+		sizeScore := slope.And(nibbleMask16)
 		sizeScore = sizeScore.Add(increaseSize).Sub(decreaseSize)
-		sizeScore = oneCoordinates.IfElse(sizeScore.Greater(maximumSizeScore), sizeScore)
-		sizeScore = maximumSizeScore.IfElse(sizeScore.Equal(zeroCoordinates), sizeScore)
-
-		packSpritesSIMD(
-			sizeScore, slopeZ,
-			stepX, stepY,
-			stepZ, stepTick,
-			permaSpin,
-			spinAgain,
-			slopeX, slopeY,
-		).StorePart(rocks.Sprites[startIndex : startIndex+numRocksLoaded])
+		sizeScore = oneUint16.IfElse(sizeScore.Greater(maximumSizeUint16), sizeScore)
+		sizeScore = maximumSizeUint16.IfElse(sizeScore.Equal(zeroUint16), sizeScore)
+		slope.AndNot(nibbleMask16).Or(sizeScore).
+			StorePart(rocks.Slope[startIndex : startIndex+numRocksLoaded])
 	}
-	return rocks, drawOptions
-}
-
-func inputValue(active bool) uint32 {
-	if active {
-		return 1
-	}
-	return 0
-}
-
-// UpdateDEBUG advances packed rocks through every generated sprite frame.
-func UpdateDEBUG(rocks Rocks, drawOptions ebiten.DrawImageOptions, in DebugInput) (Rocks, ebiten.DrawImageOptions) {
-	rocks, drawOptions = ApplyDebugInput(rocks, drawOptions, in)
-
-	for startIndex := 0; startIndex < len(rocks.Positions); startIndex += RocksPerPackedVector {
-		sprite, numRocksLoaded := simd.LoadUint32sPart(rocks.Sprites[startIndex:])
-		sizeScore, slopeZ,
-			stepX, stepY,
-			stepZ, stepTick,
-			permaSpin,
-			spinAgain,
-			slopeX, slopeY := unpackSpritesSIMD(sprite)
-
-		slopeZ = slopeZ.Add(oneCoordinates)
-		slopeZWrapped := slopeZ.GreaterEqual(slopeZFrameCount)
-		slopeZ = zeroCoordinates.IfElse(slopeZWrapped, slopeZ)
-
-		xWrapped := slopeZWrapped.And(slopeX.Equal(maximumSlope))
-		slopeX = incrementSlope(slopeX).IfElse(slopeZWrapped, slopeX)
-		slopeY = incrementSlope(slopeY).IfElse(xWrapped, slopeY)
-
-		packSpritesSIMD(
-			sizeScore, slopeZ,
-			stepX, stepY,
-			stepZ, stepTick,
-			permaSpin,
-			spinAgain,
-			slopeX, slopeY,
-		).StorePart(rocks.Sprites[startIndex : startIndex+numRocksLoaded])
-	}
-
-	for phase := range UpdateStride {
-		UpdateRocks(rocks, phase, controls.MouseInfo{})
-	}
-	return rocks, drawOptions
+	return drawOptions
 }

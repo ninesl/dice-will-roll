@@ -1,6 +1,10 @@
 package controls
 
-import "github.com/ninesl/dice-will-roll/render"
+import (
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"github.com/ninesl/dice-will-roll/render"
+)
 
 type CursorInfo struct {
 	LastPosition render.Vec2
@@ -11,4 +15,15 @@ type MouseInfo struct {
 	CursorInfo
 	Clicked, Down, Released                bool
 	RightClicked, RightDown, RightReleased bool
+}
+
+func (m *MouseInfo) Update() {
+	x, y := ebiten.CursorPosition()
+	m.LastPosition = m.Position
+	m.Position.X = float32(x)
+	m.Position.Y = float32(y)
+
+	m.Down = ebiten.IsMouseButtonPressed(ebiten.MouseButton0)
+	m.Clicked = inpututil.IsMouseButtonJustPressed(ebiten.MouseButton0)
+	m.Released = inpututil.IsMouseButtonJustReleased(ebiten.MouseButton0)
 }

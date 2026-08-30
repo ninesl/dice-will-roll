@@ -160,14 +160,7 @@ func (g *Game) Select() {
 
 // always is called at the beginning of the update loop
 func (g *Game) UpdateMouseInput() {
-	x, y := ebiten.CursorPosition()
-	g.Mouse.LastPosition = g.Mouse.Position
-	g.Mouse.Position.X = float32(x)
-	g.Mouse.Position.Y = float32(y)
-
-	g.Mouse.Down = ebiten.IsMouseButtonPressed(ebiten.MouseButton0)
-	g.Mouse.Clicked = inpututil.IsMouseButtonJustPressed(ebiten.MouseButton0)
-	g.Mouse.Released = inpututil.IsMouseButtonJustReleased(ebiten.MouseButton0)
+	g.Mouse.Update()
 }
 
 func (g *Game) cursorWithin(zone render.ZoneRenderable) bool {

@@ -15,6 +15,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/audio"
 	"github.com/hajimehoshi/ebiten/v2/audio/mp3"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/ninesl/dice-will-roll/controls"
 	"github.com/ninesl/dice-will-roll/dice"
 	"github.com/ninesl/dice-will-roll/music"
 	"github.com/ninesl/dice-will-roll/render"
@@ -55,16 +56,8 @@ func init() {
 }
 
 // TODO: last position...?
-type CursorInfo struct {
-	LastPosition render.Vec2
-	Position     render.Vec2
-}
-
-type MouseInfo struct {
-	CursorInfo
-	Clicked, Down, Released                bool
-	RightClicked, RightDown, RightReleased bool
-}
+type CursorInfo = controls.CursorInfo
+type MouseInfo = controls.MouseInfo
 
 type Game struct {
 	Shaders map[shaders.ShaderKey]*ebiten.Shader

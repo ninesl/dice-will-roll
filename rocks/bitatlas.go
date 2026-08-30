@@ -14,7 +14,7 @@ const (
 	AtlasSlopeZFrames       = 16
 	nativeRockSizeScore     = 6
 	maximumRockSizeScale    = 1.8
-	PackedRockSpritePixels  = 96
+	PackedRockSpritePixels  = 80
 )
 
 type rockSpriteLookup [atlasSlopeStates * atlasSlopeStates * AtlasSlopeZFrames]*ebiten.Image
@@ -33,6 +33,7 @@ type RockSpriteAtlas struct {
 	HalfDrawSizes    rockScaleLookup
 	CollisionLookups rockCollisionLookup
 	MouseRadius      [len(rockAmountScales)]uint32
+	SizeScale        int
 }
 
 func atlasSlopeRadians(slopeCode uint8) float32 {
@@ -135,7 +136,11 @@ func initializeMouseRadius(atlas *RockSpriteAtlas) {
 	for amountScaleIndex := range rockAmountScales {
 		atlas.MouseRadius[amountScaleIndex] = uint32(math.Ceil(
 			float64(atlas.HalfDrawSizes[amountScaleIndex][BitSpriteSlopeCodeCount-1] * 2.0)))
-		mouseRadii[amountScaleIndex] = simd.BroadcastUint32s(atlas.MouseRadius[amountScaleIndex])
+		if atlas.MouseRadius[amountScaleIndex] > 181 {
+			panic("rock mouse radius exceeds safe 16-bit squared-distance range")
+		}
+		radius := uint16(atlas.MouseRadius[amountScaleIndex])
+		mouseRadii[amountScaleIndex] = simd.BroadcastUint16s(radius)
 	}
 }
 
@@ -145,8 +150,12 @@ func initializeScaleLookups(atlas *RockSpriteAtlas, pixelSize int) {
 			drawScale := rockSizeScale(sizeScore) * amountScale
 			atlas.Scales[amountScaleIndex][sizeScore] = drawScale
 			atlas.HalfDrawSizes[amountScaleIndex][sizeScore] = float32(pixelSize) * drawScale / 2
-			hoverRadiusLookups[amountScaleIndex][sizeScore] = simd.BroadcastUint32s(uint32(math.Ceil(
-				float64(atlas.HalfDrawSizes[amountScaleIndex][sizeScore]))))
+			radiusValue := math.Ceil(float64(atlas.HalfDrawSizes[amountScaleIndex][sizeScore]))
+			if radiusValue > 181 {
+				panic("rock hover radius exceeds safe 16-bit squared-distance range")
+			}
+			radius := uint16(radiusValue)
+			hoverRadiusLookups[amountScaleIndex][sizeScore] = simd.BroadcastUint16s(radius)
 		}
 	}
 }
@@ -156,8 +165,11 @@ func initializeCollisionLookups(atlas *RockSpriteAtlas) {
 		for sizeScore := 1; sizeScore < BitSpriteSlopeCodeCount; sizeScore++ {
 			atlas.CollisionLookups[amountScaleIndex][sizeScore] = uint32(math.Ceil(
 				float64(atlas.HalfDrawSizes[amountScaleIndex][sizeScore] * 2.0 / 3.0)))
-			collisionLookups[amountScaleIndex][sizeScore] = simd.BroadcastUint32s(
-				atlas.CollisionLookups[amountScaleIndex][sizeScore])
+			if atlas.CollisionLookups[amountScaleIndex][sizeScore] > math.MaxInt16 {
+				panic("rock collision radius exceeds signed 16-bit range")
+			}
+			collisionLookups[amountScaleIndex][sizeScore] = simd.BroadcastUint16s(
+				uint16(atlas.CollisionLookups[amountScaleIndex][sizeScore]))
 		}
 	}
 }
