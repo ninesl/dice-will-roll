@@ -62,8 +62,8 @@ type RockDebug struct {
 	SizeScore, SlopeZ            int
 	StepX, StepY, StepZ          int
 	StepTick                     int
-	PermaSpin                    int
-	SpinAgain                    int
+	ForceStepping                int
+	Stepping                     int
 	SlopeX, SlopeY               int
 	VelocityX, VelocityY         int
 	PackedPosition, PackedSprite uint32
@@ -76,10 +76,10 @@ func DebugSnapshot(
 	drawOptions ebiten.DrawImageOptions,
 ) *RockDebug {
 	packedPosition := uint32(rocks.PosX[0])<<16 | uint32(rocks.PosY[0])
-	packedSprite := uint32(rocks.Slope[0])<<16 | uint32(rocks.Animate[0])
+	packedSprite := uint32(rocks.Slope[0])<<16 | uint32(rocks.Stepping[0])
 	_, _, velocityX, velocityY := UnpackPosition(rocks.PosX[0], rocks.PosY[0])
 	sizeScore, slopeZ, stepX, stepY, stepZ, stepTick,
-		permaSpin, spinAgain, slopeX, slopeY := UnpackSprite(rocks.Slope[0], rocks.Animate[0])
+		forceStepping, stepping, slopeX, slopeY := UnpackSprite(rocks.Slope[0], rocks.Stepping[0])
 	scale := atlas.Scales[amountScale][sizeScore]
 	minScale := atlas.Scales[amountScale][1]
 	maxScale := atlas.Scales[amountScale][BitSpriteSlopeCodeCount-1]
@@ -100,7 +100,7 @@ func DebugSnapshot(
 		CollisionRadius:       int(atlas.CollisionLookups[amountScale][sizeScore]),
 		SpriteSheetMB:         float64(bounds.Dx()*bounds.Dy()*4) / (1024 * 1024),
 		PositionsKB:           float64((len(rocks.PosX)+len(rocks.PosY))*2) / 1024,
-		SpritesKB:             float64((len(rocks.Slope)+len(rocks.Animate))*2) / 1024,
+		SpritesKB:             float64((len(rocks.Slope)+len(rocks.Stepping))*2) / 1024,
 		TotalFrames:           atlasSlopeStates * atlasSlopeStates * AtlasSlopeZFrames,
 		VisitedFrames:         filterIndex(slopeX, slopeY, slopeZ) + 1,
 		SizeScore:             sizeScore,
@@ -109,8 +109,8 @@ func DebugSnapshot(
 		StepY:                 stepY,
 		StepZ:                 stepZ,
 		StepTick:              stepTick,
-		PermaSpin:             permaSpin,
-		SpinAgain:             spinAgain,
+		ForceStepping:         forceStepping,
+		Stepping:              stepping,
 		SlopeX:                slopeX,
 		SlopeY:                slopeY,
 		VelocityX:             velocityX,

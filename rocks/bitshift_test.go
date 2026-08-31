@@ -1,7 +1,6 @@
 package rocks
 
 import (
-	"simd"
 	"testing"
 
 	"github.com/ninesl/dice-will-roll/controls"
@@ -15,18 +14,17 @@ func newBenchmarkRocks() Rocks {
 	Init(settings.ScreenSettings{ResolutionX: 4000, ResolutionY: 4000})
 	rocks := Rocks{
 		PosX: make([]uint16, benchmarkRockCount), PosY: make([]uint16, benchmarkRockCount),
-		Slope: make([]uint16, benchmarkRockCount), Animate: make([]uint16, benchmarkRockCount),
+		Slope: make([]uint16, benchmarkRockCount), Stepping: make([]uint16, benchmarkRockCount),
 	}
 	for i := range benchmarkRockCount {
 		velocityX := int32(i%15 - 7)
 		velocityY := int32((i*7)%15 - 7)
 		rocks.PosX[i], rocks.PosY[i] = PackPosition(
 			uint32(500+i%3000), uint32(500+(i*3)%3000), velocityX, velocityY)
-		rocks.Slope[i], rocks.Animate[i] = PackSprite(
+		rocks.Slope[i], rocks.Stepping[i] = PackSprite(
 			velocityX, velocityY, uint32(i%16), uint32(i%15+1),
 			0, 0, 0, 0, 0, 0)
 	}
-	mouseRadii[0] = simd.BroadcastUint16s(90)
 	return rocks
 }
 
@@ -45,10 +43,10 @@ func BenchmarkUpdateRocksSoA(b *testing.B) {
 	benchmarkUpdateRocks(b, controls.MouseInfo{})
 }
 
-func BenchmarkUpdateRocksAnimated(b *testing.B) {
+func BenchmarkUpdateRocksForceStepping(b *testing.B) {
 	rocks := newBenchmarkRocks()
-	for i := range rocks.Animate {
-		rocks.Animate[i] = permaSpinMask16
+	for i := range rocks.Stepping {
+		rocks.Stepping[i] = forceSteppingMask16
 	}
 	b.ReportAllocs()
 	b.SetBytes(benchmarkRockCount * 8)

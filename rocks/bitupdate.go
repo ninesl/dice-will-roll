@@ -9,66 +9,134 @@ import (
 const UpdateStride = 2
 
 func UpdateRocks(rocks *Rocks, amountScale, phase int, mouse controls.MouseInfo) {
-	mode := mouseModeHover
-	if mouse.Down && mouse.RightDown {
-		mode = mouseModeBothDown
-	} else if mouse.Down {
-		mode = mouseModeLeftDown
-	} else if mouse.RightDown {
-		mode = mouseModeRightDown
-	}
-	if !mouse.Active && mouse.Position.X == 0 && mouse.Position.Y == 0 && !mouse.Down && !mouse.RightDown {
-		mode = mouseModeDisabled
-	}
+	input := prepareRockUpdateInput16(rocks, amountScale, mouse)
 	groups := (rocks.Len() + RocksPerPackedVector - 1) / RocksPerPackedVector
 	start := min(rocks.Len(), groups*phase/UpdateStride*RocksPerPackedVector)
 	end := min(rocks.Len(), groups*(phase+1)/UpdateStride*RocksPerPackedVector)
-	updateMovement16(rocks, start, end, amountScale, mode,
-		simd.BroadcastInt16s(int16(mouse.Position.X)), simd.BroadcastInt16s(int16(mouse.Position.Y)))
+	runRockUpdateRoutine16(rocks, start, end, &input)
 }
 
-func updateMovement16(
+func prepareRockUpdateInput16(
 	rocks *Rocks,
-	start, end, amountScale int,
-	mode uint8,
-	mouseX, mouseY simd.Int16s,
+	amountScale int,
+	mouse controls.MouseInfo,
+) rockUpdateInput16 {
+	state := &rocks.updateState
+	positionX, positionY := int16(mouse.Position.X), int16(mouse.Position.Y)
+	if !state.initialized || state.amountScale != amountScale {
+		state.amountScale = amountScale
+	}
+	if !state.initialized || state.positionX != positionX || state.positionY != positionY {
+		state.positionX, state.positionY = positionX, positionY
+	}
+	if !state.initialized || state.mouseActive != mouse.Active ||
+		state.leftDown != mouse.Down || state.rightDown != mouse.RightDown {
+		state.mouseActive = mouse.Active
+		state.leftDown = mouse.Down
+		state.rightDown = mouse.RightDown
+		switch {
+		case mouse.Down && mouse.RightDown:
+			state.routine = rockUpdateButton
+		case mouse.Down:
+			state.routine = rockUpdateButton
+		case mouse.RightDown:
+			state.routine = rockUpdateButton
+		case !mouse.Active && positionX == 0 && positionY == 0:
+			state.routine = rockUpdateDisabled
+		default:
+			state.routine = rockUpdateHover
+		}
+	}
+	state.initialized = true
+	all := oneUint16.Equal(oneUint16)
+	none := zeroUint16.NotEqual(zeroUint16)
+	farForce, attract := none, none
+	if state.leftDown && !state.rightDown {
+		farForce = all
+	} else if state.leftDown && state.rightDown {
+		attract = all
+	}
+	return rockUpdateInput16{
+		constants: &rockUpdateConstants[state.amountScale],
+		routine:   state.routine,
+		mouseX:    simd.BroadcastInt16s(state.positionX),
+		mouseY:    simd.BroadcastInt16s(state.positionY),
+		farForce:  farForce,
+		attract:   attract,
+	}
+}
+
+func runRockUpdateRoutine16(
+	rocks *Rocks,
+	start, end int,
+	state *rockUpdateInput16,
 ) {
 	fullEnd := end - (end-start)%RocksPerPackedVector
 	for i := start; i < fullEnd; i += RocksPerPackedVector {
 		positionX := simd.LoadUint16s(rocks.PosX[i:])
 		positionY := simd.LoadUint16s(rocks.PosY[i:])
+		stepping := simd.LoadUint16s(rocks.Stepping[i:])
+		if !rockGroupNeedsUpdate16(positionX, positionY, stepping,
+			rocks.Stepping[i:i+RocksPerPackedVector], state) {
+			continue
+		}
 		slope := simd.LoadUint16s(rocks.Slope[i:])
-		animate := simd.LoadUint16s(rocks.Animate[i:])
-		positionX, positionY, slope, animate = updateRockGroup16(
-			positionX, positionY, slope, animate, amountScale, mode, mouseX, mouseY,
-			animationGroupActive(rocks.Animate[i:i+RocksPerPackedVector]))
+		positionX, positionY, slope, stepping = updateRockGroup16(
+			positionX, positionY, slope, stepping, state)
 		positionX.Store(rocks.PosX[i:])
 		positionY.Store(rocks.PosY[i:])
 		slope.Store(rocks.Slope[i:])
-		animate.Store(rocks.Animate[i:])
+		stepping.Store(rocks.Stepping[i:])
 	}
 	if fullEnd == end {
 		return
 	}
 	positionX, _ := simd.LoadUint16sPart(rocks.PosX[fullEnd:end])
 	positionY, _ := simd.LoadUint16sPart(rocks.PosY[fullEnd:end])
+	stepping, _ := simd.LoadUint16sPart(rocks.Stepping[fullEnd:end])
+	if !rockGroupNeedsUpdate16(positionX, positionY, stepping, rocks.Stepping[fullEnd:end], state) {
+		return
+	}
 	slope, _ := simd.LoadUint16sPart(rocks.Slope[fullEnd:end])
-	animate, _ := simd.LoadUint16sPart(rocks.Animate[fullEnd:end])
-	positionX, positionY, slope, animate = updateRockGroup16(
-		positionX, positionY, slope, animate, amountScale, mode, mouseX, mouseY,
-		animationGroupActive(rocks.Animate[fullEnd:end]))
+	positionX, positionY, slope, stepping = updateRockGroup16(
+		positionX, positionY, slope, stepping, state)
 	positionX.StorePart(rocks.PosX[fullEnd:end])
 	positionY.StorePart(rocks.PosY[fullEnd:end])
 	slope.StorePart(rocks.Slope[fullEnd:end])
-	animate.StorePart(rocks.Animate[fullEnd:end])
+	stepping.StorePart(rocks.Stepping[fullEnd:end])
+}
+
+func rockGroupNeedsUpdate16(
+	packedX, packedY, packedStepping simd.Uint16s,
+	reduction []uint16,
+	input *rockUpdateInput16,
+) bool {
+	activity := packedX.Or(packedY).And(velocityMask16).Or(packedStepping)
+	if input.routine != rockUpdateDisabled {
+		positionX := packedX.And(coordinateMask16).ConvertToInt16()
+		positionY := packedY.And(coordinateMask16).ConvertToInt16()
+		absX := positionX.Sub(input.mouseX).Abs().ToBits()
+		absY := positionY.Sub(input.mouseY).Abs().ToBits()
+		broadHit := absX.LessEqual(input.constants.mouseRadius).
+			And(absY.LessEqual(input.constants.mouseRadius))
+		activity = activity.Or(broadHit.ToInt16s().ToBits())
+	}
+
+	// The simd package has no portable horizontal Any operation. Use the
+	// already-loaded Stepping stream as temporary reduction storage; an idle
+	// group necessarily writes the same all-zero state, while an active group
+	// is overwritten by the full update immediately afterward.
+	activity.StorePart(reduction)
+	var active uint16
+	for _, lane := range reduction {
+		active |= lane
+	}
+	return active != 0
 }
 
 func updateRockGroup16(
 	packedX, packedY, packedSlope, packedAnimate simd.Uint16s,
-	amountScale int,
-	mode uint8,
-	mouseX, mouseY simd.Int16s,
-	hasAnimation bool,
+	state *rockUpdateInput16,
 ) (simd.Uint16s, simd.Uint16s, simd.Uint16s, simd.Uint16s) {
 	positionX := packedX.And(coordinateMask16).ConvertToInt16()
 	positionY := packedY.And(coordinateMask16).ConvertToInt16()
@@ -79,29 +147,32 @@ func updateRockGroup16(
 	size := packedSlope.And(nibbleMask16)
 	falseMask := zeroUint16.NotEqual(zeroUint16)
 	mouseHit := falseMask
-	if mode != mouseModeDisabled {
-		velocityX, velocityY, mouseHit = setMouseVelocity16(
+	if state.routine == rockUpdateHover {
+		velocityX, velocityY, mouseHit = setHoverVelocity16(
 			positionX, positionY, velocityX, velocityY, size,
-			amountScale, mode, mouseX, mouseY)
+			state.constants, state.mouseX, state.mouseY)
+	} else if state.routine == rockUpdateButton {
+		velocityX, velocityY, mouseHit = setButtonVelocity16(
+			positionX, positionY, velocityX, velocityY,
+			state.constants, state.mouseX, state.mouseY, state.farForce, state.attract)
 	}
 
-	radius := collisionRadius(size, amountScale).BitsToInt16()
+	radius := collisionRadius(size, state.constants).BitsToInt16()
 	bounce := oneUint16.Equal(oneUint16)
-	buttonDown := mode == mouseModeLeftDown || mode == mouseModeRightDown || mode == mouseModeBothDown
-	if buttonDown {
+	if state.routine == rockUpdateButton {
 		// A rock actively pushed into a wall keeps the mouse-assigned direction.
-		// The wall still clamps it and drives the queued spin animation.
+		// The wall still clamps it and drives the queued stepping animation.
 		bounce = mouseHit.ToInt16s().Equal(zeroInt16)
 	}
 	velocityX, velocityY, wallHit := collideWalls16(
 		positionX, positionY, velocityX, velocityY, radius, bounce)
 	impact := mouseHit.Or(wallHit)
 	collisionVelocityX, collisionVelocityY := velocityX, velocityY
-	permaSpin := packedAnimate.ShiftAllRight(1).And(oneUint16)
+	forceStepping := packedAnimate.ShiftAllRight(1).And(oneUint16)
 
 	// Collision velocities move once at full strength. Every other finite
 	// velocity damps exactly once before this update's movement.
-	damp := permaSpin.Equal(zeroUint16).And(impact.ToInt16s().Equal(zeroInt16))
+	damp := forceStepping.Equal(zeroUint16).And(impact.ToInt16s().Equal(zeroInt16))
 	velocityX = dampVelocity16(velocityX).IfElse(damp, velocityX)
 	velocityY = dampVelocity16(velocityY).IfElse(damp, velocityY)
 	positionX = positionX.Add(velocityX)
@@ -116,49 +187,38 @@ func updateRockGroup16(
 	stepX := packedAnimate.ShiftAllRight(10).And(nibbleValues16[7])
 	stepZ := packedAnimate.ShiftAllRight(6).And(nibbleMask16)
 	stepTick := packedAnimate.ShiftAllRight(2).And(nibbleMask16)
-	spinAgain := packedAnimate.And(oneUint16)
+	stepping := packedAnimate.And(oneUint16)
 
 	// Existing animation advances after movement and collision handling. New
 	// collision state is scheduled afterward, so it starts on the next update.
-	if hasAnimation {
-		size, slopeZ, stepX, stepY, stepZ, stepTick, permaSpin, spinAgain, slopeX, slopeY =
-			advanceAnimation16(size, slopeZ, stepX, stepY, stepZ, stepTick,
-				permaSpin, spinAgain, slopeX, slopeY, previousX, previousY)
-	}
+	size, slopeZ, stepX, stepY, stepZ, stepTick, forceStepping, stepping, slopeX, slopeY =
+		advanceStepping16(size, slopeZ, stepX, stepY, stepZ, stepTick,
+			forceStepping, stepping, slopeX, slopeY, previousX, previousY)
 	stopped := velocityX.Equal(zeroInt16).And(velocityY.Equal(zeroInt16)).
-		And(permaSpin.Equal(zeroUint16)).And(stepZ.Equal(zeroUint16)).And(spinAgain.Equal(zeroUint16))
+		And(forceStepping.Equal(zeroUint16)).And(stepZ.Equal(zeroUint16)).And(stepping.Equal(zeroUint16))
 	stepX = zeroUint16.IfElse(stopped, stepX)
 	stepY = zeroUint16.IfElse(stopped, stepY)
 	stepTick = zeroUint16.IfElse(stopped, stepTick)
-	stepX, stepY, stepZ, spinAgain, slopeX, slopeY, _ = scheduleCollision16(
-		stepX, stepY, stepZ, permaSpin, spinAgain,
+	stepX, stepY, stepZ, stepping, slopeX, slopeY, _ = scheduleCollision16(
+		stepX, stepY, stepZ, forceStepping, stepping,
 		slopeX, slopeY, collisionVelocityX, collisionVelocityY, previousX, previousY,
 		impact, wallHit, mouseHit)
 
 	return packPositionAxis16(positionX, velocityX), packPositionAxis16(positionY, velocityY),
 		packSlope16(size, slopeZ, slopeX, slopeY),
-		packAnimate16(stepX, stepY, stepZ, stepTick, permaSpin, spinAgain)
+		packAnimate16(stepX, stepY, stepZ, stepTick, forceStepping, stepping)
 }
 
-func animationGroupActive(animate []uint16) bool {
-	for _, state := range animate {
-		if state != 0 {
-			return true
-		}
-	}
-	return false
-}
-
-func advanceAnimation16(
-	size, slopeZ, stepX, stepY, stepZ, tick, permaSpin, spinAgain simd.Uint16s,
+func advanceStepping16(
+	size, slopeZ, stepX, stepY, stepZ, tick, forceStepping, stepping simd.Uint16s,
 	slopeX, slopeY, velocityX, velocityY simd.Int16s,
 ) (simd.Uint16s, simd.Uint16s, simd.Uint16s, simd.Uint16s, simd.Uint16s, simd.Uint16s, simd.Uint16s, simd.Uint16s, simd.Int16s, simd.Int16s) {
-	inactive := permaSpin.Equal(zeroUint16)
-	active := permaSpin.NotEqual(zeroUint16)
-	stepZ = canonicalPermaStepZ16(stepZ).IfElse(active, stepZ)
-	spinAgain = spinAgain.Masked(inactive)
-	hasAnimation := stepX.Or(stepY).Or(stepZ).Or(spinAgain).Or(permaSpin).NotEqual(zeroUint16)
-	enabled := size.NotEqual(zeroUint16).And(hasAnimation)
+	inactive := forceStepping.Equal(zeroUint16)
+	active := forceStepping.NotEqual(zeroUint16)
+	stepZ = canonicalForceStepZ16(stepZ).IfElse(active, stepZ)
+	stepping = stepping.Masked(inactive)
+	hasStepping := stepX.Or(stepY).Or(stepZ).Or(stepping).Or(forceStepping).NotEqual(zeroUint16)
+	enabled := size.NotEqual(zeroUint16).And(hasStepping)
 	due := tick.Equal(zeroUint16).And(enabled)
 	waiting := tick.NotEqual(zeroUint16).And(enabled)
 	tick = tick.Sub(oneUint16.Masked(waiting))
@@ -187,17 +247,17 @@ func advanceAnimation16(
 	stepY = stepY.Sub(oneUint16.Masked(incrementY.Or(decrementY).And(stepY.NotEqual(zeroUint16))))
 
 	finiteZ := stepZ.NotEqual(zeroUint16).And(due).And(inactive)
-	startSpin := stepZ.Equal(zeroUint16).And(spinAgain.NotEqual(zeroUint16)).And(due).And(inactive)
+	startStep := stepZ.Equal(zeroUint16).And(stepping.NotEqual(zeroUint16)).And(due).And(inactive)
 	slopeZ = updateSlopeZ16(slopeZ, velocityX, velocityY).
-		IfElse(finiteZ.Or(startSpin).Or(active.And(due)), slopeZ)
+		IfElse(finiteZ.Or(startStep).Or(active.And(due)), slopeZ)
 	stepZ = stepZ.Sub(oneUint16.Masked(finiteZ))
-	rolloverSpin := stepZ.Equal(zeroUint16).And(spinAgain.NotEqual(zeroUint16)).And(due).And(inactive)
-	stepZ = maximumStepZ16.IfElse(rolloverSpin, stepZ)
-	spinAgain = zeroUint16.IfElse(rolloverSpin, spinAgain)
-	return size, slopeZ, stepX, stepY, stepZ, tick, permaSpin, spinAgain, slopeX, slopeY
+	rolloverStep := stepZ.Equal(zeroUint16).And(stepping.NotEqual(zeroUint16)).And(due).And(inactive)
+	stepZ = maximumStepZ16.IfElse(rolloverStep, stepZ)
+	stepping = zeroUint16.IfElse(rolloverStep, stepping)
+	return size, slopeZ, stepX, stepY, stepZ, tick, forceStepping, stepping, slopeX, slopeY
 }
 
-func canonicalPermaStepZ16(value simd.Uint16s) simd.Uint16s {
+func canonicalForceStepZ16(value simd.Uint16s) simd.Uint16s {
 	full := value.Equal(maximumStepZ16)
 	xDirection := value.And(nibbleValues16[3])
 	yDirection := value.And(nibbleValues16[12])
@@ -251,7 +311,7 @@ func packSlope16(size, slopeZ simd.Uint16s, slopeX, slopeY simd.Int16s) simd.Uin
 		Or(slopeZ.ShiftAllLeft(4)).Or(size)
 }
 
-func packAnimate16(stepX, stepY, stepZ, tick, permaSpin, spinAgain simd.Uint16s) simd.Uint16s {
+func packAnimate16(stepX, stepY, stepZ, tick, forceStepping, stepping simd.Uint16s) simd.Uint16s {
 	return stepY.ShiftAllLeft(13).Or(stepX.ShiftAllLeft(10)).Or(stepZ.ShiftAllLeft(6)).
-		Or(tick.ShiftAllLeft(2)).Or(permaSpin.ShiftAllLeft(1)).Or(spinAgain)
+		Or(tick.ShiftAllLeft(2)).Or(forceStepping.ShiftAllLeft(1)).Or(stepping)
 }

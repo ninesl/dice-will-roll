@@ -25,11 +25,34 @@ func TestPackedRadiusFormulas(t *testing.T) {
 	for amountScale := range hover {
 		for size := range hover[amountScale] {
 			lane := simd.BroadcastUint16s(uint16(size))
-			if got := firstUint16Lane(hoverRadius(lane, amountScale)); got != hover[amountScale][size] {
+			constants := &rockUpdateConstants[amountScale]
+			if got := firstUint16Lane(hoverRadius(lane, constants)); got != hover[amountScale][size] {
 				t.Errorf("hoverRadius(%d, %d) = %d; want %d", size, amountScale, got, hover[amountScale][size])
 			}
-			if got := firstUint16Lane(collisionRadius(lane, amountScale)); got != collision[amountScale][size] {
+			if got := firstUint16Lane(collisionRadius(lane, constants)); got != collision[amountScale][size] {
 				t.Errorf("collisionRadius(%d, %d) = %d; want %d", size, amountScale, got, collision[amountScale][size])
+			}
+		}
+	}
+}
+
+func TestMouseMagnitudeBands(t *testing.T) {
+	for amountScale := range rockUpdateConstants {
+		constants := &rockUpdateConstants[amountScale]
+		radius := firstUint16Lane(constants.mouseRadius)
+		for distance := uint16(0); distance <= radius; distance++ {
+			want := uint16(mouseForceBands)
+			for band := uint16(1); band < mouseForceBands; band++ {
+				if distance*mouseForceBands >= radius*band {
+					want = mouseForceBands - band
+				}
+			}
+			lane := simd.BroadcastUint16s(distance)
+			if got := firstUint16Lane(closeButtonMagnitude16(lane, &constants.buttonThresholds)); got != want {
+				t.Fatalf("button magnitude scale %d distance %d = %d; want %d", amountScale, distance, got, want)
+			}
+			if got := firstUint16Lane(closeHoverMagnitude16(lane, constants.mouseRadius)); got != want {
+				t.Fatalf("hover magnitude scale %d distance %d = %d; want %d", amountScale, distance, got, want)
 			}
 		}
 	}

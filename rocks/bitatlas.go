@@ -2,7 +2,6 @@ package rocks
 
 import (
 	"math"
-	"simd"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ninesl/dice-will-roll/render"
@@ -139,8 +138,6 @@ func initializeMouseRadius(atlas *RockSpriteAtlas) {
 		if atlas.MouseRadius[amountScaleIndex] > 181 {
 			panic("rock mouse radius exceeds safe 16-bit squared-distance range")
 		}
-		radius := uint16(atlas.MouseRadius[amountScaleIndex])
-		mouseRadii[amountScaleIndex] = simd.BroadcastUint16s(radius)
 	}
 }
 

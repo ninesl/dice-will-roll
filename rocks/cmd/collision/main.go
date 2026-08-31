@@ -96,7 +96,7 @@ func main() {
 func appendRandomRockSet(
 	state rocks.Rocks,
 	rockCount int,
-	permaSpin uint32,
+	forceStepping uint32,
 ) rocks.Rocks {
 	for i := range rockCount {
 		velocityX, velocityY := randomVelocities()
@@ -106,12 +106,12 @@ func appendRandomRockSet(
 			velocityX,
 			velocityY,
 		)
-		slope, animate := rocks.PackSprite(
+		slope, stepping := rocks.PackSprite(
 			velocityX, velocityY, uint32(rand.N(rocks.AtlasSlopeZFrames)),
-			uint32(i%sizeScoreCount+0x1), 0, 0, 0, 0, permaSpin, 0)
+			uint32(i%sizeScoreCount+0x1), 0, 0, 0, 0, forceStepping, 0)
 		state.PosX, state.PosY = append(state.PosX, x), append(state.PosY, y)
 		state.Slope = append(state.Slope, slope)
-		state.Animate = append(state.Animate, animate)
+		state.Stepping = append(state.Stepping, stepping)
 	}
 	return state
 }
@@ -133,17 +133,17 @@ func randomVelocities() (int32, int32) {
 func (g *game) randomizeRockSlopes() {
 	for i := range g.rocks.PosX {
 		positionX, positionY, _, _ := rocks.UnpackPosition(g.rocks.PosX[i], g.rocks.PosY[i])
-		sizeScore, _, _, _, _, _, _, _, _, _ := rocks.UnpackSprite(g.rocks.Slope[i], g.rocks.Animate[i])
+		sizeScore, _, _, _, _, _, _, _, _, _ := rocks.UnpackSprite(g.rocks.Slope[i], g.rocks.Stepping[i])
 		velocityX, velocityY := randomVelocities()
 		g.rocks.PosX[i], g.rocks.PosY[i] = rocks.PackPosition(
 			uint32(positionX), uint32(positionY), velocityX, velocityY)
-		g.rocks.Slope[i], g.rocks.Animate[i] = rocks.PackSprite(
+		g.rocks.Slope[i], g.rocks.Stepping[i] = rocks.PackSprite(
 			velocityX, velocityY, uint32(rand.N(rocks.AtlasSlopeZFrames)),
-			uint32(sizeScore), 0, 0, 0, 0, g.permaSpinFlag(), 0)
+			uint32(sizeScore), 0, 0, 0, 0, g.forceSteppingFlag(), 0)
 	}
 }
 
-func (g *game) permaSpinFlag() uint32 {
+func (g *game) forceSteppingFlag() uint32 {
 	if g.dampingEnabled {
 		return 0x0
 	}
@@ -153,15 +153,15 @@ func (g *game) permaSpinFlag() uint32 {
 func (g *game) toggleDamping() {
 	g.dampingEnabled = !g.dampingEnabled
 	for i, slope := range g.rocks.Slope {
-		sizeScore, slopeZ, _, _, _, _, _, _, slopeX, slopeY := rocks.UnpackSprite(slope, g.rocks.Animate[i])
-		g.rocks.Slope[i], g.rocks.Animate[i] = rocks.PackSprite(
+		sizeScore, slopeZ, _, _, _, _, _, _, slopeX, slopeY := rocks.UnpackSprite(slope, g.rocks.Stepping[i])
+		g.rocks.Slope[i], g.rocks.Stepping[i] = rocks.PackSprite(
 			int32(slopeX), int32(slopeY), uint32(slopeZ), uint32(sizeScore),
-			0, 0, 0, 0, g.permaSpinFlag(), 0)
+			0, 0, 0, 0, g.forceSteppingFlag(), 0)
 	}
 }
 
 func (g *game) addRandomRockSet() {
-	g.rocks = appendRandomRockSet(g.rocks, g.rocksPerSet, g.permaSpinFlag())
+	g.rocks = appendRandomRockSet(g.rocks, g.rocksPerSet, g.forceSteppingFlag())
 	g.amountScale = rocks.RockAmountScaleIndex(g.rocks.Len())
 }
 
