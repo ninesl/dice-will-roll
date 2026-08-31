@@ -32,6 +32,8 @@ jobs:
           fi
 
       - name: build wasm
+        env:
+          GOEXPERIMENT: simd
         run: make wasm-build WASM_PATH=./build/${{ steps.wasm.outputs.filename }}
 
       - name: ensure deploy directory exists
