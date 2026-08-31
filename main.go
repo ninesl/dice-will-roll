@@ -21,6 +21,7 @@ import (
 	"github.com/ninesl/dice-will-roll/render"
 	"github.com/ninesl/dice-will-roll/render/shaders"
 	"github.com/ninesl/dice-will-roll/rocks"
+	"github.com/ninesl/dice-will-roll/rocks/collision"
 	"github.com/ninesl/dice-will-roll/settings"
 )
 
@@ -238,9 +239,10 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 }
 
 func main() {
-	if err := run(); err != nil {
-		log.Fatal(err)
-	}
+	collision.Run()
+	// if err := run(); err != nil {
+	// 	log.Fatal(err)
+	// }
 }
 
 func run() error {

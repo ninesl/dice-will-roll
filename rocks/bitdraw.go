@@ -19,17 +19,18 @@ func FilterName(filter ebiten.Filter) string {
 	}
 }
 
-// Draw renders every packed rock in slice order using atlas.
-func Draw(
-	posX, posY, slopes []uint16,
+func drawRockRange(
+	rocks *Rocks,
 	atlas *RockSpriteAtlas,
 	amountScale int,
-	screen *ebiten.Image,
+	target *ebiten.Image,
 	drawOptions ebiten.DrawImageOptions,
+	start, end int,
 ) {
-	for i, packedX := range posX {
-		positionX, positionY, _, _ := UnpackPosition(packedX, posY[i])
-		slope := slopes[i]
+	for i := start; i < end; i++ {
+		packedX := rocks.PosX[i]
+		positionX, positionY, _, _ := UnpackPosition(packedX, rocks.PosY[i])
+		slope := rocks.Slope[i]
 		sizeScore := int(slope & spriteSizeScoreMask16)
 		slopeZ := int(slope >> 4 & 0xF)
 		slopeX := unpackSignedNibble(slope, 12)
@@ -43,7 +44,7 @@ func Draw(
 			float64(positionX)-float64(halfDrawSize),
 			float64(positionY)-float64(halfDrawSize),
 		)
-		screen.DrawImage(atlas.Frames[filterIndex(slopeX, slopeY, slopeZ)], &drawOptions)
+		target.DrawImage(atlas.Frames[filterIndex(slopeX, slopeY, slopeZ)], &drawOptions)
 	}
 }
 
@@ -75,49 +76,41 @@ func DebugSnapshot(
 	amountScale int,
 	drawOptions ebiten.DrawImageOptions,
 ) *RockDebug {
-	packedPosition := uint32(rocks.PosX[0])<<16 | uint32(rocks.PosY[0])
-	packedSprite := uint32(rocks.Slope[0])<<16 | uint32(rocks.Stepping[0])
-	_, _, velocityX, velocityY := UnpackPosition(rocks.PosX[0], rocks.PosY[0])
-	sizeScore, slopeZ, stepX, stepY, stepZ, stepTick,
-		forceStepping, stepping, slopeX, slopeY := UnpackSprite(rocks.Slope[0], rocks.Stepping[0])
-	scale := atlas.Scales[amountScale][sizeScore]
 	minScale := atlas.Scales[amountScale][1]
 	maxScale := atlas.Scales[amountScale][BitSpriteSlopeCodeCount-1]
 	tileSize := float64(atlas.SpriteSheet.TileSize)
 	bounds := atlas.Image.Bounds()
 
-	return &RockDebug{
+	debug := &RockDebug{
 		Filter:                FilterName(drawOptions.Filter),
 		MipmapsEnabled:        !drawOptions.DisableMipmaps,
 		FPS:                   ebiten.ActualFPS(),
 		TPS:                   ebiten.ActualTPS(),
-		Scale:                 float64(scale),
-		DrawSize:              tileSize * float64(scale),
 		MinDrawSize:           tileSize * float64(minScale),
 		MaxDrawSize:           tileSize * float64(maxScale),
 		AmountScale:           amountScale,
 		AmountScaleMultiplier: float64(rockAmountScales[amountScale]),
-		CollisionRadius:       int(atlas.CollisionLookups[amountScale][sizeScore]),
 		SpriteSheetMB:         float64(bounds.Dx()*bounds.Dy()*4) / (1024 * 1024),
 		PositionsKB:           float64((len(rocks.PosX)+len(rocks.PosY))*2) / 1024,
 		SpritesKB:             float64((len(rocks.Slope)+len(rocks.Stepping))*2) / 1024,
 		TotalFrames:           atlasSlopeStates * atlasSlopeStates * AtlasSlopeZFrames,
-		VisitedFrames:         filterIndex(slopeX, slopeY, slopeZ) + 1,
-		SizeScore:             sizeScore,
-		SlopeZ:                slopeZ,
-		StepX:                 stepX,
-		StepY:                 stepY,
-		StepZ:                 stepZ,
-		StepTick:              stepTick,
-		ForceStepping:         forceStepping,
-		Stepping:              stepping,
-		SlopeX:                slopeX,
-		SlopeY:                slopeY,
-		VelocityX:             velocityX,
-		VelocityY:             velocityY,
-		PackedPosition:        packedPosition,
-		PackedSprite:          packedSprite,
 	}
+	if rocks.Len() == 0 {
+		return debug
+	}
+
+	debug.PackedPosition = uint32(rocks.PosX[0])<<16 | uint32(rocks.PosY[0])
+	debug.PackedSprite = uint32(rocks.Slope[0])<<16 | uint32(rocks.Stepping[0])
+	_, _, debug.VelocityX, debug.VelocityY = UnpackPosition(rocks.PosX[0], rocks.PosY[0])
+	debug.SizeScore, debug.SlopeZ, debug.StepX, debug.StepY, debug.StepZ, debug.StepTick,
+		debug.ForceStepping, debug.Stepping, debug.SlopeX, debug.SlopeY =
+		UnpackSprite(rocks.Slope[0], rocks.Stepping[0])
+	scale := atlas.Scales[amountScale][debug.SizeScore]
+	debug.Scale = float64(scale)
+	debug.DrawSize = tileSize * float64(scale)
+	debug.CollisionRadius = int(atlas.CollisionLookups[amountScale][debug.SizeScore])
+	debug.VisitedFrames = filterIndex(debug.SlopeX, debug.SlopeY, debug.SlopeZ) + 1
+	return debug
 }
 
 type DebugInput struct {
@@ -130,7 +123,7 @@ type DebugInput struct {
 }
 
 // ApplyDebugInput changes debug-controlled scale settings without advancing the simulation.
-func ApplyDebugInput(rocks Rocks, drawOptions ebiten.DrawImageOptions, in DebugInput) ebiten.DrawImageOptions {
+func ApplyDebugInput(rocks *Rocks, drawOptions ebiten.DrawImageOptions, in DebugInput) ebiten.DrawImageOptions {
 	if in.CycleFilter {
 		switch drawOptions.Filter {
 		case ebiten.FilterPixelated:
@@ -156,6 +149,7 @@ func ApplyDebugInput(rocks Rocks, drawOptions ebiten.DrawImageOptions, in DebugI
 	if !in.IncreaseSizeScale && !in.DecrementSizeScale {
 		return drawOptions
 	}
+	rocks.redraw = true
 
 	increaseSize, decreaseSize := zeroUint16, zeroUint16
 	if in.IncreaseSizeScale {

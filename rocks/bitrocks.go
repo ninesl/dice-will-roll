@@ -29,7 +29,12 @@ type Rocks struct {
 	Slope    []uint16
 	Stepping []uint16
 
-	updateState rockUpdateState
+	drawGroups     []bool
+	dirtyLayers    []bool
+	groupsPerLayer int
+	anyDirtyLayer  bool
+	redraw         bool
+	updateState    rockUpdateState
 }
 
 type rockUpdateRoutine uint8
@@ -49,6 +54,7 @@ type rockUpdateState struct {
 	mouseActive bool
 	leftDown    bool
 	rightDown   bool
+	rockCount   int
 }
 
 type rockUpdateInput16 struct {

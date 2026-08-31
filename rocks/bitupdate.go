@@ -9,8 +9,14 @@ import (
 const UpdateStride = 2
 
 func UpdateRocks(rocks *Rocks, amountScale, phase int, mouse controls.MouseInfo) {
+	prepareRockLayerDirtyState(rocks)
 	input := prepareRockUpdateInput16(rocks, amountScale, mouse)
 	groups := (rocks.Len() + RocksPerPackedVector - 1) / RocksPerPackedVector
+	if cap(rocks.drawGroups) < groups {
+		rocks.drawGroups = append(rocks.drawGroups, make([]bool, groups-len(rocks.drawGroups))...)
+	} else {
+		rocks.drawGroups = rocks.drawGroups[:groups]
+	}
 	start := min(rocks.Len(), groups*phase/UpdateStride*RocksPerPackedVector)
 	end := min(rocks.Len(), groups*(phase+1)/UpdateStride*RocksPerPackedVector)
 	runRockUpdateRoutine16(rocks, start, end, &input)
@@ -25,6 +31,11 @@ func prepareRockUpdateInput16(
 	positionX, positionY := int16(mouse.Position.X), int16(mouse.Position.Y)
 	if !state.initialized || state.amountScale != amountScale {
 		state.amountScale = amountScale
+		rocks.redraw = true
+	}
+	if !state.initialized || state.rockCount != rocks.Len() {
+		state.rockCount = rocks.Len()
+		rocks.redraw = true
 	}
 	if !state.initialized || state.positionX != positionX || state.positionY != positionY {
 		state.positionX, state.positionY = positionX, positionY
@@ -76,13 +87,28 @@ func runRockUpdateRoutine16(
 		positionX := simd.LoadUint16s(rocks.PosX[i:])
 		positionY := simd.LoadUint16s(rocks.PosY[i:])
 		stepping := simd.LoadUint16s(rocks.Stepping[i:])
-		if !rockGroupNeedsUpdate16(positionX, positionY, stepping,
-			rocks.Stepping[i:i+RocksPerPackedVector], state) {
+		group := i / RocksPerPackedVector
+		rocks.drawGroups[group] = rockGroupNeedsUpdate16(positionX, positionY, stepping,
+			rocks.Stepping[i:i+RocksPerPackedVector], state)
+		if !rocks.drawGroups[group] {
 			continue
 		}
 		slope := simd.LoadUint16s(rocks.Slope[i:])
+		oldPositionX, oldPositionY, oldSlope := positionX, positionY, slope
 		positionX, positionY, slope, stepping = updateRockGroup16(
 			positionX, positionY, slope, stepping, state)
+		if !rocks.redraw {
+			visualChange := positionX.And(coordinateMask16).NotEqual(oldPositionX.And(coordinateMask16)).
+				Or(positionY.And(coordinateMask16).NotEqual(oldPositionY.And(coordinateMask16))).
+				Or(slope.NotEqual(oldSlope))
+			visualChange.ToInt16s().ToBits().Store(rocks.Stepping[i:])
+			for _, changed := range rocks.Stepping[i : i+RocksPerPackedVector] {
+				if changed != 0 {
+					rocks.markGroupLayerDirty(group)
+					break
+				}
+			}
+		}
 		positionX.Store(rocks.PosX[i:])
 		positionY.Store(rocks.PosY[i:])
 		slope.Store(rocks.Slope[i:])
@@ -94,12 +120,28 @@ func runRockUpdateRoutine16(
 	positionX, _ := simd.LoadUint16sPart(rocks.PosX[fullEnd:end])
 	positionY, _ := simd.LoadUint16sPart(rocks.PosY[fullEnd:end])
 	stepping, _ := simd.LoadUint16sPart(rocks.Stepping[fullEnd:end])
-	if !rockGroupNeedsUpdate16(positionX, positionY, stepping, rocks.Stepping[fullEnd:end], state) {
+	group := fullEnd / RocksPerPackedVector
+	rocks.drawGroups[group] = rockGroupNeedsUpdate16(
+		positionX, positionY, stepping, rocks.Stepping[fullEnd:end], state)
+	if !rocks.drawGroups[group] {
 		return
 	}
 	slope, _ := simd.LoadUint16sPart(rocks.Slope[fullEnd:end])
+	oldPositionX, oldPositionY, oldSlope := positionX, positionY, slope
 	positionX, positionY, slope, stepping = updateRockGroup16(
 		positionX, positionY, slope, stepping, state)
+	if !rocks.redraw {
+		visualChange := positionX.And(coordinateMask16).NotEqual(oldPositionX.And(coordinateMask16)).
+			Or(positionY.And(coordinateMask16).NotEqual(oldPositionY.And(coordinateMask16))).
+			Or(slope.NotEqual(oldSlope))
+		visualChange.ToInt16s().ToBits().StorePart(rocks.Stepping[fullEnd:end])
+		for _, changed := range rocks.Stepping[fullEnd:end] {
+			if changed != 0 {
+				rocks.markGroupLayerDirty(group)
+				break
+			}
+		}
+	}
 	positionX.StorePart(rocks.PosX[fullEnd:end])
 	positionY.StorePart(rocks.PosY[fullEnd:end])
 	slope.StorePart(rocks.Slope[fullEnd:end])
@@ -157,15 +199,15 @@ func updateRockGroup16(
 			state.constants, state.mouseX, state.mouseY, state.farForce, state.attract)
 	}
 
-	radius := collisionRadius(size, state.constants).BitsToInt16()
 	bounce := oneUint16.Equal(oneUint16)
 	if state.routine == rockUpdateButton {
 		// A rock actively pushed into a wall keeps the mouse-assigned direction.
 		// The wall still clamps it and drives the queued stepping animation.
 		bounce = mouseHit.ToInt16s().Equal(zeroInt16)
 	}
-	velocityX, velocityY, wallHit := collideWalls16(
-		positionX, positionY, velocityX, velocityY, radius, bounce)
+	velocityX, velocityY, wallHitX, wallHitY := collideWalls16(
+		positionX, positionY, velocityX, velocityY, bounce)
+	wallHit := wallHitX.Or(wallHitY)
 	impact := mouseHit.Or(wallHit)
 	collisionVelocityX, collisionVelocityY := velocityX, velocityY
 	forceStepping := packedAnimate.ShiftAllRight(1).And(oneUint16)
@@ -175,10 +217,10 @@ func updateRockGroup16(
 	damp := forceStepping.Equal(zeroUint16).And(impact.ToInt16s().Equal(zeroInt16))
 	velocityX = dampVelocity16(velocityX).IfElse(damp, velocityX)
 	velocityY = dampVelocity16(velocityY).IfElse(damp, velocityY)
-	positionX = positionX.Add(velocityX)
-	positionY = positionY.Add(velocityY)
-	positionX = positionX.Max(radius).Min(screenWidth16.Sub(radius))
-	positionY = positionY.Max(radius).Min(screenHeight16.Sub(radius))
+	positionX = positionX.IfElse(wallHitX.And(bounce), positionX.Add(velocityX))
+	positionY = positionY.IfElse(wallHitY.And(bounce), positionY.Add(velocityY))
+	positionX = positionX.Max(oneInt16).Min(screenWidth16)
+	positionY = positionY.Max(oneInt16).Min(screenHeight16)
 
 	slopeZ := packedSlope.ShiftAllRight(4).And(nibbleMask16)
 	slopeX := packedSlope.BitsToInt16().ShiftAllRight(12)

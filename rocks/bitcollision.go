@@ -101,29 +101,28 @@ func signedMouseMagnitude16(magnitude simd.Uint16s, delta simd.Int16s) simd.Int1
 	return signed.IfElse(delta.Greater(zeroInt16), signed.Neg()).Masked(delta.NotEqual(zeroInt16))
 }
 
-func collideWall16(position, velocity, extent, radius simd.Int16s) (simd.Int16s, simd.Mask16s) {
-	maximumPosition := extent.Sub(radius)
+func collideWall16(position, velocity, extent simd.Int16s) (simd.Int16s, simd.Mask16s) {
 	projected := position.Add(velocity)
-	hitMinimum := projected.Less(radius).And(velocity.Less(zeroInt16))
-	hitMaximum := projected.Greater(maximumPosition).And(velocity.Greater(zeroInt16))
-	overlap := radius.Sub(projected).Masked(hitMinimum).
-		Or(projected.Sub(maximumPosition).Masked(hitMaximum))
+	hitMinimum := projected.LessEqual(zeroInt16).And(velocity.Less(zeroInt16))
+	hitMaximum := projected.GreaterEqual(extent).And(velocity.Greater(zeroInt16))
+	overlap := projected.Neg().Masked(hitMinimum).
+		Or(projected.Sub(extent).Masked(hitMaximum))
 	return overlap, hitMinimum.Or(hitMaximum)
 }
 
 func collideWalls16(
-	positionX, positionY, velocityX, velocityY, radius simd.Int16s,
+	positionX, positionY, velocityX, velocityY simd.Int16s,
 	bounce simd.Mask16s,
 ) (
-	simd.Int16s, simd.Int16s, simd.Mask16s,
+	simd.Int16s, simd.Int16s, simd.Mask16s, simd.Mask16s,
 ) {
-	overlapX, candidateX := collideWall16(positionX, velocityX, screenWidth16, radius)
-	overlapY, candidateY := collideWall16(positionY, velocityY, screenHeight16, radius)
+	overlapX, candidateX := collideWall16(positionX, velocityX, screenWidth16)
+	overlapY, candidateY := collideWall16(positionY, velocityY, screenHeight16)
 	hitX := candidateX.And(overlapX.GreaterEqual(overlapY))
 	hitY := candidateY.And(overlapY.Greater(overlapX))
 	velocityX = velocityX.Neg().IfElse(hitX.And(bounce), velocityX)
 	velocityY = velocityY.Neg().IfElse(hitY.And(bounce), velocityY)
-	return velocityX, velocityY, hitX.Or(hitY)
+	return velocityX, velocityY, hitX, hitY
 }
 
 func slopeDistance16(slope, velocity simd.Int16s) simd.Uint16s {
