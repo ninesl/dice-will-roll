@@ -5,7 +5,7 @@ CPU_PROFILE_PORT=8080
 ALLOC_PROFILE_PORT=8081
 GAME_ARGS=
 ROCKS_CMD_ARGS=
-SHADER_CMD_ARGS=-shader cmd/background.kage
+SHADER_CMD_ARGS=-shader render/shaders/kages/rocks/moon_rock.kage
 BENCH_DIR?=/tmp/dice-will-roll-bench
 BENCH_PATTERN?=^BenchmarkUpdateRocks
 BENCH_TIME?=5s
@@ -91,7 +91,7 @@ run-rocks-cmd:
 	env GOEXPERIMENT=simd go run ./rocks/cmd ${ROCKS_CMD_ARGS}
 
 run-shaders-cmd:
-	cd render/shaders/cmd && go run . ${SHADER_CMD_ARGS}
+	go run ./render/shaders/cmd ${SHADER_CMD_ARGS}
 
 run-cmds: run-rocks-cmd run-shaders-cmd
 

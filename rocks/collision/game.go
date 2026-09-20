@@ -43,6 +43,7 @@ type game struct {
 	dampingEnabled bool
 }
 
+// Run starts a debug ebiten session for testing rock capabilties, etc.
 func Run() {
 	rocksPerSize := flag.Int("n", defaultRocksPerSize, "rocks generated for each of the 15 size scores")
 	flag.Parse()
@@ -280,7 +281,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 
 func (g *game) updateDebugText(debug *rocks.RockDebug) {
 	debugText := fmt.Sprintf(
-		"FPS: %.2f\nTPS: %.2f\nRocks: %d\nSpriteSheetMemory: %.2f MB\nPositionsMemory: %.4f KB\nSpritesMemory: %.4f KB\n\nSize scale (Left/Right): %.1f-%.1f px\nAmount scale (Up/Down): %d (%.1fx)\nMipmaps (G): %t\nFilter (F): %s\nDamping (0): %t\nVSync (V): %t\n\nSpace: randomize rock slopes\nQ: add 1x random rock set\nA: remove 1x random rock set",
+		"FPS: %.2f\nTPS: %.2f\nRocks: %d\nSpriteSheetMemory: %.2f MB\nPositionsMemory: %.4f KB\nSpritesMemory: %.4f KB\n\nSize scale (Left/Right): %.1f-%.1f px\nAmount scale (Up/Down): %d (%.1fx)\nMipmaps (G): %t\nFilter (F): %s\nDamping (0): %t\nVSync (V): %t\n\nSpace: randomize rock slopes\nQ: add 1x rock set\nA: remove 1x rock set",
 		debug.FPS,
 		debug.TPS,
 		g.rocks.Len(),

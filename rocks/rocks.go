@@ -450,14 +450,10 @@ func (r *RocksRenderer) generateSprites() {
 
 				// Create temporary image for this frame
 				frameImg := ebiten.NewImage(spriteSize, spriteSize)
+				rotation := render.Vec3{X: angleRadX, Y: angleRadY, Z: rotationRadAngle}
 
 				u := map[string]interface{}{
-					"Time":            0.0,
-					"Resolution":      []float32{r.RockTileSize, r.RockTileSize},
-					"Mouse":           render.Vec2{X: 0.0, Y: 0.0}.KageVec2(),
-					"RotationX":       angleRadX,
-					"RotationY":       angleRadY,
-					"RotationZ":       rotationRadAngle,
+					"Rotation":        rotation.KageVec3(),
 					"InnerColorDark":  innerDark.KageVec3(),
 					"InnerColorLight": innerLight.KageVec3(),
 					"OuterColorDark":  outerDark.KageVec3(),

@@ -73,14 +73,10 @@ func InitRockAtlas(shader *ebiten.Shader) *RockSpriteAtlas {
 	pixelSize := PackedRockSpritePixels
 	sheetImage := ebiten.NewImage(pixelSize*sheetColumns, pixelSize*sheetRows)
 	frameImage := ebiten.NewImage(pixelSize, pixelSize)
+	rotation := (render.Vec3{}).KageVec3()
 
 	uniforms := map[string]interface{}{
-		"Time":            0.0,
-		"Resolution":      []float32{float32(pixelSize), float32(pixelSize)},
-		"Mouse":           render.Vec2{}.KageVec2(),
-		"RotationX":       float32(0),
-		"RotationY":       float32(0),
-		"RotationZ":       float32(0),
+		"Rotation":        rotation,
 		"LightSource":     []float32{0, 0, -3},
 		"InnerColorDark":  render.WhiteDark.KageVec3(),
 		"InnerColorLight": render.WhiteMid.KageVec3(),
@@ -90,13 +86,13 @@ func InitRockAtlas(shader *ebiten.Shader) *RockSpriteAtlas {
 	shaderOptions := &ebiten.DrawRectShaderOptions{Uniforms: uniforms}
 	drawOptions := &ebiten.DrawImageOptions{}
 	for slopeX := uint8(1); slopeX < BitSpriteSlopeCodeCount; slopeX++ {
-		uniforms["RotationX"] = atlasSlopeRadians(slopeX)
+		rotation[0] = atlasSlopeRadians(slopeX)
 
 		for slopeY := uint8(1); slopeY < BitSpriteSlopeCodeCount; slopeY++ {
-			uniforms["RotationY"] = atlasSlopeRadians(slopeY)
+			rotation[1] = atlasSlopeRadians(slopeY)
 
 			for slopeZ := range AtlasSlopeZFrames {
-				uniforms["RotationZ"] = float32(slopeZ) * (2 * math.Pi / AtlasSlopeZFrames)
+				rotation[2] = float32(slopeZ) * (2 * math.Pi / AtlasSlopeZFrames)
 				frameImage.Clear()
 				frameImage.DrawRectShader(pixelSize, pixelSize, shader, shaderOptions)
 
