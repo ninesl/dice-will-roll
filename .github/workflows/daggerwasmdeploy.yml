@@ -10,19 +10,24 @@ permissions:
 jobs:
   release:
     runs-on: [self-hosted, linux, x64]
+    env:
+      DAGGER_ENGINE: container+podman://dagger-engine-v1.0.0-beta.13
+
     steps:
       - uses: actions/checkout@v5
-      - name: Build WASM
+        with:
+          persist-credentials: false
 
-  run: |
-    "$HOME/.local/bin/dagger" -m core api call \
-      container \
-      from --address=golang:1.27.1 \
-      with-directory --path=/src --source=. --exclude=build \
-      with-workdir --path=/src \
-      with-new-directory --path=/out \
-      with-env-variable --name=GOOS --value=js \
-      with-env-variable --name=GOARCH --value=wasm \
-      with-exec --args=go,build,-o,/out/dicewillroll.wasm,. \
-      file --path=/out/dicewillroll.wasm \
-      export --path="$HOME/prod/ebiten-wasm/wasms/dicewillroll/latest.wasm"
+      - name: Build WASM
+        run: |
+          "$HOME/.local/bin/dagger" -M api call \
+            container \
+            from --address=golang:1.27.1 \
+            with-directory --path=/src --source=. --exclude=build \
+            with-workdir --path=/src \
+            with-env-variable --name=GOOS --value=js \
+            with-env-variable --name=GOARCH --value=wasm \
+            with-env-variable --name=GOEXPERIMENT --value=simd \
+            with-exec --args=go,build,-o,dicewillroll.wasm,. \
+            file --path=/src/dicewillroll.wasm \
+            export --path="$HOME/prod/ebiten-wasm/wasms/dicewillroll/latest.wasm"
