@@ -5,4 +5,3 @@ Currently the game is not in a stable place yet, there are ways to score/etc but
 [dicewillroll.ninescoding.com/](https:///dicewillroll.ninescoding.com/)
 
 If you'd like to play the prototype look at the [prototype I made in python using the pygame-ce framework](https://github.com/ninesl/dice-will-roll-prototype)
-
